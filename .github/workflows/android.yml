@@ -48,12 +48,12 @@ jobs:
           retention-days: 14
 
   release:
-    name: Build and publish signed APK
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Build signed release APK
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v')
     needs: verify
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      file_stem: ${{ steps.version.outputs.file_stem }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -83,7 +83,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.TIVIHUB_UPLOAD_KEY_PASSWORD }}
         run: |
           if [[ -z "$RELEASE_KEYSTORE_BASE64" || -z "$RELEASE_STORE_PASSWORD" || -z "$RELEASE_KEY_ALIAS" || -z "$RELEASE_KEY_PASSWORD" ]]; then
-            echo "::error::Configure all release-signing repository secrets before pushing a version tag."
+            echo "::error::Configure all release-signing repository secrets before building a release APK."
             exit 1
           fi
 
@@ -97,17 +97,24 @@ jobs:
             echo "TIVIHUB_UPLOAD_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"
           } >> "$GITHUB_ENV"
 
-      - name: Validate version tag
+      - name: Resolve release version
         id: version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          VERSION="${RELEASE_TAG#v}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Release tags must use the exact format vMAJOR.MINOR.PATCH."
-            exit 1
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${RELEASE_TAG#v}"
+            if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Release tags must use the exact format vMAJOR.MINOR.PATCH."
+              exit 1
+            fi
+            FILE_STEM="TiviHub-v${VERSION}"
+          else
+            VERSION="1.0.0"
+            FILE_STEM="TiviHub-main-${GITHUB_RUN_NUMBER}"
           fi
           echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "file_stem=$FILE_STEM" >> "$GITHUB_OUTPUT"
 
       - name: Build signed release APK
         env:
@@ -121,7 +128,7 @@ jobs:
 
       - name: Verify APK signature and create checksum
         env:
-          RELEASE_VERSION_NAME: ${{ steps.version.outputs.name }}
+          APK_FILE_STEM: ${{ steps.version.outputs.file_stem }}
         run: |
           APK="app/build/outputs/apk/release/app-release.apk"
           SIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
@@ -130,15 +137,39 @@ jobs:
             exit 1
           fi
           "$SIGNER" verify --verbose "$APK"
-          cp "$APK" "TiviHub-v${RELEASE_VERSION_NAME}.apk"
-          sha256sum "TiviHub-v${RELEASE_VERSION_NAME}.apk" > "TiviHub-v${RELEASE_VERSION_NAME}-SHA256SUMS.txt"
+          cp "$APK" "${APK_FILE_STEM}.apk"
+          sha256sum "${APK_FILE_STEM}.apk" > "${APK_FILE_STEM}-SHA256SUMS.txt"
+
+      - name: Upload signed release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tivihub-release-apk-${{ github.run_number }}
+          path: |
+            ${{ steps.version.outputs.file_stem }}.apk
+            ${{ steps.version.outputs.file_stem }}-SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    name: Publish tagged GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: tivihub-release-apk-${{ github.run_number }}
+          path: release-assets
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: TiviHub v${{ steps.version.outputs.name }}
+          name: TiviHub ${{ github.ref_name }}
           generate_release_notes: true
           overwrite_files: true
           files: |
-            TiviHub-v${{ steps.version.outputs.name }}.apk
-            TiviHub-v${{ steps.version.outputs.name }}-SHA256SUMS.txt
+            release-assets/${{ needs.release.outputs.file_stem }}.apk
+            release-assets/${{ needs.release.outputs.file_stem }}-SHA256SUMS.txt

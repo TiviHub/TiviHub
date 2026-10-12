@@ -63,14 +63,14 @@ Tests cover playlist parsing, Xtream URL construction and metadata, XMLTV parsin
 
 ## Releases and versioning
 
-GitHub Actions runs the verification workflow for pushes and pull requests, and makes a debug APK available as a short-lived workflow artifact. Creating and pushing a version tag matching `vX.Y.Z` triggers a release build after tests and lint pass. For example:
+GitHub Actions runs tests, lint, and a debug build for pushes and pull requests. A push to `main` also builds and verifies a signed release APK; download it with its SHA-256 checksum from that run's **Artifacts** section. These main-branch artifacts are retained for 14 days. Creating and pushing a version tag matching `vX.Y.Z` triggers a release build after verification and publishes it on the repository's **Releases** page. For example:
 
 ```powershell
 git tag v1.0.1
 git push origin v1.0.1
 ```
 
-The tag becomes the release's version name (`v1.0.1`); GitHub Actions assigns a monotonically increasing Android version code. The workflow builds and verifies a signed release APK, creates a SHA-256 checksum, and attaches both files to a GitHub Release with generated release notes.
+The tag becomes the release's version name (`v1.0.1`); GitHub Actions assigns a monotonically increasing Android version code. The workflow builds and verifies a signed release APK, creates a SHA-256 checksum, and attaches both files to a GitHub Release with generated release notes. Main-branch APKs use version name `1.0.0` and a unique version code for each workflow run.
 
 ### One-time release signing setup
 
@@ -98,7 +98,7 @@ To make APKs installable and upgradeable without changing signing identity, conf
      gh secret set TIVIHUB_RELEASE_KEYSTORE_BASE64
    ```
 
-3. Commit the desired source changes, create a new version tag, and push it. The release workflow fails with an explicit error if signing secrets are missing or incomplete; it does not publish an unsigned APK.
+3. Push to `main` to get a signed APK artifact, or create and push a new version tag to publish a GitHub Release. The workflow fails with an explicit error if signing secrets are missing or incomplete; it does not produce an unsigned release APK.
 
 Protect `v*` tags in the repository's rulesets and limit tag creation to trusted maintainers. Use the release signing key only for official project releases. Do not share its private material with contributors or store it in workflow artifacts.
 
