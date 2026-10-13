@@ -143,9 +143,11 @@ jobs:
             exit 1
           fi
           "$SIGNER" verify --verbose "$APK"
-          CERTIFICATE_SHA256="$("$SIGNER" verify --print-certs "$APK" |
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
-          if [[ -z "$CERTIFICATE_SHA256" ]]; then
+          CERTIFICATE_OUTPUT="$("$SIGNER" verify --print-certs "$APK" 2>&1)"
+          CERTIFICATE_SHA256="$(printf '%s\n' "$CERTIFICATE_OUTPUT" |
+            awk -F': ' '/certificate SHA-256 digest:/ { print $NF; exit }' |
+            tr -d ':')"
+          if [[ ! "$CERTIFICATE_SHA256" =~ ^[[:xdigit:]]{64}$ ]]; then
             echo "::error::Could not read the APK signing certificate fingerprint."
             exit 1
           fi
