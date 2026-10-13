@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -34,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -49,8 +52,18 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
+import androidx.media3.cast.CastPlayer
+import androidx.media3.cast.DefaultMediaItemConverter
+import androidx.media3.cast.MediaItemConverter
+import androidx.media3.cast.SessionAvailabilityListener
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.mediarouter.app.MediaRouteButton
+import com.google.android.gms.cast.MediaInfo
+import com.google.android.gms.cast.MediaQueueItem
+import com.google.android.gms.cast.framework.CastButtonFactory
+import com.google.android.gms.cast.framework.CastContext
 import com.tivihub.data.model.EpgProgram
 import com.tivihub.data.network.OpenSubtitleFile
 import com.tivihub.data.network.OpenSubtitlesApi
@@ -68,7 +81,40 @@ private data class SubtitleTrackOption(
     val label: String
 )
 
+@UnstableApi
+private class TiviHubCastMediaItemConverter(private val isLive: Boolean) : MediaItemConverter {
+    private val delegate = DefaultMediaItemConverter()
+
+    override fun toMediaItem(mediaQueueItem: MediaQueueItem): MediaItem =
+        delegate.toMediaItem(mediaQueueItem)
+
+    override fun toMediaQueueItem(mediaItem: MediaItem): MediaQueueItem {
+        val source = checkNotNull(delegate.toMediaQueueItem(mediaItem).media)
+        val mediaInfo = MediaInfo.Builder(source.contentId)
+            .setContentUrl(source.contentUrl ?: source.contentId)
+            .setContentType(source.contentType)
+            .setStreamType(if (isLive) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
+            .setMetadata(source.metadata)
+            .setCustomData(source.customData)
+            .build()
+        return MediaQueueItem.Builder(mediaInfo).build()
+    }
+}
+
+private fun castMimeType(url: String, isLive: Boolean): String {
+    val path = Uri.parse(url).path.orEmpty().lowercase()
+    return when {
+        path.endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
+        path.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
+        path.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
+        path.endsWith(".mp4") || path.endsWith(".m4v") -> MimeTypes.VIDEO_MP4
+        isLive -> MimeTypes.VIDEO_MP2T
+        else -> MimeTypes.VIDEO_MP4
+    }
+}
+
 @Composable
+@OptIn(markerClass = [UnstableApi::class])
 fun PlayerScreen(
     url: String,
     title: String,
@@ -78,6 +124,7 @@ fun PlayerScreen(
     guidePrograms: List<EpgProgram>,
     openSubtitlesApiKey: () -> String?,
     subtitleSearchQuery: String?,
+    isLive: Boolean,
     onProgress: (Long, Long, Boolean, com.tivihub.data.model.LibraryItem?) -> Unit,
     onClose: () -> Unit
 ) {
@@ -96,7 +143,23 @@ fun PlayerScreen(
     val externalSubtitleFiles = remember { mutableListOf<File>() }
     val coroutineScope = rememberCoroutineScope()
     val openSubtitlesApi = remember { OpenSubtitlesApi() }
-    val player = remember(url, drmLicenseUrl) {
+    val castMediaItem = remember(url, title, drmLicenseUrl, isLive) {
+        val itemBuilder = MediaItem.Builder()
+            .setUri(url)
+            .setMimeType(castMimeType(url, isLive))
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder().setTitle(title).build()
+            )
+        if (!drmLicenseUrl.isNullOrBlank()) {
+            itemBuilder.setDrmConfiguration(
+                MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                    .setLicenseUri(drmLicenseUrl)
+                    .build()
+            )
+        }
+        itemBuilder.build()
+    }
+    val player = remember(url, title, drmLicenseUrl, isLive) {
         ExoPlayer.Builder(context).build().apply {
             val itemBuilder = MediaItem.Builder().setUri(url)
             if (!drmLicenseUrl.isNullOrBlank()) {
@@ -112,14 +175,45 @@ fun PlayerScreen(
             playWhenReady = true
         }
     }
-    DisposableEffect(player) {
+    val castPlayer = remember(context, url, title, drmLicenseUrl, isLive) {
+        CastPlayer(
+            CastContext.getSharedInstance(context),
+            TiviHubCastMediaItemConverter(isLive)
+        )
+    }
+    var activePlayer by remember(player) { mutableStateOf<Player>(player) }
+    val currentPlaybackPlayer by rememberUpdatedState(activePlayer)
+    DisposableEffect(player, castPlayer) {
+        val sessionAvailabilityListener = object : SessionAvailabilityListener {
+            override fun onCastSessionAvailable() {
+                val position = player.currentPosition
+                player.pause()
+                castPlayer.setMediaItem(castMediaItem)
+                castPlayer.prepare()
+                castPlayer.seekTo(position)
+                castPlayer.play()
+                activePlayer = castPlayer
+            }
+
+            override fun onCastSessionUnavailable() {
+                player.seekTo(castPlayer.currentPosition)
+                player.play()
+                activePlayer = player
+            }
+        }
+        castPlayer.setSessionAvailabilityListener(sessionAvailabilityListener)
+        if (castPlayer.isCastSessionAvailable) {
+            sessionAvailabilityListener.onCastSessionAvailable()
+        }
         onDispose {
             onProgress(
-                player.currentPosition,
-                player.duration,
-                player.playbackState == Player.STATE_ENDED,
+                currentPlaybackPlayer.currentPosition,
+                currentPlaybackPlayer.duration,
+                currentPlaybackPlayer.playbackState == Player.STATE_ENDED,
                 libraryItem
             )
+            castPlayer.setSessionAvailabilityListener(null)
+            castPlayer.release()
             player.release()
         }
     }
@@ -154,11 +248,11 @@ fun PlayerScreen(
     DisposableEffect(player, externalSubtitleFiles) {
         onDispose { externalSubtitleFiles.forEach(File::delete) }
     }
-    LaunchedEffect(player) {
+    LaunchedEffect(activePlayer) {
         while (true) {
             delay(5_000)
-            val ended = player.playbackState == Player.STATE_ENDED
-            onProgress(player.currentPosition, player.duration, ended, libraryItem)
+            val ended = activePlayer.playbackState == Player.STATE_ENDED
+            onProgress(activePlayer.currentPosition, activePlayer.duration, ended, libraryItem)
             if (ended) break
         }
     }
@@ -166,7 +260,7 @@ fun PlayerScreen(
         AndroidView(
             factory = {
                 PlayerView(it).apply {
-                    this.player = player
+                    this.player = activePlayer
                     useController = true
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -175,7 +269,7 @@ fun PlayerScreen(
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            update = { it.player = player }
+            update = { it.player = activePlayer }
         )
         Text(
             title,
@@ -187,19 +281,27 @@ fun PlayerScreen(
         IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
             Icon(Icons.Default.Close, contentDescription = "Close player", tint = Color.White)
         }
-        IconButton(
-            onClick = { showSubtitleMenu = true },
-            modifier = Modifier.align(Alignment.TopEnd)
-                .padding(top = 8.dp, end = if (guidePrograms.isNotEmpty()) 56.dp else 8.dp)
+        Row(
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.ClosedCaption, contentDescription = "Subtitles", tint = Color.White)
-        }
-        if (guidePrograms.isNotEmpty()) {
+            AndroidView(
+                factory = { viewContext ->
+                    MediaRouteButton(viewContext).also {
+                        CastButtonFactory.setUpMediaRouteButton(viewContext, it)
+                    }
+                },
+                modifier = Modifier.size(48.dp)
+            )
             IconButton(
-                onClick = { showGuide = !showGuide },
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                onClick = { showSubtitleMenu = true }
             ) {
-                Icon(Icons.Default.DateRange, contentDescription = "Toggle TV guide", tint = Color.White)
+                Icon(Icons.Default.ClosedCaption, contentDescription = "Subtitles", tint = Color.White)
+            }
+            if (guidePrograms.isNotEmpty()) {
+                IconButton(onClick = { showGuide = !showGuide }) {
+                    Icon(Icons.Default.DateRange, contentDescription = "Toggle TV guide", tint = Color.White)
+                }
             }
         }
         if (showGuide && guidePrograms.isNotEmpty()) {

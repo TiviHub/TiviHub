@@ -21,6 +21,12 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+data class UserDataSnapshot(
+    val playlists: List<Playlist>,
+    val favorites: List<Favorite>,
+    val libraryItems: List<LibraryItem>
+)
+
 class LocalRepository(
     private val database: IptvDatabase,
     private val cipher: CredentialCipher,
@@ -36,6 +42,13 @@ class LocalRepository(
         rows.map(LibraryItemEntity::toLibraryItem)
     }
     suspend fun allPlaylists() = database.playlistDao().all().map(::toPlaylist)
+    suspend fun userDataSnapshot() = database.withTransaction {
+        UserDataSnapshot(
+            playlists = database.playlistDao().all().map(::toPlaylist),
+            favorites = database.favoriteDao().all().map(FavoriteEntity::toFavorite),
+            libraryItems = database.libraryDao().all().map(LibraryItemEntity::toLibraryItem)
+        )
+    }
     suspend fun activePlaylist() = database.playlistDao().active()?.let(::toPlaylist)
 
     suspend fun savePlaylist(playlist: Playlist) {
@@ -72,6 +85,51 @@ class LocalRepository(
         database.withTransaction {
             database.playlistDao().clearActive()
             check(database.playlistDao().markActive(id) == 1) { "Playlist not found." }
+        }
+    }
+
+    suspend fun replaceUserData(
+        playlists: List<Playlist>,
+        favorites: List<Favorite>,
+        libraryItems: List<LibraryItem>
+    ) {
+        clearCatalogCacheFiles()
+        database.withTransaction {
+            database.playlistDao().clearAll()
+            database.favoriteDao().clearAll()
+            database.libraryDao().clearAll()
+            database.catalogCacheDao().clearAll()
+            database.epgDao().clearPrograms()
+            playlists.forEach { playlist ->
+                database.playlistDao().save(
+                    PlaylistEntity(
+                        id = playlist.id,
+                        name = playlist.name,
+                        type = playlist.type.name,
+                        url = playlist.url,
+                        usernameEncrypted = cipher.encrypt(playlist.username),
+                        passwordEncrypted = cipher.encrypt(playlist.password),
+                        active = playlist.active,
+                        drmLicenseUrl = playlist.drmLicenseUrl,
+                        expiresAtMillis = playlist.expiresAtMillis,
+                        createdAt = playlist.createdAt
+                    )
+                )
+            }
+            favorites.forEach { database.favoriteDao().save(it.toEntity()) }
+            libraryItems.forEach { database.libraryDao().save(it.toEntity()) }
+        }
+    }
+
+    private fun clearCatalogCacheFiles() {
+        val directory = File(filesDirectory, "catalog-cache")
+        if (!directory.exists()) return
+        val files = directory.listFiles()
+            ?: throw IOException("Could not list cached catalog files for removal.")
+        files.forEach { file ->
+            if (file.isFile && !file.delete()) {
+                throw IOException("Could not remove a cached catalog file.")
+            }
         }
     }
 

@@ -19,6 +19,9 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY createdAt")
     suspend fun all(): List<PlaylistEntity>
 
+    @Query("DELETE FROM playlists")
+    suspend fun clearAll()
+
     @Query("SELECT * FROM playlists WHERE active = 1 LIMIT 1")
     suspend fun active(): PlaylistEntity?
 
@@ -43,8 +46,14 @@ interface FavoriteDao {
     @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
     fun observeAll(): Flow<List<FavoriteEntity>>
 
+    @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
+    suspend fun all(): List<FavoriteEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(entity: FavoriteEntity)
+
+    @Query("DELETE FROM favorites")
+    suspend fun clearAll()
 
     @Query("DELETE FROM favorites WHERE contentId = :contentId AND contentType = :contentType AND playlistId = :playlistId")
     suspend fun delete(contentId: String, contentType: String, playlistId: String)
@@ -58,11 +67,17 @@ interface LibraryDao {
     @Query("SELECT * FROM library_items ORDER BY updatedAt DESC")
     fun observeAll(): Flow<List<LibraryItemEntity>>
 
+    @Query("SELECT * FROM library_items ORDER BY updatedAt DESC")
+    suspend fun all(): List<LibraryItemEntity>
+
     @Query("SELECT * FROM library_items WHERE contentId = :contentId AND contentType = :contentType AND playlistId = :playlistId LIMIT 1")
     suspend fun find(contentId: String, contentType: String, playlistId: String): LibraryItemEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(entity: LibraryItemEntity)
+
+    @Query("DELETE FROM library_items")
+    suspend fun clearAll()
 
     @Query("DELETE FROM library_items WHERE contentId = :contentId AND contentType = :contentType AND playlistId = :playlistId")
     suspend fun delete(contentId: String, contentType: String, playlistId: String)
@@ -78,6 +93,9 @@ interface CatalogCacheDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(entity: CatalogCacheEntity)
+
+    @Query("DELETE FROM catalog_cache")
+    suspend fun clearAll()
 
     @Query("DELETE FROM catalog_cache WHERE playlistId = :playlistId")
     suspend fun deleteForPlaylist(playlistId: String)

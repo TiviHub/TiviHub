@@ -22,12 +22,15 @@ TiviHub is a native Android player for organizing and watching content from your
 
 - **Live TV** — browse channels and groups, view channel details, and mark favorites.
 - **Movies and series** — explore provider catalogs by category, search titles, view available metadata, and save favorites.
+- **Google Cast** — cast live channels, movies, and episodes to nearby Cast devices from the player.
 - **Playlist support** — add M3U/M3U8 playlists for live channels or Xtream-compatible accounts for live TV, movies, series, episodes, and provider metadata.
+- **Playlist management** — switch sources from the app bar, see per-playlist catalog refresh times, and refresh an individual source with progress and actionable connection/account errors.
 - **TV guide** — view cached XMLTV programme information when supplied by the active source.
 - **Playback** — play compatible streams with AndroidX Media3, including HLS, DASH, and supported Widevine DRM sources.
 - **Continue watching** — save movie and episode progress locally and resume playback.
 - **Subtitles** — use embedded subtitles or search/download subtitles with your own OpenSubtitles API key.
 - **Library and favorites** — keep saved live channels, movies, and series together, with saved-item counts.
+- **Encrypted backup and restore** — move playlists, credentials, favorites, library items, and app preferences between devices with a password-protected backup.
 - **Flexible catalog layout** — choose an automatic or fixed grid-column count for movies and series.
 - **Local data** — cache catalogs and guide data, with controls to refresh them.
 - **Material 3** — use system, light, or dark themes.
@@ -155,8 +158,15 @@ The release workflow stops with an explicit error if a signing secret is missing
 - TiviHub sends requests to servers configured by the user. OpenSubtitles searches send the search text and API key to that third-party service.
 - For playlist compatibility, Android cleartext traffic is enabled. HTTP connections are not encrypted in transit; the playlist editor warns and requires confirmation before saving an HTTP playlist. Use HTTPS sources whenever available.
 - No IPTV content or provider credentials are included in this repository. Do not share real playlist URLs, credentials, API keys, signing material, private URLs, or personal data in issues, pull requests, tests, screenshots, or commits.
+- User-created backups contain playlist details, provider credentials, favorites, library items, app preferences, and the optional OpenSubtitles API key. The entire backup is encrypted with a password before it is written to the destination you choose; TiviHub does not upload it. Anyone with the backup file and its password can access its contents. The password cannot be recovered. Restoring replaces existing playlists, favorites, library items, and backed-up preferences, and clears cached catalogs and guide data.
 
 For vulnerability reporting, see [SECURITY.md](SECURITY.md). Please report security issues privately rather than in public issues.
+
+## Backup and restore
+
+Open **Settings → Backup & restore** to create or restore a backup. Choose a password of at least eight characters and store it separately from the backup file. The backup is encrypted locally with authenticated AES-GCM encryption and a key derived from your password; it is saved only to the destination you select. TiviHub cannot recover a forgotten password.
+
+Backups include playlists and their credentials, favorites, library items, theme, catalog layout and refresh preferences, and the optional OpenSubtitles API key. They do not include downloaded catalogs or cached TV guide data. Restore first previews item counts and requires confirmation; confirming replaces the current playlists, favorites, library, and included preferences, then clears catalog and guide caches. Keep a separate copy of anything you do not want replaced.
 
 ## Contributing
 
