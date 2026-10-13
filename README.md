@@ -1,93 +1,122 @@
+<div align="center">
+
 # TiviHub
 
-TiviHub is a native Android IPTV player for organizing and watching content from playlists you provide. It brings live TV, movies, series, a personal library, and programme information together in a content-first interface.
+**Your playlists. Your library. One Android IPTV player.**
 
-> **TiviHub does not provide or host channels, movies, series, playlists, or streams.** Add only sources that you are authorized to access and use. You are responsible for complying with applicable law and the terms of your providers.
+Browse and play live TV, movies, and series from playlists and provider accounts you configure.
+
+[![Android CI](https://github.com/TiViHub/TiviHub/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/TiViHub/TiviHub/actions/workflows/android.yml)
+[![Latest release](https://img.shields.io/github/v/release/TiViHub/TiviHub?display_name=tag&sort=semver)](https://github.com/TiViHub/TiviHub/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/oreo)
+
+</div>
+
+> [!IMPORTANT]
+> **TiviHub does not provide or host channels, movies, series, playlists, or streams.** You must supply sources that you are authorized to access and use. You are responsible for complying with applicable laws and your providers' terms.
+
+TiviHub is a native Android player for organizing and watching content from your own M3U/M3U8 playlists and Xtream-compatible services. It brings live TV, movies, series, programme information, playback progress, favorites, and a personal library together in a content-first interface.
 
 ## Features
 
-- **M3U/M3U8 playlists** for live TV channels, groups, and logos.
-- **Xtream Codes playlists** for live TV, movies, series, episodes, and provider metadata.
-- **TV Guide** with cached XMLTV programme data when provided by the active Xtream source.
-- **Catalog browsing** with search, categories, title details, and metadata-aware sorting. Recently added is the default; rating and year sorts appear only when the provider supplies that data.
-- **Media3/ExoPlayer playback**, including HLS, DASH, and compatible Widevine DRM sources.
-- **Playback progress and resume** for movies and episodes.
-- **Embedded subtitles** and optional subtitle search/download using your own OpenSubtitles API key.
-- **Favorites and Library** for live channels, saved movies, and series.
-- **Local caching and refresh controls** for catalogs and EPG data.
-- **Material 3 interface** with system, light, and dark themes.
-- **Android 8.0+ support**; browsing is portrait-oriented, with device orientation available during playback.
+- **Live TV** — browse channels and groups, view channel details, and mark favorites.
+- **Movies and series** — explore provider catalogs by category, search titles, view available metadata, and save favorites.
+- **Playlist support** — add M3U/M3U8 playlists for live channels or Xtream-compatible accounts for live TV, movies, series, episodes, and provider metadata.
+- **TV guide** — view cached XMLTV programme information when supplied by the active source.
+- **Playback** — play compatible streams with AndroidX Media3, including HLS, DASH, and supported Widevine DRM sources.
+- **Continue watching** — save movie and episode progress locally and resume playback.
+- **Subtitles** — use embedded subtitles or search/download subtitles with your own OpenSubtitles API key.
+- **Library and favorites** — keep saved live channels, movies, and series together, with saved-item counts.
+- **Flexible catalog layout** — choose an automatic or fixed grid-column count for movies and series.
+- **Local data** — cache catalogs and guide data, with controls to refresh them.
+- **Material 3** — use system, light, or dark themes.
+- **Playback orientation** — browse in portrait and use the device's orientation during playback.
 
-Features and metadata depend on the playlist provider, content, device, and network.
+Available features and metadata depend on your playlist provider, content, device, and network.
 
-## Download
+## Download and install
 
-Open the repository's **Releases** page and download the versioned `TiviHub-vX.Y.Z.apk` asset from the release you want. The matching SHA-256 checksum file is attached to each release.
+Download the latest versioned APK from [GitHub Releases](https://github.com/TiViHub/TiviHub/releases). Each release includes a SHA-256 checksum and the APK signing certificate's SHA-256 fingerprint.
 
-To install an APK, download it to your Android device and allow installation from the browser or file manager when Android asks. Android may show a warning because the APK is installed outside Google Play. APK updates from this project must be signed with the same release key; uninstalling first may remove local app data.
+1. Download the APK to your Android device.
+2. Open it from your browser or file manager and allow installation from that source if Android asks.
+3. Add a playlist or provider account in TiviHub's settings.
 
-Only download release APKs from this repository's official Releases page. To check the downloaded APK against its checksum in PowerShell:
+Android may warn because the APK is installed outside Google Play. Install only releases from this repository. To update an existing installation, the new APK must be signed with the same release key; uninstalling the app first may remove its local data.
+
+### Verify the APK checksum
+
+The checksum helps detect accidental or in-transit changes. In PowerShell, run this from the folder containing the downloaded APK and checksum file:
 
 ```powershell
-$apk = ".\TiviHub-v1.0.1.apk"
-$checksumFile = ".\TiviHub-v1.0.1-SHA256SUMS.txt"
+$apk = ".\TiviHub-vX.Y.Z.apk"
+$checksumFile = ".\TiviHub-vX.Y.Z-SHA256SUMS.txt"
 $expected = (Get-Content $checksumFile).Split(' ')[0]
 $actual = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -ne $expected) { throw "APK checksum mismatch" }
 Write-Output "APK checksum matches"
 ```
 
-The SHA-256 checksum detects accidental or in-transit changes, but by itself does not authenticate who published the APK. Each release also includes the signing certificate's SHA-256 fingerprint; compare it with the fingerprint reported by Android SDK Build Tools' `apksigner verify --print-certs <apk>`. Treat the fingerprint as a publisher identity only after you have independently trusted the expected value.
-
-## Requirements
-
-- Android 8.0 (API 26) or later to run the app.
-- JDK 17 to build.
-- Android SDK Platform 36 (installed automatically by Android Studio, or available through the Android SDK command-line tools).
-- A playlist or provider account that you are authorized to use.
+A checksum alone does not prove who published an APK. Each release also publishes the signing certificate's SHA-256 fingerprint. Verify the APK with Android SDK Build Tools' `apksigner verify --print-certs <apk>` and compare the result to the fingerprint file. Trust that fingerprint only after independently confirming the expected value.
 
 ## Build from source
 
-The Android Gradle project is at the repository root. Open this folder in Android Studio, or build from PowerShell on Windows:
+### Requirements
+
+- Android 8.0 (API 26) or later to run the app.
+- JDK 17.
+- Android SDK Platform 36 and Build Tools 36.0.0.
+- A playlist or provider account that you are authorized to use.
+
+Open the repository root in Android Studio, or use the Gradle wrapper from a terminal. The first build downloads the Gradle distribution, Android Gradle Plugin, and dependencies.
+
+**Windows PowerShell**
 
 ```powershell
 .\gradlew.bat :app:assembleDebug
 ```
 
-The debug APK is created at `app\build\outputs\apk\debug\app-debug.apk`. Install it on a connected device or emulator with:
+**macOS / Linux**
+
+```bash
+./gradlew :app:assembleDebug
+```
+
+The debug APK is created at `app/build/outputs/apk/debug/app-debug.apk` (on Windows, `app\build\outputs\apk\debug\app-debug.apk`). To install it on a connected device or emulator:
 
 ```powershell
 .\gradlew.bat :app:installDebug
 ```
 
-Build and install using the Gradle wrapper; a separate Gradle installation is not required. The first build downloads the Gradle distribution, Android Gradle Plugin, and Android dependencies.
-
 ### Tests and lint
 
-Run the same checks used by GitHub Actions:
+Run the same checks as the CI workflow:
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-Tests cover playlist parsing, Xtream URL construction and metadata, XMLTV parsing, subtitle API behavior, and other network/data behavior.
+On macOS or Linux, replace `.\gradlew.bat` with `./gradlew`.
 
-## Releases and versioning
+## Releases
 
-GitHub Actions runs tests, lint, and a debug build for pushes to `main` and pull requests. A push to `main` also builds and verifies a signed release APK; download it with its SHA-256 checksum and signing-certificate fingerprint from that run's **Artifacts** section. These main-branch artifacts are retained for 14 days. Creating and pushing a version tag matching `vX.Y.Z` triggers a release build after verification and publishes it on the repository's **Releases** page. For example:
+GitHub Actions runs unit tests, lint, and a debug build on pushes to `main` and pull requests. A push to `main` also builds a signed release APK; its APK, checksum, and certificate fingerprint are available in the run's **Artifacts** section for 14 days.
+
+To publish a versioned release, maintainers create and push a semantic version tag:
 
 ```powershell
-git tag v1.0.1
-git push origin v1.0.1
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
-The tag becomes the release's version name (`v1.0.1`); GitHub Actions assigns a monotonically increasing Android version code. The workflow builds and verifies a signed release APK, creates a SHA-256 checksum and signing-certificate fingerprint, and attaches all three files to a GitHub Release with generated release notes. Main-branch APKs use version name `1.0.0` and a unique version code for each workflow run.
+The tag becomes the Android version name. GitHub Actions assigns an increasing Android version code, verifies the signed APK, generates its checksum and certificate fingerprint, then publishes the files to [GitHub Releases](https://github.com/TiViHub/TiviHub/releases) with generated release notes. Treat published version tags as immutable.
 
-### One-time release signing setup
+### Release signing setup (maintainers)
 
-To make APKs installable and upgradeable without changing signing identity, configure a dedicated Android release keystore as GitHub Actions **environment secrets**. **Never commit the keystore, its passwords, or a base64 copy to this repository.** Keep an offline backup of the keystore and its credentials; losing them prevents signing compatible updates.
+Release signing is configured through GitHub Actions secrets in an environment named `release`. Never commit a keystore, password, or encoded keystore to this repository. Keep an offline backup of the keystore and credentials; losing them prevents compatible APK updates.
 
-1. Create a dedicated keystore on a trusted machine. Keep it outside the repository:
+1. Create a dedicated keystore on a trusted machine, outside the repository:
 
    ```powershell
    keytool -genkeypair -v `
@@ -97,72 +126,48 @@ To make APKs installable and upgradeable without changing signing identity, conf
      -dname "CN=TiviHub, O=TiviHub Project"
    ```
 
-   The certificate subject is visible in APK signature metadata and is not identity-verified by Android. Use a project identity rather than personal contact details. Keep the keystore password and an offline backup secure; losing the key prevents compatible updates.
+   The certificate subject is visible in APK signature metadata and is not identity-verified by Android. Use a project identity rather than personal contact details.
 
-2. In the repository's **Settings → Environments**, create an environment named `release`. Add these secrets under that environment's **Environment secrets**:
-   - `TIVIHUB_RELEASE_KEYSTORE_BASE64` — base64-encoded bytes of the keystore.
+2. In the repository's **Settings → Environments**, create the `release` environment and add these **environment secrets**:
+   - `TIVIHUB_RELEASE_KEYSTORE_BASE64` — Base64-encoded keystore bytes.
    - `TIVIHUB_UPLOAD_STORE_PASSWORD` — keystore password.
-   - `TIVIHUB_UPLOAD_KEY_ALIAS` — the alias used when creating the keystore.
-   - `TIVIHUB_UPLOAD_KEY_PASSWORD` — password for that alias.
+   - `TIVIHUB_UPLOAD_KEY_ALIAS` — the key alias.
+   - `TIVIHUB_UPLOAD_KEY_PASSWORD` — password for the key alias.
 
-   Restrict deployments to `main` and `v*` tags. Where your GitHub plan allows it, require approval from a trusted reviewer before deployment. Remove the signing values from repository-level Actions secrets after confirming the environment secrets work. GitHub may limit required reviewers or other protection rules for private repositories on some plans; use the available rules and revisit them before making the repository public.
+   Restrict deployments to `main` and `v*` tags. Require approval from a trusted reviewer where available. GitHub plan limitations may affect which environment protection rules are available.
 
-   With GitHub CLI installed and authenticated, the binary keystore can be uploaded without printing its encoded contents (use `--env release`):
+   With GitHub CLI installed and authenticated, encode and upload the keystore without printing its contents:
 
    ```powershell
    [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\tivihub-release.p12")) |
-     gh secret set TIVIHUB_RELEASE_KEYSTORE_BASE64 --env release --repo Momkay/TiviHub
+     gh secret set TIVIHUB_RELEASE_KEYSTORE_BASE64 --env release --repo TiViHub/TiviHub
    ```
 
-3. Push to `main` to get a signed APK artifact, or create and push a new version tag to publish a GitHub Release. The workflow fails with an explicit error if signing secrets are missing or incomplete; it does not produce an unsigned release APK.
+3. Protect `main` and `v*` tags using the repository's available rules. Require pull requests and passing checks for `main`, review of workflow/build changes, and restrict tag creation to trusted maintainers. Keep signing secrets scoped to the `release` environment.
 
-In **Settings → Rules → Rulesets**, protect `main` and `v*` tags: require pull requests and passing checks for `main`, require code-owner review for workflow/build configuration changes, block force pushes and deletion, and restrict tag creation to trusted maintainers. Availability of individual rules can depend on the repository plan. Use the release signing key only for official project releases. Do not share its private material with contributors or store it in workflow artifacts.
-
-## Playlists and provider data
-
-1. Open **Settings** in TiviHub and add a playlist.
-2. Choose M3U/M3U8 or Xtream and enter the URL and any required account details.
-3. Select the playlist as active and browse the sections supported by that source.
-
-M3U/M3U8 sources are used for live channels. Xtream sources can additionally provide movies, series, episodes, account information, and XMLTV guide data. TiviHub reads available metadata from the provider; it does not generate missing provider data.
-
-HTTPS is strongly recommended. HTTP playlist URLs are unencrypted and can expose credentials, requests, and media to parties able to observe or modify the connection. For compatibility with user-provided IPTV sources, this app currently permits cleartext traffic; the playlist editor warns and requires confirmation before saving an HTTP playlist, but that confirmation does not encrypt traffic or constrain every host referenced by a playlist.
+The release workflow stops with an explicit error if a signing secret is missing. It does not publish an unsigned release APK.
 
 ## Privacy and security
 
-- Playlist data, catalog caches, favorites, library items, playback progress, and guide data are kept in app-private local storage.
+- Playlists, catalog caches, favorites, library items, playback progress, and guide data are stored in app-private local storage.
 - Playlist passwords and the optional OpenSubtitles API key are encrypted using Android Keystore-backed AES-GCM encryption.
 - Other saved data, including playlist server URLs, is not encrypted by the app. Android app-data backup is disabled.
-- The app sends requests to the servers configured by the user. OpenSubtitles search sends the search text and API key to that third-party service.
+- TiviHub sends requests to servers configured by the user. OpenSubtitles searches send the search text and API key to that third-party service.
 - For playlist compatibility, Android cleartext traffic is enabled. HTTP connections are not encrypted in transit; the playlist editor warns and requires confirmation before saving an HTTP playlist. Use HTTPS sources whenever available.
-- No IPTV content or provider credentials are included in this repository. Do not add real playlists, credentials, API keys, signing material, private URLs, or personal data to issues, pull requests, tests, screenshots, or commits.
+- No IPTV content or provider credentials are included in this repository. Do not share real playlist URLs, credentials, API keys, signing material, private URLs, or personal data in issues, pull requests, tests, screenshots, or commits.
 
-## Project layout
-
-```text
-app/                         Android application module
-  src/main/java/com/tivihub/
-    data/model/              Domain models
-    data/network/            M3U, Xtream, XMLTV, and subtitle APIs/parsers
-    data/local/              Room persistence, repository, credential encryption
-    ui/                      Compose screens, theme, and media player
-  src/test/                  Unit tests
-gradle/wrapper/              Pinned Gradle wrapper
-.github/workflows/android.yml CI, verification, and tagged release automation
-```
-
-The app uses Kotlin, Jetpack Compose and Material 3, MVVM with lifecycle-aware `StateFlow` and coroutines, Room, OkHttp, and AndroidX Media3.
+For vulnerability reporting, see [SECURITY.md](SECURITY.md). Please report security issues privately rather than in public issues.
 
 ## Contributing
 
-Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) and follow the [Code of Conduct](./CODE_OF_CONDUCT.md) before opening a pull request. Keep changes focused, add or update tests for changed behavior, and run the Android checks locally. Never include private provider data or secrets. Report security issues privately using the process in [SECURITY.md](./SECURITY.md).
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before opening a pull request. Keep changes focused, add or update tests for changed behavior, and run the checks listed above.
+
+## Project and license
+
+TiviHub is built with Kotlin, Jetpack Compose and Material 3, AndroidX Media3, Room, OkHttp, and Kotlin Coroutines.
+
+This project is distributed under the [MIT License](LICENSE). Third-party libraries and assets may have their own licenses and terms. The project license does not grant rights to third-party content or trademarks.
 
 ## Legal note
 
-TiviHub is a player, not a content provider. Users are responsible for their playlists, services, and rights to access and use content. The project does not endorse or guarantee third-party playlists, streams, DRM licenses, or subtitles.
-
-## License
-
-TiviHub is distributed under the MIT License. See [LICENSE](./LICENSE).
-
-Third-party libraries and assets may be subject to their own licenses and terms. The MIT license for this repository does not grant rights to third-party content or trademarks.
+TiviHub is a media player, not a content provider. Users are responsible for their playlists, services, and rights to access and use content. The project does not endorse or guarantee third-party playlists, streams, DRM licenses, or subtitles.
