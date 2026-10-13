@@ -22,7 +22,9 @@ Thanks for considering a contribution. Changes should improve the Android app wh
 - Never log or commit playlist URLs containing credentials, provider details, API keys, passwords, signing keys, personal information, or private screenshots.
 - Do not add bundled playlists or copyrighted media.
 - Keep dependencies and their licenses aligned with the project's Android and JDK requirements.
+- Do not put secrets in pull-request code or workflows. Release signing secrets are available only to the protected `release` environment; untrusted changes must never be run with signing credentials.
+- Follow the [Code of Conduct](./CODE_OF_CONDUCT.md). Report security issues privately as described in [SECURITY.md](./SECURITY.md), not in public issues.
 
 ## Releases
 
-Only project maintainers should create `vX.Y.Z` release tags. The GitHub Actions workflow signs release APKs using the repository's private signing key; never request or expose that key in a pull request, issue, commit, or workflow artifact.
+Only project maintainers should create `vX.Y.Z` release tags. The GitHub Actions workflow signs release APKs using secrets scoped to the `release` environment; never request or expose that key in a pull request, issue, commit, or workflow artifact. Protect `main` and `v*` tags, and require review of workflow and signing-configuration changes before merging.

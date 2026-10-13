@@ -2,6 +2,10 @@ name: Android CI and Release
 
 on:
   push:
+    branches:
+      - main
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
 
@@ -52,6 +56,7 @@ jobs:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v')
     needs: verify
     runs-on: ubuntu-latest
+    environment: release
     outputs:
       file_stem: ${{ steps.version.outputs.file_stem }}
     steps:
@@ -83,7 +88,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.TIVIHUB_UPLOAD_KEY_PASSWORD }}
         run: |
           if [[ -z "$RELEASE_KEYSTORE_BASE64" || -z "$RELEASE_STORE_PASSWORD" || -z "$RELEASE_KEY_ALIAS" || -z "$RELEASE_KEY_PASSWORD" ]]; then
-            echo "::error::Configure all release-signing repository secrets before building a release APK."
+            echo "::error::Configure all release-signing secrets in the GitHub 'release' environment before building a release APK."
             exit 1
           fi
 
@@ -130,6 +135,7 @@ jobs:
         env:
           APK_FILE_STEM: ${{ steps.version.outputs.file_stem }}
         run: |
+          set -euo pipefail
           APK="app/build/outputs/apk/release/app-release.apk"
           SIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           if [[ -z "$SIGNER" ]]; then
@@ -137,8 +143,16 @@ jobs:
             exit 1
           fi
           "$SIGNER" verify --verbose "$APK"
+          CERTIFICATE_SHA256="$("$SIGNER" verify --print-certs "$APK" |
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          if [[ -z "$CERTIFICATE_SHA256" ]]; then
+            echo "::error::Could not read the APK signing certificate fingerprint."
+            exit 1
+          fi
           cp "$APK" "${APK_FILE_STEM}.apk"
           sha256sum "${APK_FILE_STEM}.apk" > "${APK_FILE_STEM}-SHA256SUMS.txt"
+          printf 'APK signing certificate SHA-256: %s\n' "$CERTIFICATE_SHA256" \
+            > "${APK_FILE_STEM}-CERTIFICATE-SHA256.txt"
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
@@ -147,6 +161,7 @@ jobs:
           path: |
             ${{ steps.version.outputs.file_stem }}.apk
             ${{ steps.version.outputs.file_stem }}-SHA256SUMS.txt
+            ${{ steps.version.outputs.file_stem }}-CERTIFICATE-SHA256.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -173,3 +188,4 @@ jobs:
           files: |
             release-assets/${{ needs.release.outputs.file_stem }}.apk
             release-assets/${{ needs.release.outputs.file_stem }}-SHA256SUMS.txt
+            release-assets/${{ needs.release.outputs.file_stem }}-CERTIFICATE-SHA256.txt

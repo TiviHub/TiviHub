@@ -21,7 +21,9 @@ import com.tivihub.data.network.XtreamApi
 import java.io.Reader
 import java.io.Writer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -97,8 +99,8 @@ class MainViewModel(
     val epgRefreshInProgress: StateFlow<Boolean> = _epgRefreshInProgress.asStateFlow()
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
+    private val feedbackMessages = Channel<String>(Channel.CONFLATED)
+    val feedback = feedbackMessages.receiveAsFlow()
     private val _playerItem = MutableStateFlow<PlayerItem?>(null)
     val playerItem: StateFlow<PlayerItem?> = _playerItem.asStateFlow()
     private var guideJob: Job? = null
@@ -126,7 +128,7 @@ class MainViewModel(
                     autoRefreshEnabled() &&
                     shouldRefreshEpg()
                 ) {
-                    refreshGuide()
+                    refreshGuide(showConfirmation = false)
                 }
             } catch (error: Exception) {
                 showError(error)
@@ -171,11 +173,13 @@ class MainViewModel(
         getApplication<Application>().getSharedPreferences(PREFERENCES, 0).edit {
             putString(CATALOG_REFRESH_INTERVAL, interval.name)
         }
+        showFeedback("Catalog refresh interval updated")
     }
 
     fun savePlaylist(playlist: Playlist) {
         viewModelScope.launch {
             try {
+                val isUpdate = repository.allPlaylists().any { it.id == playlist.id }
                 val providerExpiry = validatePlaylist(playlist)
                 repository.savePlaylist(
                     playlist.copy(expiresAtMillis = providerExpiry)
@@ -188,6 +192,7 @@ class MainViewModel(
                     _movies.value = emptyList()
                     _series.value = emptyList()
                 }
+                showFeedback(if (isUpdate) "Playlist updated" else "Playlist added")
             } catch (error: Exception) {
                 showError(error)
             }
@@ -203,6 +208,7 @@ class MainViewModel(
                 _movies.value = emptyList()
                 _series.value = emptyList()
                 _activePlaylist.value?.let(::loadLive)
+                showFeedback("Active playlist changed")
             } catch (error: Exception) {
                 showError(error)
             }
@@ -223,6 +229,7 @@ class MainViewModel(
                     _series.value = emptyList()
                     _activePlaylist.value?.let { loadLive(it) }
                 }
+                showFeedback("Playlist deleted")
             } catch (error: Exception) {
                 showError(error)
             }
@@ -265,6 +272,7 @@ class MainViewModel(
                 _series.value = it
             }
         }
+        showFeedback("Catalog refresh started")
     }
 
     private fun <T> loadCatalog(
@@ -482,6 +490,7 @@ class MainViewModel(
                 if (existing != null || legacyFavorite != null) {
                     if (existing != null) repository.removeLibraryItem(existing)
                     if (legacyFavorite != null) repository.removeFavorite(legacyFavorite)
+                    showFeedback("Removed from library")
                 } else {
                     repository.saveLibraryItem(
                         item.copy(
@@ -491,6 +500,7 @@ class MainViewModel(
                             updatedAt = System.currentTimeMillis()
                         )
                     )
+                    showFeedback("Saved to library")
                 }
             } catch (error: Exception) {
                 showError(error)
@@ -502,6 +512,13 @@ class MainViewModel(
         viewModelScope.launch {
             try {
                 repository.saveLibraryItem(item.copy(status = status, updatedAt = System.currentTimeMillis()))
+                showFeedback(
+                    when (status) {
+                        LibraryStatus.WATCHLIST -> "Saved to library"
+                        LibraryStatus.WATCHING -> "Marked as watching"
+                        LibraryStatus.WATCHED -> "Marked as watched"
+                    }
+                )
             } catch (error: Exception) {
                 showError(error)
             }
@@ -518,6 +535,7 @@ class MainViewModel(
                         it.playlistId == item.playlistId
                 }
                 if (favorite != null) repository.removeFavorite(favorite)
+                showFeedback("Removed from library")
             } catch (error: Exception) {
                 showError(error)
             }
@@ -570,7 +588,13 @@ class MainViewModel(
                         it.contentType == favorite.contentType &&
                         it.playlistId == favorite.playlistId
                 }
-                if (existing == null) repository.addFavorite(favorite) else repository.removeFavorite(existing)
+                if (existing == null) {
+                    repository.addFavorite(favorite)
+                    showFeedback("Added to favorites")
+                } else {
+                    repository.removeFavorite(existing)
+                    showFeedback("Removed from favorites")
+                }
             } catch (error: Exception) {
                 showError(error)
             }
@@ -581,13 +605,14 @@ class MainViewModel(
         viewModelScope.launch {
             try {
                 repository.removeLiveFavorites()
+                showFeedback("Favorites reset")
             } catch (error: Exception) {
                 showError(error)
             }
         }
     }
 
-    fun refreshGuide() {
+    fun refreshGuide(showConfirmation: Boolean = true) {
         if (_epgRefreshInProgress.value) return
         _epgRefreshInProgress.value = true
         viewModelScope.launch {
@@ -603,6 +628,7 @@ class MainViewModel(
                 val refreshedAt = System.currentTimeMillis()
                 epgPreferences.edit { putLong(EPG_LAST_FETCHED, refreshedAt) }
                 _epgLastFetched.value = refreshedAt
+                if (showConfirmation) showFeedback("TV guide refreshed")
             } catch (error: Exception) {
                 showError(error)
             } finally {
@@ -617,6 +643,7 @@ class MainViewModel(
                 repository.clearGuideCache()
                 epgPreferences.edit { remove(EPG_LAST_FETCHED) }
                 _epgLastFetched.value = null
+                showFeedback("TV guide cache cleared")
             } catch (error: Exception) {
                 showError(error)
             }
@@ -627,6 +654,7 @@ class MainViewModel(
         getApplication<Application>().getSharedPreferences(PREFERENCES, 0).edit {
             putBoolean(AUTO_REFRESH, enabled)
         }
+        showFeedback(if (enabled) "Automatic guide refresh enabled" else "Automatic guide refresh disabled")
         if (enabled && shouldRefreshEpg()) refreshGuide()
     }
 
@@ -638,6 +666,7 @@ class MainViewModel(
 
     fun setEpgRefreshInterval(interval: CatalogRefreshInterval) {
         epgPreferences.edit { putString(EPG_REFRESH_INTERVAL, interval.name) }
+        showFeedback("TV guide refresh interval updated")
     }
 
     fun openSubtitlesApiKey(): String? =
@@ -652,6 +681,7 @@ class MainViewModel(
             else putString(OPEN_SUBTITLES_API_KEY, credentialCipher.encrypt(normalized))
         }
         _openSubtitlesConfigured.value = normalized.isNotEmpty()
+        showFeedback(if (normalized.isEmpty()) "OpenSubtitles API key removed" else "OpenSubtitles API key saved")
     }
 
     private fun shouldRefreshEpg(): Boolean {
@@ -668,10 +698,6 @@ class MainViewModel(
     fun autoRefreshEnabled() = getApplication<Application>()
         .getSharedPreferences(PREFERENCES, 0)
         .getBoolean(AUTO_REFRESH, true)
-
-    fun dismissError() {
-        _error.value = null
-    }
 
     private fun load(action: suspend () -> Unit) {
         viewModelScope.launch {
@@ -707,7 +733,17 @@ class MainViewModel(
     }
 
     private fun showError(error: Exception) {
-        _error.value = error.localizedMessage ?: "Something went wrong."
+        showFeedback(error.localizedMessage ?: "Something went wrong.")
+    }
+
+    fun notifyAction(message: String) {
+        showFeedback(message)
+    }
+
+    private fun showFeedback(message: String) {
+        check(feedbackMessages.trySend(message).isSuccess) {
+            "Could not deliver action feedback."
+        }
     }
 
     data class PlayerItem(

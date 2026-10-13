@@ -36,7 +36,9 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
@@ -67,6 +69,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -117,6 +120,7 @@ import java.text.DateFormat
 import java.util.Date
 import java.util.TimeZone
 import java.util.UUID
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,6 +130,7 @@ fun TiviHubApp(viewModel: MainViewModel) {
     var theme by rememberSaveable {
         mutableStateOf(preferences.getString("theme", "system") ?: "system")
     }
+    var catalogColumns by rememberSaveable { mutableStateOf(0) }
     val darkTheme = when (theme) {
         "dark" -> true
         "light" -> false
@@ -150,17 +155,19 @@ fun TiviHubApp(viewModel: MainViewModel) {
         val favorites by viewModel.favorites.collectAsStateWithLifecycle()
         val libraryItems by viewModel.libraryItems.collectAsStateWithLifecycle()
         val loading by viewModel.loading.collectAsStateWithLifecycle()
-        val error by viewModel.error.collectAsStateWithLifecycle()
         val playerItem by viewModel.playerItem.collectAsStateWithLifecycle()
         val guidePrograms by viewModel.guidePrograms.collectAsStateWithLifecycle()
         val liveGuidePrograms by viewModel.liveGuidePrograms.collectAsStateWithLifecycle()
         val channelGuidePrograms by viewModel.channelGuidePrograms.collectAsStateWithLifecycle()
         val snackbar = remember { SnackbarHostState() }
 
-        LaunchedEffect(error) {
-            error?.let {
-                snackbar.showSnackbar(it)
-                viewModel.dismissError()
+        LaunchedEffect(viewModel, snackbar) {
+            viewModel.feedback.collectLatest { message ->
+                snackbar.showSnackbar(
+                    message = message,
+                    actionLabel = "Close",
+                    duration = SnackbarDuration.Indefinite
+                )
             }
         }
         BackHandler(enabled = selectedSeries != null || selectedMovie != null || selectedChannel != null || playerItem != null) {
@@ -278,7 +285,7 @@ fun TiviHubApp(viewModel: MainViewModel) {
                                     )
                                 )
                             },
-                            onRefreshGuide = viewModel::refreshGuide
+                            onRefreshGuide = { viewModel.refreshGuide() }
                         )
                     }
                 } else if (selectedMovie != null) {
@@ -408,6 +415,8 @@ fun TiviHubApp(viewModel: MainViewModel) {
                         playlistId = activePlaylist?.id,
                         loading = loading,
                         enabled = activePlaylist?.type == PlaylistType.XTREAM,
+                        columns = catalogColumns,
+                        onColumnsChanged = { catalogColumns = it },
                         onPlay = viewModel::openMovie,
                         onToggleLibrary = { movie ->
                             activePlaylist?.let { playlist ->
@@ -432,6 +441,8 @@ fun TiviHubApp(viewModel: MainViewModel) {
                         playlistId = activePlaylist?.id,
                         loading = loading,
                         enabled = activePlaylist?.type == PlaylistType.XTREAM,
+                        columns = catalogColumns,
+                        onColumnsChanged = { catalogColumns = it },
                         onSelect = viewModel::openSeries,
                         onToggleLibrary = { item ->
                             activePlaylist?.let { playlist ->
@@ -529,6 +540,7 @@ fun TiviHubApp(viewModel: MainViewModel) {
                         onThemeChanged = { selectedTheme ->
                             theme = selectedTheme
                             preferences.edit { putString("theme", selectedTheme) }
+                            viewModel.notifyAction("Theme updated")
                         }
                     )
                 }
@@ -617,6 +629,9 @@ private fun LiveScreen(
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 20.dp)) {
                 items(visible, key = LiveChannel::id) { channel ->
+                    val isFavorite = favorites.any {
+                        it.contentId == channel.id && it.playlistId == channel.playlistId
+                    }
                     Row(
                         Modifier.fillMaxWidth().clickable { onSelect(channel) }.padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -628,15 +643,17 @@ private fun LiveScreen(
                         }
                         IconButton(onClick = { onFavorite(channel) }) {
                             Icon(
-                                if (selectedGroup == "Favorites") Icons.Default.Delete else Icons.Default.Favorite,
-                                contentDescription = if (selectedGroup == "Favorites") {
+                                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = if (isFavorite) {
                                     "Remove ${channel.name} from favorites"
                                 } else {
-                                    "Toggle ${channel.name} favorite"
+                                    "Add ${channel.name} to favorites"
                                 },
-                                tint = if (selectedGroup == "Favorites" ||
-                                    favorites.any { it.contentId == channel.id && it.playlistId == channel.playlistId }
-                                ) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (isFavorite) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                         FilledIconButton(onClick = { onPlay(channel) }) {
@@ -827,7 +844,7 @@ private fun LiveChannelDetailsScreen(
         }
         OutlinedButton(onClick = onFavorite, modifier = Modifier.fillMaxWidth()) {
             Icon(
-                Icons.Default.Favorite,
+                imageVector = if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 contentDescription = null,
                 tint = if (favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
@@ -946,6 +963,47 @@ private fun CatalogSortPicker(
 }
 
 @Composable
+private fun CatalogViewPicker(
+    columns: Int,
+    onColumnsChanged: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf(0, 2, 3, 4)
+    Box {
+        IconButton(
+            onClick = { expanded = true },
+            modifier = Modifier.semantics {
+                contentDescription = if (columns == 0) {
+                    "Catalog grid: automatic columns"
+                } else {
+                    "Catalog grid: $columns columns"
+                }
+            }
+        ) {
+            Icon(Icons.Default.GridView, contentDescription = null)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(if (option == 0) "Automatic (recommended)" else "$option columns")
+                    },
+                    onClick = {
+                        onColumnsChanged(option)
+                        expanded = false
+                    },
+                    trailingIcon = if (columns == option) {
+                        { Icon(Icons.Default.Check, contentDescription = "Selected") }
+                    } else {
+                        null
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun MoviesScreen(
     movies: List<Movie>,
     favorites: List<Favorite>,
@@ -953,6 +1011,8 @@ private fun MoviesScreen(
     playlistId: String?,
     loading: Boolean,
     enabled: Boolean,
+    columns: Int,
+    onColumnsChanged: (Int) -> Unit,
     onPlay: (Movie) -> Unit,
     onToggleLibrary: (Movie) -> Unit
 ) {
@@ -993,6 +1053,7 @@ private fun MoviesScreen(
         ) {
             CategoryPicker(categories, selectedCategory) { selectedCategory = it }
             Spacer(Modifier.weight(1f))
+            CatalogViewPicker(columns, onColumnsChanged)
             CatalogSortPicker(sortOptions, selectedSort) { selectedSort = it }
         }
         val filtered = movies.filter {
@@ -1019,7 +1080,7 @@ private fun MoviesScreen(
         }
         if (visible.isEmpty() && !loading) EmptyState("No movies", "Your Xtream playlist returned no movies.")
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(145.dp),
+            columns = if (columns == 0) GridCells.Adaptive(145.dp) else GridCells.Fixed(columns),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1045,6 +1106,8 @@ private fun SeriesScreen(
     playlistId: String?,
     loading: Boolean,
     enabled: Boolean,
+    columns: Int,
+    onColumnsChanged: (Int) -> Unit,
     onSelect: (Series) -> Unit,
     onToggleLibrary: (Series) -> Unit
 ) {
@@ -1085,6 +1148,7 @@ private fun SeriesScreen(
         ) {
             CategoryPicker(categories, selectedCategory) { selectedCategory = it }
             Spacer(Modifier.weight(1f))
+            CatalogViewPicker(columns, onColumnsChanged)
             CatalogSortPicker(sortOptions, selectedSort) { selectedSort = it }
         }
         val filtered = series.filter {
@@ -1111,7 +1175,7 @@ private fun SeriesScreen(
         }
         if (visible.isEmpty() && !loading) EmptyState("No series", "Your Xtream playlist returned no series.")
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(145.dp),
+            columns = if (columns == 0) GridCells.Adaptive(145.dp) else GridCells.Fixed(columns),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1343,6 +1407,11 @@ private fun LibraryScreen(
             )
         }
     }.sortedByDescending(LibraryItem::updatedAt)
+    val savedCounts = mapOf(
+        "Live TV" to liveFavorites.size,
+        "Movies" to savedItems.count { it.contentType == ContentType.MOVIE },
+        "Series" to savedItems.count { it.contentType == ContentType.SERIES }
+    )
     Column(Modifier.fillMaxSize()) {
         Text("Your library", Modifier.padding(start = 16.dp, top = 16.dp), style = MaterialTheme.typography.titleLarge)
         Row(
@@ -1366,7 +1435,7 @@ private fun LibraryScreen(
                     FilterChip(
                         selected = selectedSavedSection == subsection,
                         onClick = { selectedSavedSection = subsection },
-                        label = { Text(subsection) }
+                        label = { Text("$subsection (${savedCounts.getValue(subsection)})") }
                     )
                 }
             }

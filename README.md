@@ -26,7 +26,18 @@ Open the repository's **Releases** page and download the versioned `TiviHub-vX.Y
 
 To install an APK, download it to your Android device and allow installation from the browser or file manager when Android asks. Android may show a warning because the APK is installed outside Google Play. APK updates from this project must be signed with the same release key; uninstalling first may remove local app data.
 
-Only download release APKs from this repository's official Releases page. Check the published checksum if you need to verify that the file matches the release asset.
+Only download release APKs from this repository's official Releases page. To check the downloaded APK against its checksum in PowerShell:
+
+```powershell
+$apk = ".\TiviHub-v1.0.1.apk"
+$checksumFile = ".\TiviHub-v1.0.1-SHA256SUMS.txt"
+$expected = (Get-Content $checksumFile).Split(' ')[0]
+$actual = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "APK checksum mismatch" }
+Write-Output "APK checksum matches"
+```
+
+The SHA-256 checksum detects accidental or in-transit changes, but by itself does not authenticate who published the APK. Each release also includes the signing certificate's SHA-256 fingerprint; compare it with the fingerprint reported by Android SDK Build Tools' `apksigner verify --print-certs <apk>`. Treat the fingerprint as a publisher identity only after you have independently trusted the expected value.
 
 ## Requirements
 
@@ -63,18 +74,18 @@ Tests cover playlist parsing, Xtream URL construction and metadata, XMLTV parsin
 
 ## Releases and versioning
 
-GitHub Actions runs tests, lint, and a debug build for pushes and pull requests. A push to `main` also builds and verifies a signed release APK; download it with its SHA-256 checksum from that run's **Artifacts** section. These main-branch artifacts are retained for 14 days. Creating and pushing a version tag matching `vX.Y.Z` triggers a release build after verification and publishes it on the repository's **Releases** page. For example:
+GitHub Actions runs tests, lint, and a debug build for pushes to `main` and pull requests. A push to `main` also builds and verifies a signed release APK; download it with its SHA-256 checksum and signing-certificate fingerprint from that run's **Artifacts** section. These main-branch artifacts are retained for 14 days. Creating and pushing a version tag matching `vX.Y.Z` triggers a release build after verification and publishes it on the repository's **Releases** page. For example:
 
 ```powershell
 git tag v1.0.1
 git push origin v1.0.1
 ```
 
-The tag becomes the release's version name (`v1.0.1`); GitHub Actions assigns a monotonically increasing Android version code. The workflow builds and verifies a signed release APK, creates a SHA-256 checksum, and attaches both files to a GitHub Release with generated release notes. Main-branch APKs use version name `1.0.0` and a unique version code for each workflow run.
+The tag becomes the release's version name (`v1.0.1`); GitHub Actions assigns a monotonically increasing Android version code. The workflow builds and verifies a signed release APK, creates a SHA-256 checksum and signing-certificate fingerprint, and attaches all three files to a GitHub Release with generated release notes. Main-branch APKs use version name `1.0.0` and a unique version code for each workflow run.
 
 ### One-time release signing setup
 
-To make APKs installable and upgradeable without changing signing identity, configure a dedicated Android release keystore as GitHub Actions repository secrets. **Never commit the keystore, its passwords, or a base64 copy to this repository.** Keep an offline backup of the keystore and its credentials; losing them prevents signing compatible updates.
+To make APKs installable and upgradeable without changing signing identity, configure a dedicated Android release keystore as GitHub Actions **environment secrets**. **Never commit the keystore, its passwords, or a base64 copy to this repository.** Keep an offline backup of the keystore and its credentials; losing them prevents signing compatible updates.
 
 1. Create a dedicated keystore on a trusted machine. Keep it outside the repository:
 
@@ -82,25 +93,30 @@ To make APKs installable and upgradeable without changing signing identity, conf
    keytool -genkeypair -v `
      -keystore "$HOME\tivihub-release.p12" `
      -alias tivihub-release `
-     -keyalg RSA -keysize 2048 -validity 10000
+     -keyalg RSA -keysize 2048 -validity 10000 `
+     -dname "CN=TiviHub, O=TiviHub Project"
    ```
 
-2. In the repository's **Settings → Secrets and variables → Actions**, add:
+   The certificate subject is visible in APK signature metadata and is not identity-verified by Android. Use a project identity rather than personal contact details. Keep the keystore password and an offline backup secure; losing the key prevents compatible updates.
+
+2. In the repository's **Settings → Environments**, create an environment named `release`. Add these secrets under that environment's **Environment secrets**:
    - `TIVIHUB_RELEASE_KEYSTORE_BASE64` — base64-encoded bytes of the keystore.
    - `TIVIHUB_UPLOAD_STORE_PASSWORD` — keystore password.
    - `TIVIHUB_UPLOAD_KEY_ALIAS` — the alias used when creating the keystore.
    - `TIVIHUB_UPLOAD_KEY_PASSWORD` — password for that alias.
 
-   With GitHub CLI installed and authenticated, the binary keystore can be uploaded without printing its encoded contents:
+   Restrict deployments to `main` and `v*` tags. Where your GitHub plan allows it, require approval from a trusted reviewer before deployment. Remove the signing values from repository-level Actions secrets after confirming the environment secrets work. GitHub may limit required reviewers or other protection rules for private repositories on some plans; use the available rules and revisit them before making the repository public.
+
+   With GitHub CLI installed and authenticated, the binary keystore can be uploaded without printing its encoded contents (use `--env release`):
 
    ```powershell
    [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\tivihub-release.p12")) |
-     gh secret set TIVIHUB_RELEASE_KEYSTORE_BASE64
+     gh secret set TIVIHUB_RELEASE_KEYSTORE_BASE64 --env release --repo Momkay/TiviHub
    ```
 
 3. Push to `main` to get a signed APK artifact, or create and push a new version tag to publish a GitHub Release. The workflow fails with an explicit error if signing secrets are missing or incomplete; it does not produce an unsigned release APK.
 
-Protect `v*` tags in the repository's rulesets and limit tag creation to trusted maintainers. Use the release signing key only for official project releases. Do not share its private material with contributors or store it in workflow artifacts.
+In **Settings → Rules → Rulesets**, protect `main` and `v*` tags: require pull requests and passing checks for `main`, require code-owner review for workflow/build configuration changes, block force pushes and deletion, and restrict tag creation to trusted maintainers. Availability of individual rules can depend on the repository plan. Use the release signing key only for official project releases. Do not share its private material with contributors or store it in workflow artifacts.
 
 ## Playlists and provider data
 
@@ -110,14 +126,15 @@ Protect `v*` tags in the repository's rulesets and limit tag creation to trusted
 
 M3U/M3U8 sources are used for live channels. Xtream sources can additionally provide movies, series, episodes, account information, and XMLTV guide data. TiviHub reads available metadata from the provider; it does not generate missing provider data.
 
-HTTPS is recommended. HTTP playlist URLs are unencrypted and can expose credentials, requests, and media to parties able to observe or modify the connection. TiviHub warns before saving an HTTP playlist.
+HTTPS is strongly recommended. HTTP playlist URLs are unencrypted and can expose credentials, requests, and media to parties able to observe or modify the connection. For compatibility with user-provided IPTV sources, this app currently permits cleartext traffic; the playlist editor warns and requires confirmation before saving an HTTP playlist, but that confirmation does not encrypt traffic or constrain every host referenced by a playlist.
 
 ## Privacy and security
 
 - Playlist data, catalog caches, favorites, library items, playback progress, and guide data are kept in app-private local storage.
 - Playlist passwords and the optional OpenSubtitles API key are encrypted using Android Keystore-backed AES-GCM encryption.
+- Other saved data, including playlist server URLs, is not encrypted by the app. Android app-data backup is disabled.
 - The app sends requests to the servers configured by the user. OpenSubtitles search sends the search text and API key to that third-party service.
-- HTTP connections are not encrypted in transit. Use HTTPS sources whenever available.
+- For playlist compatibility, Android cleartext traffic is enabled. HTTP connections are not encrypted in transit; the playlist editor warns and requires confirmation before saving an HTTP playlist. Use HTTPS sources whenever available.
 - No IPTV content or provider credentials are included in this repository. Do not add real playlists, credentials, API keys, signing material, private URLs, or personal data to issues, pull requests, tests, screenshots, or commits.
 
 ## Project layout
@@ -138,7 +155,7 @@ The app uses Kotlin, Jetpack Compose and Material 3, MVVM with lifecycle-aware `
 
 ## Contributing
 
-Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request. Keep changes focused, add or update tests for changed behavior, and run the Android checks locally. Never include private provider data or secrets.
+Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) and follow the [Code of Conduct](./CODE_OF_CONDUCT.md) before opening a pull request. Keep changes focused, add or update tests for changed behavior, and run the Android checks locally. Never include private provider data or secrets. Report security issues privately using the process in [SECURITY.md](./SECURITY.md).
 
 ## Legal note
 
