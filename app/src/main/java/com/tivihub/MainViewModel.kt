@@ -4,8 +4,13 @@ import android.app.Application
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.tivihub.data.local.BackupPreferences
+import com.tivihub.data.local.BackupDisplaySettings
+import com.tivihub.data.local.BackupSummary
 import com.tivihub.data.local.LocalRepository
 import com.tivihub.data.local.CredentialCipher
+import com.tivihub.data.local.TiviHubBackup
+import com.tivihub.data.local.TiviHubBackupFile
 import com.tivihub.data.model.EpgProgram
 import com.tivihub.data.model.Favorite
 import com.tivihub.data.model.LibraryItem
@@ -21,6 +26,7 @@ import com.tivihub.data.network.XtreamApi
 import java.io.Reader
 import java.io.Writer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -30,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
@@ -44,6 +51,12 @@ enum class CatalogRefreshInterval(val label: String, val intervalMillis: Long?) 
     EVERY_THREE_DAYS("Every 3 days", 3 * 24 * 60 * 60 * 1000L),
     WEEKLY("Every 7 days", 7 * 24 * 60 * 60 * 1000L)
 }
+
+data class PlaylistRefreshState(
+    val inProgress: Boolean = false,
+    val lastAttemptAt: Long? = null,
+    val errorMessage: String? = null
+)
 
 class MainViewModel(
     application: Application,
@@ -84,9 +97,14 @@ class MainViewModel(
     val catalogRefreshTimes: StateFlow<Map<String, Map<String, Long>>> = _catalogRefreshTimes.asStateFlow()
     private val _catalogRefreshInProgress = MutableStateFlow(false)
     val catalogRefreshInProgress: StateFlow<Boolean> = _catalogRefreshInProgress.asStateFlow()
+    private val _playlistRefreshStates = MutableStateFlow<Map<String, PlaylistRefreshState>>(emptyMap())
+    val playlistRefreshStates: StateFlow<Map<String, PlaylistRefreshState>> =
+        _playlistRefreshStates.asStateFlow()
     private val epgPreferences = application.getSharedPreferences(PREFERENCES, 0)
     private val subtitlePreferences = application.getSharedPreferences(PREFERENCES, 0)
+    private val appPreferences = application.getSharedPreferences(PREFERENCES, 0)
     private val credentialCipher = CredentialCipher("tivihub.opensubtitles.api_key")
+    private var pendingRestoreBackup: TiviHubBackup? = null
     private val _openSubtitlesConfigured = MutableStateFlow(
         !subtitlePreferences.getString(OPEN_SUBTITLES_API_KEY, null).isNullOrBlank()
     )
@@ -261,18 +279,128 @@ class MainViewModel(
         val playlist = _activePlaylist.value ?: return showError(
             IllegalStateException("Choose an active playlist first.")
         )
-        loadCatalog(playlist, "live", ::decodeLive, ::encodeLive, true, api::liveChannels) {
-            _channels.value = it
-        }
-        if (playlist.type == PlaylistType.XTREAM) {
-            loadCatalog(playlist, "movies", ::decodeMovies, ::encodeMovie, true, api::movies, cacheVersion = 2) {
-                _movies.value = it
+        refreshPlaylist(playlist)
+    }
+
+    fun refreshPlaylist(playlist: Playlist) {
+        if (_playlistRefreshStates.value[playlist.id]?.inProgress == true) return
+        _playlistRefreshStates.value = _playlistRefreshStates.value + (
+            playlist.id to PlaylistRefreshState(inProgress = true)
+        )
+        _catalogRefreshInProgress.value = true
+        viewModelScope.launch {
+            val errors = mutableListOf<String>()
+            try {
+                val refreshActions = buildList<suspend () -> Unit> {
+                    add {
+                        refreshCatalogNow(playlist, "live", ::encodeLive, api::liveChannels, publish = {
+                            if (_activePlaylist.value?.id == playlist.id) _channels.value = it
+                        })
+                    }
+                    if (playlist.type == PlaylistType.XTREAM) {
+                        add {
+                            refreshCatalogNow(
+                                playlist, "movies", ::encodeMovie, api::movies, cacheVersion = 2,
+                                publish = { if (_activePlaylist.value?.id == playlist.id) _movies.value = it }
+                            )
+                        }
+                        add {
+                            refreshCatalogNow(
+                                playlist, "series", ::encodeSeries, api::series, cacheVersion = 2,
+                                publish = { if (_activePlaylist.value?.id == playlist.id) _series.value = it }
+                            )
+                        }
+                    }
+                }
+                refreshActions.forEach { refresh ->
+                    try {
+                        refresh()
+                    } catch (error: Exception) {
+                        errors += actionableRefreshError(playlist, error)
+                    }
+                }
+            } finally {
+                val completedAt = System.currentTimeMillis()
+                val errorMessage = errors.distinct().joinToString("\n").takeIf(String::isNotBlank)
+                _playlistRefreshStates.value = _playlistRefreshStates.value + (
+                    playlist.id to PlaylistRefreshState(
+                        inProgress = false,
+                        lastAttemptAt = completedAt,
+                        errorMessage = errorMessage
+                    )
+                )
+                _catalogRefreshInProgress.value = _playlistRefreshStates.value.values.any { it.inProgress }
+                if (errorMessage == null) {
+                    showFeedback("${playlist.name} refreshed")
+                } else {
+                    showFeedback("${playlist.name}: refresh failed. See playlist details for recovery steps.")
+                }
             }
-            loadCatalog(playlist, "series", ::decodeSeries, ::encodeSeries, true, api::series, cacheVersion = 2) {
-                _series.value = it
+        }
+    }
+
+    private suspend fun <T> refreshCatalogNow(
+        playlist: Playlist,
+        contentType: String,
+        encodeItem: (T) -> JSONObject,
+        fetch: suspend (Playlist) -> List<T>,
+        cacheVersion: Int = 0,
+        publish: (List<T>) -> Unit
+    ) {
+        catalogRefreshMutex.withLock {
+            val fresh = fetch(playlist)
+            val refreshedAt = System.currentTimeMillis()
+            repository.saveCatalog(playlist.id, contentType, refreshedAt, cacheVersion) { writer ->
+                writeCatalog(writer, fresh, encodeItem)
+            }
+            _catalogRefreshTimes.value = _catalogRefreshTimes.value +
+                (playlist.id to (_catalogRefreshTimes.value[playlist.id].orEmpty() + (contentType to refreshedAt)))
+            publish(fresh)
+        }
+    }
+
+    private fun actionableRefreshError(playlist: Playlist, error: Exception): String {
+        val causeMessages = mutableListOf<String>()
+        val causes = mutableListOf<Throwable>()
+        var cause: Throwable? = error
+        while (cause != null) {
+            causes += cause
+            cause.message?.let(causeMessages::add)
+            cause = cause.cause
+        }
+        val message = causeMessages.joinToString(" ").lowercase(java.util.Locale.ROOT)
+        val connectionFailure = causes.any {
+            it is java.net.UnknownHostException ||
+                it is java.net.SocketTimeoutException ||
+                it is java.net.ConnectException
+        }
+        return when {
+            playlist.type == PlaylistType.XTREAM && (
+                "authentication was rejected" in message ||
+                    "unauthorized" in message ||
+                    "http 401" in message ||
+                    "http 403" in message ||
+                    "expired" in message ||
+                    "disabled" in message
+                ) -> "Provider rejected the account or subscription. Edit the playlist credentials or contact your provider, then retry."
+            "http 404" in message ->
+                "Playlist endpoint was not found (HTTP 404). Edit the playlist URL and retry."
+            "http 5" in message ||
+                connectionFailure ->
+                "Provider is unavailable or the connection failed. Check your internet connection and provider status, then retry."
+            else -> {
+                var safeMessage = error.localizedMessage ?: "Unexpected provider response."
+                listOf(
+                    playlist.url to "[playlist URL]",
+                    playlist.username to "[username]",
+                    playlist.password to "[password]"
+                ).filter { it.first.isNotBlank() }.forEach { (secret, replacement) ->
+                    safeMessage = safeMessage.replace(secret, replacement)
+                }
+                safeMessage = safeMessage.takeIf(String::isNotBlank) ?: "Unexpected provider response."
+                "Refresh failed: $safeMessage Check the playlist settings and retry."
             }
         }
-        showFeedback("Catalog refresh started")
     }
 
     private fun <T> loadCatalog(
@@ -400,7 +528,8 @@ class MainViewModel(
         drmLicenseUrl: String? = null,
         channelId: String? = null,
         libraryItem: LibraryItem? = null,
-        subtitleSearchQuery: String? = null
+        subtitleSearchQuery: String? = null,
+        isLive: Boolean = false
     ) {
         val previous = libraryItem?.let { item ->
             libraryItems.value.firstOrNull {
@@ -419,7 +548,8 @@ class MainViewModel(
             channelId,
             libraryItem,
             resumePosition,
-            subtitleSearchQuery
+            subtitleSearchQuery,
+            isLive
         )
         libraryItem?.let { item ->
             viewModelScope.launch {
@@ -684,6 +814,111 @@ class MainViewModel(
         showFeedback(if (normalized.isEmpty()) "OpenSubtitles API key removed" else "OpenSubtitles API key saved")
     }
 
+    suspend fun createEncryptedBackup(password: CharArray): ByteArray {
+        val snapshot = repository.userDataSnapshot()
+        val backup = TiviHubBackup(
+            playlists = snapshot.playlists,
+            favorites = snapshot.favorites,
+            libraryItems = snapshot.libraryItems,
+            preferences = BackupPreferences(
+                theme = appPreferences.getString(THEME, "system") ?: "system",
+                catalogColumns = catalogColumns(),
+                autoRefresh = autoRefreshEnabled(),
+                catalogRefreshInterval = catalogRefreshInterval().name,
+                epgRefreshInterval = epgRefreshInterval().name,
+                openSubtitlesApiKey = openSubtitlesApiKey().orEmpty()
+            )
+        )
+        return withContext(Dispatchers.Default) {
+            TiviHubBackupFile.encrypt(backup, password)
+        }
+    }
+
+    suspend fun previewRestoreBackup(file: ByteArray, password: CharArray): BackupSummary {
+        val backup = withContext(Dispatchers.Default) {
+            TiviHubBackupFile.decrypt(file, password)
+        }
+        require(backup.preferences.theme in setOf("system", "light", "dark")) {
+            "The backup contains an invalid theme setting."
+        }
+        require(backup.preferences.catalogColumns in setOf(0, 2, 3, 4)) {
+            "The backup contains an invalid catalog layout setting."
+        }
+        require(CatalogRefreshInterval.entries.any { it.name == backup.preferences.catalogRefreshInterval }) {
+            "The backup contains an invalid catalog refresh setting."
+        }
+        require(CatalogRefreshInterval.entries.any { it.name == backup.preferences.epgRefreshInterval }) {
+            "The backup contains an invalid guide refresh setting."
+        }
+        require(backup.playlists.all { it.id.isNotBlank() && it.name.isNotBlank() && it.url.isNotBlank() }) {
+            "The backup contains an invalid playlist."
+        }
+        require(backup.playlists.all { playlist ->
+            isValidHttpUrl(playlist.url) &&
+                (playlist.type != PlaylistType.XTREAM ||
+                    (playlist.username.isNotBlank() && playlist.password.isNotBlank())) &&
+                (playlist.drmLicenseUrl.isBlank() || isValidHttpUrl(playlist.drmLicenseUrl))
+        }) { "The backup contains invalid playlist connection details." }
+        pendingRestoreBackup = backup
+        return BackupSummary(
+            playlistCount = backup.playlists.size,
+            favoriteCount = backup.favorites.size,
+            libraryCount = backup.libraryItems.size
+        )
+    }
+
+    suspend fun restorePendingBackup(): BackupDisplaySettings {
+        val backup = checkNotNull(pendingRestoreBackup) { "No backup is ready to restore." }
+        repository.replaceUserData(backup.playlists, backup.favorites, backup.libraryItems)
+        appPreferences.edit {
+            putString(THEME, backup.preferences.theme)
+            putInt(CATALOG_COLUMNS, backup.preferences.catalogColumns)
+            putBoolean(AUTO_REFRESH, backup.preferences.autoRefresh)
+            putString(CATALOG_REFRESH_INTERVAL, backup.preferences.catalogRefreshInterval)
+            putString(EPG_REFRESH_INTERVAL, backup.preferences.epgRefreshInterval)
+            val encryptedApiKey = backup.preferences.openSubtitlesApiKey
+                .takeIf(String::isNotBlank)
+                ?.let(credentialCipher::encrypt)
+            if (encryptedApiKey == null) remove(OPEN_SUBTITLES_API_KEY)
+            else putString(OPEN_SUBTITLES_API_KEY, encryptedApiKey)
+        }
+        pendingRestoreBackup = null
+        _activePlaylist.value = repository.activePlaylist()
+        _channels.value = emptyList()
+        _movies.value = emptyList()
+        _series.value = emptyList()
+        _selectedChannel.value = null
+        _selectedMovie.value = null
+        _selectedSeries.value = null
+        _playerItem.value = null
+        _guidePrograms.value = emptyList()
+        _channelGuidePrograms.value = emptyList()
+        guideJob?.cancel()
+        channelGuideJob?.cancel()
+        clearGuideFetchState()
+        _openSubtitlesConfigured.value = backup.preferences.openSubtitlesApiKey.isNotBlank()
+        loadCatalogRefreshTimes()
+        _activePlaylist.value?.let(::loadLive)
+        showFeedback("Backup restored")
+        return BackupDisplaySettings(backup.preferences.theme, backup.preferences.catalogColumns)
+    }
+
+    fun catalogColumns(): Int =
+        appPreferences.getInt(CATALOG_COLUMNS, 0).takeIf { it in setOf(0, 2, 3, 4) } ?: 0
+
+    private fun clearGuideFetchState() {
+        epgPreferences.edit { remove(EPG_LAST_FETCHED) }
+        _epgLastFetched.value = null
+    }
+
+    fun cancelPendingBackupRestore() {
+        pendingRestoreBackup = null
+    }
+
+    fun reportActionError(error: Exception) {
+        showError(error)
+    }
+
     private fun shouldRefreshEpg(): Boolean {
         val lastFetched = _epgLastFetched.value ?: return true
         val interval = epgRefreshInterval()
@@ -726,10 +961,18 @@ class MainViewModel(
     }
 
     private fun requireHttpUrl(value: String) {
-        val uri = java.net.URI(value)
-        require(uri.scheme in setOf("http", "https") && uri.host != null) {
+        require(isValidHttpUrl(value)) {
             "Enter a valid HTTP or HTTPS URL."
         }
+    }
+
+    private fun isValidHttpUrl(value: String): Boolean {
+        val uri = try {
+            java.net.URI(value)
+        } catch (_: java.net.URISyntaxException) {
+            return false
+        }
+        return uri.scheme in setOf("http", "https") && uri.host != null
     }
 
     private fun showError(error: Exception) {
@@ -753,11 +996,14 @@ class MainViewModel(
         val channelId: String?,
         val libraryItem: LibraryItem?,
         val resumePositionMillis: Long,
-        val subtitleSearchQuery: String?
+        val subtitleSearchQuery: String?,
+        val isLive: Boolean
     )
 
     private companion object {
         const val PREFERENCES = "tivihub.settings"
+        const val THEME = "theme"
+        const val CATALOG_COLUMNS = "catalog.columns"
         const val AUTO_REFRESH = "epg.auto_refresh"
         const val CATALOG_REFRESH_INTERVAL = "catalog.refresh_interval"
         const val EPG_LAST_FETCHED = "epg.last_fetched"

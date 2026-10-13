@@ -1,6 +1,9 @@
 package com.tivihub.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn as AndroidOptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -35,14 +38,17 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -77,11 +83,17 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -90,6 +102,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import android.net.Uri
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -103,8 +119,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.util.UnstableApi
 import coil.compose.AsyncImage
 import com.tivihub.MainViewModel
+import com.tivihub.PlaylistRefreshState
 import com.tivihub.AppSection
 import com.tivihub.CatalogRefreshInterval
 import com.tivihub.data.model.ContentType
@@ -116,13 +134,22 @@ import com.tivihub.data.model.Movie
 import com.tivihub.data.model.Playlist
 import com.tivihub.data.model.PlaylistType
 import com.tivihub.data.model.Series
+import com.tivihub.data.local.BackupSummary
+import com.tivihub.data.local.TiviHubBackupFile
+import com.tivihub.data.local.BackupDisplaySettings
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.text.DateFormat
 import java.util.Date
 import java.util.TimeZone
 import java.util.UUID
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
+@AndroidOptIn(markerClass = [UnstableApi::class])
 @Composable
 fun TiviHubApp(viewModel: MainViewModel) {
     val context = LocalContext.current
@@ -130,7 +157,12 @@ fun TiviHubApp(viewModel: MainViewModel) {
     var theme by rememberSaveable {
         mutableStateOf(preferences.getString("theme", "system") ?: "system")
     }
-    var catalogColumns by rememberSaveable { mutableStateOf(0) }
+    var catalogColumns by rememberSaveable {
+        mutableStateOf(preferences.getInt("catalog.columns", 0).takeIf { it in setOf(0, 2, 3, 4) } ?: 0)
+    }
+    var liveSearchQuery by rememberSaveable { mutableStateOf("") }
+    var moviesSearchQuery by rememberSaveable { mutableStateOf("") }
+    var seriesSearchQuery by rememberSaveable { mutableStateOf("") }
     val darkTheme = when (theme) {
         "dark" -> true
         "light" -> false
@@ -142,6 +174,7 @@ fun TiviHubApp(viewModel: MainViewModel) {
         val activePlaylist by viewModel.activePlaylist.collectAsStateWithLifecycle()
         val catalogRefreshTimes by viewModel.catalogRefreshTimes.collectAsStateWithLifecycle()
         val catalogRefreshInProgress by viewModel.catalogRefreshInProgress.collectAsStateWithLifecycle()
+        val playlistRefreshStates by viewModel.playlistRefreshStates.collectAsStateWithLifecycle()
         val epgLastFetched by viewModel.epgLastFetched.collectAsStateWithLifecycle()
         val epgRefreshInProgress by viewModel.epgRefreshInProgress.collectAsStateWithLifecycle()
         val openSubtitlesConfigured by viewModel.openSubtitlesConfigured.collectAsStateWithLifecycle()
@@ -160,7 +193,7 @@ fun TiviHubApp(viewModel: MainViewModel) {
         val liveGuidePrograms by viewModel.liveGuidePrograms.collectAsStateWithLifecycle()
         val channelGuidePrograms by viewModel.channelGuidePrograms.collectAsStateWithLifecycle()
         val snackbar = remember { SnackbarHostState() }
-
+        var playlistMenuExpanded by rememberSaveable { mutableStateOf(false) }
         LaunchedEffect(viewModel, snackbar) {
             viewModel.feedback.collectLatest { message ->
                 snackbar.showSnackbar(
@@ -180,36 +213,84 @@ fun TiviHubApp(viewModel: MainViewModel) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
-                    ),
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Image(
-                                painter = painterResource(R.drawable.tivihub_icon),
-                                contentDescription = null,
-                                modifier = Modifier.size(38.dp)
-                            )
-                            Column(Modifier.padding(start = 12.dp)) {
+                Column {
+                    TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background
+                        ),
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Image(
+                                    painter = painterResource(R.drawable.tivihub_icon),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(38.dp)
+                                )
                                 Text(
                                     "TiviHub",
+                                    modifier = Modifier.padding(start = 12.dp),
                                     fontWeight = FontWeight.SemiBold,
                                     letterSpacing = (-0.4).sp
                                 )
-                                activePlaylist?.let {
+                            }
+                        },
+                        actions = {
+                            Box {
+                                TextButton(
+                                    onClick = { playlistMenuExpanded = true },
+                                    enabled = playlists.isNotEmpty()
+                                ) {
                                     Text(
-                                        it.name,
+                                        activePlaylist?.name ?: "Select playlist",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
+                                    )
+                                    Icon(
+                                        Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Switch playlist",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = playlistMenuExpanded,
+                                    onDismissRequest = { playlistMenuExpanded = false }
+                                ) {
+                                    playlists.forEach { playlist ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(playlist.name)
+                                                    Text(
+                                                        playlist.type.name,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                playlistMenuExpanded = false
+                                                if (playlist.id != activePlaylist?.id) {
+                                                    viewModel.activatePlaylist(playlist)
+                                                }
+                                            },
+                                            leadingIcon = if (playlist.id == activePlaylist?.id) {
+                                                { Icon(Icons.Default.Check, contentDescription = "Active playlist") }
+                                            } else null
+                                        )
+                                    }
+                                    DropdownMenuItem(
+                                        text = { Text("Manage playlists") },
+                                        onClick = {
+                                            playlistMenuExpanded = false
+                                            viewModel.selectSection(AppSection.SETTINGS)
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
                                     )
                                 }
                             }
                         }
-                    }
-                )
+                    )
+                }
             },
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
@@ -270,7 +351,8 @@ fun TiviHubApp(viewModel: MainViewModel) {
                                     channel.streamUrl,
                                     channel.name,
                                     channel.drmLicenseUrl,
-                                    channel.tvgId
+                                    channel.tvgId,
+                                    isLive = true
                                 )
                             },
                             onFavorite = {
@@ -393,8 +475,18 @@ fun TiviHubApp(viewModel: MainViewModel) {
                         favorites = favorites,
                         guidePrograms = liveGuidePrograms,
                         loading = loading,
+                        search = liveSearchQuery,
+                        onSearchChanged = { liveSearchQuery = it },
                         onSelect = viewModel::openChannel,
-                        onPlay = { viewModel.play(it.streamUrl, it.name, it.drmLicenseUrl, it.tvgId) },
+                        onPlay = {
+                            viewModel.play(
+                                it.streamUrl,
+                                it.name,
+                                it.drmLicenseUrl,
+                                it.tvgId,
+                                isLive = true
+                            )
+                        },
                         onFavorite = { channel ->
                             viewModel.toggleFavorite(
                                 Favorite(
@@ -415,8 +507,14 @@ fun TiviHubApp(viewModel: MainViewModel) {
                         playlistId = activePlaylist?.id,
                         loading = loading,
                         enabled = activePlaylist?.type == PlaylistType.XTREAM,
+                        search = moviesSearchQuery,
+                        onSearchChanged = { moviesSearchQuery = it },
                         columns = catalogColumns,
-                        onColumnsChanged = { catalogColumns = it },
+                        onColumnsChanged = {
+                            catalogColumns = it
+                            preferences.edit { putInt("catalog.columns", it) }
+                            viewModel.notifyAction("Catalog layout updated")
+                        },
                         onPlay = viewModel::openMovie,
                         onToggleLibrary = { movie ->
                             activePlaylist?.let { playlist ->
@@ -441,8 +539,14 @@ fun TiviHubApp(viewModel: MainViewModel) {
                         playlistId = activePlaylist?.id,
                         loading = loading,
                         enabled = activePlaylist?.type == PlaylistType.XTREAM,
+                        search = seriesSearchQuery,
+                        onSearchChanged = { seriesSearchQuery = it },
                         columns = catalogColumns,
-                        onColumnsChanged = { catalogColumns = it },
+                        onColumnsChanged = {
+                            catalogColumns = it
+                            preferences.edit { putInt("catalog.columns", it) }
+                            viewModel.notifyAction("Catalog layout updated")
+                        },
                         onSelect = viewModel::openSeries,
                         onToggleLibrary = { item ->
                             activePlaylist?.let { playlist ->
@@ -521,12 +625,14 @@ fun TiviHubApp(viewModel: MainViewModel) {
                         catalogRefreshInterval = viewModel.catalogRefreshInterval(),
                         epgRefreshInterval = viewModel.epgRefreshInterval(),
                         catalogRefreshTimes = catalogRefreshTimes,
+                        playlistRefreshStates = playlistRefreshStates,
                         catalogRefreshInProgress = catalogRefreshInProgress,
                         epgLastFetched = epgLastFetched,
                         epgRefreshInProgress = epgRefreshInProgress,
                         theme = preferences.getString("theme", "system") ?: "system",
                         onAddPlaylist = viewModel::savePlaylist,
                         onActivatePlaylist = viewModel::activatePlaylist,
+                        onRefreshPlaylist = viewModel::refreshPlaylist,
                         onDeletePlaylist = viewModel::deletePlaylist,
                         onToggleAutoRefresh = viewModel::setAutoRefresh,
                         onEpgRefreshIntervalChanged = viewModel::setEpgRefreshInterval,
@@ -537,6 +643,16 @@ fun TiviHubApp(viewModel: MainViewModel) {
                         onClearGuide = viewModel::clearGuideCache,
                         openSubtitlesConfigured = openSubtitlesConfigured,
                         onSaveOpenSubtitlesApiKey = viewModel::setOpenSubtitlesApiKey,
+                        onCreateBackup = viewModel::createEncryptedBackup,
+                        onPreviewRestoreBackup = viewModel::previewRestoreBackup,
+                        onRestoreBackup = viewModel::restorePendingBackup,
+                        onCancelBackupRestore = viewModel::cancelPendingBackupRestore,
+                        onReportActionError = viewModel::reportActionError,
+                        onActionFeedback = viewModel::notifyAction,
+                        onDisplaySettingsRestored = {
+                            theme = it.theme
+                            catalogColumns = it.catalogColumns
+                        },
                         onThemeChanged = { selectedTheme ->
                             theme = selectedTheme
                             preferences.edit { putString("theme", selectedTheme) }
@@ -570,6 +686,7 @@ fun TiviHubApp(viewModel: MainViewModel) {
                     guidePrograms = guidePrograms,
                     openSubtitlesApiKey = viewModel::openSubtitlesApiKey,
                     subtitleSearchQuery = item.subtitleSearchQuery,
+                    isLive = item.isLive,
                     onProgress = viewModel::updatePlaybackProgress,
                     onClose = viewModel::closePlayer
                 )
@@ -584,30 +701,41 @@ private fun LiveScreen(
     favorites: List<Favorite>,
     guidePrograms: List<com.tivihub.data.model.EpgProgram>,
     loading: Boolean,
+    search: String,
+    onSearchChanged: (String) -> Unit,
     onSelect: (LiveChannel) -> Unit,
     onPlay: (LiveChannel) -> Unit,
     onFavorite: (LiveChannel) -> Unit
 ) {
-    var search by rememberSaveable { mutableStateOf("") }
     var selectedGroup by rememberSaveable { mutableStateOf("All groups") }
     var showGuide by rememberSaveable { mutableStateOf(false) }
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
     val groups = listOf("All groups", "Favorites") +
         channels.map(LiveChannel::group).distinct().filterNot { it == "All groups" || it == "Favorites" }.sorted()
     Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = search,
-            onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            label = { Text("Search channels") },
-            singleLine = true
-        )
-        CategoryPicker(groups, selectedGroup, Modifier.padding(start = 16.dp)) { selectedGroup = it }
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            FilterChip(selected = !showGuide, onClick = { showGuide = false }, label = { Text("Channels") })
-            FilterChip(selected = showGuide, onClick = { showGuide = true }, label = { Text("TV guide") })
+            CategoryPicker(groups, selectedGroup) { selectedGroup = it }
+            Spacer(Modifier.weight(1f))
+            SearchToggle(searchExpanded) { searchExpanded = it }
+            IconButton(
+                onClick = { showGuide = !showGuide },
+                modifier = Modifier.semantics {
+                    contentDescription = if (showGuide) "Show channels" else "Show TV guide"
+                }
+            ) {
+                Icon(
+                    Icons.Default.Tv,
+                    contentDescription = null,
+                    tint = if (showGuide) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        ExpandableSearchField(searchExpanded, search, "Search channels", onSearchChanged) {
+            searchExpanded = false
         }
         val visible = channels.filter {
             it.name.contains(search, ignoreCase = true) &&
@@ -1004,6 +1132,63 @@ private fun CatalogViewPicker(
 }
 
 @Composable
+private fun SearchToggle(expanded: Boolean, onExpandedChange: (Boolean) -> Unit) {
+    IconButton(
+        onClick = { onExpandedChange(!expanded) },
+        modifier = Modifier.semantics {
+            contentDescription = if (expanded) "Close search" else "Search"
+        }
+    ) {
+        Icon(
+            if (expanded) Icons.Default.Close else Icons.Default.Search,
+            contentDescription = null
+        )
+    }
+}
+
+@Composable
+private fun ExpandableSearchField(
+    expanded: Boolean,
+    query: String,
+    label: String,
+    onQueryChanged: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        } else {
+            keyboardController?.hide()
+        }
+    }
+    AnimatedVisibility(
+        visible = expanded,
+        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .focusRequester(focusRequester),
+            label = { Text(label) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Close search")
+                }
+            },
+            singleLine = true
+        )
+    }
+}
+
+@Composable
 private fun MoviesScreen(
     movies: List<Movie>,
     favorites: List<Favorite>,
@@ -1011,26 +1196,21 @@ private fun MoviesScreen(
     playlistId: String?,
     loading: Boolean,
     enabled: Boolean,
+    search: String,
+    onSearchChanged: (String) -> Unit,
     columns: Int,
     onColumnsChanged: (Int) -> Unit,
     onPlay: (Movie) -> Unit,
     onToggleLibrary: (Movie) -> Unit
 ) {
-    var search by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("All categories") }
     var selectedSort by rememberSaveable { mutableStateOf(CatalogSortOption.RECENTLY_ADDED) }
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
     if (!enabled) {
         EmptyState("Xtream playlist required", "Movies are available from Xtream playlists.")
         return
     }
     Column {
-        OutlinedTextField(
-            value = search,
-            onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            label = { Text("Search movies") },
-            singleLine = true
-        )
         val categories = listOf("All categories") + movies.mapNotNull(Movie::category)
             .distinct().sortedBy(String::lowercase)
         LaunchedEffect(categories) {
@@ -1053,8 +1233,12 @@ private fun MoviesScreen(
         ) {
             CategoryPicker(categories, selectedCategory) { selectedCategory = it }
             Spacer(Modifier.weight(1f))
+            SearchToggle(searchExpanded) { searchExpanded = it }
             CatalogViewPicker(columns, onColumnsChanged)
             CatalogSortPicker(sortOptions, selectedSort) { selectedSort = it }
+        }
+        ExpandableSearchField(searchExpanded, search, "Search movies", onSearchChanged) {
+            searchExpanded = false
         }
         val filtered = movies.filter {
             it.name.contains(search, ignoreCase = true) &&
@@ -1106,26 +1290,21 @@ private fun SeriesScreen(
     playlistId: String?,
     loading: Boolean,
     enabled: Boolean,
+    search: String,
+    onSearchChanged: (String) -> Unit,
     columns: Int,
     onColumnsChanged: (Int) -> Unit,
     onSelect: (Series) -> Unit,
     onToggleLibrary: (Series) -> Unit
 ) {
-    var search by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("All categories") }
     var selectedSort by rememberSaveable { mutableStateOf(CatalogSortOption.RECENTLY_ADDED) }
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
     if (!enabled) {
         EmptyState("Xtream playlist required", "Series are available from Xtream playlists.")
         return
     }
     Column {
-        OutlinedTextField(
-            value = search,
-            onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            label = { Text("Search series") },
-            singleLine = true
-        )
         val categories = listOf("All categories") + series.mapNotNull(Series::category)
             .distinct().sortedBy(String::lowercase)
         LaunchedEffect(categories) {
@@ -1148,8 +1327,12 @@ private fun SeriesScreen(
         ) {
             CategoryPicker(categories, selectedCategory) { selectedCategory = it }
             Spacer(Modifier.weight(1f))
+            SearchToggle(searchExpanded) { searchExpanded = it }
             CatalogViewPicker(columns, onColumnsChanged)
             CatalogSortPicker(sortOptions, selectedSort) { selectedSort = it }
+        }
+        ExpandableSearchField(searchExpanded, search, "Search series", onSearchChanged) {
+            searchExpanded = false
         }
         val filtered = series.filter {
             it.name.contains(search, ignoreCase = true) &&
@@ -1595,12 +1778,14 @@ private fun SettingsScreen(
     catalogRefreshInterval: CatalogRefreshInterval,
     epgRefreshInterval: CatalogRefreshInterval,
     catalogRefreshTimes: Map<String, Map<String, Long>>,
+    playlistRefreshStates: Map<String, PlaylistRefreshState>,
     catalogRefreshInProgress: Boolean,
     epgLastFetched: Long?,
     epgRefreshInProgress: Boolean,
     theme: String,
     onAddPlaylist: (Playlist) -> Unit,
     onActivatePlaylist: (Playlist) -> Unit,
+    onRefreshPlaylist: (Playlist) -> Unit,
     onDeletePlaylist: (Playlist) -> Unit,
     onToggleAutoRefresh: (Boolean) -> Unit,
     onEpgRefreshIntervalChanged: (CatalogRefreshInterval) -> Unit,
@@ -1611,6 +1796,13 @@ private fun SettingsScreen(
     onClearGuide: () -> Unit,
     openSubtitlesConfigured: Boolean,
     onSaveOpenSubtitlesApiKey: (String) -> Unit,
+    onCreateBackup: suspend (CharArray) -> ByteArray,
+    onPreviewRestoreBackup: suspend (ByteArray, CharArray) -> BackupSummary,
+    onRestoreBackup: suspend () -> BackupDisplaySettings,
+    onCancelBackupRestore: () -> Unit,
+    onReportActionError: (Exception) -> Unit,
+    onActionFeedback: (String) -> Unit,
+    onDisplaySettingsRestored: (BackupDisplaySettings) -> Unit,
     onThemeChanged: (String) -> Unit
 ) {
     var showPlaylistEditor by remember { mutableStateOf(false) }
@@ -1618,8 +1810,47 @@ private fun SettingsScreen(
     var refreshMenuExpanded by remember { mutableStateOf(false) }
     var epgRefreshMenuExpanded by remember { mutableStateOf(false) }
     var confirmResetFavorites by remember { mutableStateOf(false) }
+    var showExportPasswordDialog by remember { mutableStateOf(false) }
     var legalInfo by remember { mutableStateOf<LegalInfo?>(null) }
     var openSubtitlesApiKey by remember { mutableStateOf("") }
+    var restoreUri by remember { mutableStateOf<Uri?>(null) }
+    var exportPassword by remember { mutableStateOf("") }
+    var exportPasswordConfirmation by remember { mutableStateOf("") }
+    var restorePassword by remember { mutableStateOf("") }
+    var backupPasswordError by remember { mutableStateOf<String?>(null) }
+    var backupPreview by remember { mutableStateOf<BackupSummary?>(null) }
+    var pendingExportBytes by remember { mutableStateOf<ByteArray?>(null) }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val bytes = pendingExportBytes
+        pendingExportBytes = null
+        if (uri != null && bytes != null) {
+            coroutineScope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val output = context.contentResolver.openOutputStream(uri, "w")
+                            ?: throw IllegalStateException("Could not open the selected backup destination.")
+                        output.use { it.write(bytes) }
+                    }
+                    onActionFeedback("Encrypted backup exported")
+                } catch (error: Exception) {
+                    onReportActionError(error)
+                } finally {
+                    bytes.fill(0)
+                }
+            }
+        } else {
+            bytes?.fill(0)
+        }
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        restoreUri = uri
+    }
     val liveFavoriteCount = favorites.count { it.contentType == ContentType.LIVE }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Appearance", style = MaterialTheme.typography.titleLarge) }
@@ -1636,6 +1867,27 @@ private fun SettingsScreen(
                         }
                     }
                 }
+            }
+        }
+        item {
+            Text("Backup & restore", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
+            Text(
+                "Export playlists, favorites, library items, preferences, and credentials in a password-encrypted backup. Keep the password safe; it cannot be recovered.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    backupPasswordError = null
+                    exportPassword = ""
+                    exportPasswordConfirmation = ""
+                    showExportPasswordDialog = true
+                }) { Text("Create backup") }
+                OutlinedButton(onClick = {
+                    restorePassword = ""
+                    backupPasswordError = null
+                    restoreLauncher.launch(arrayOf("*/*"))
+                }) { Text("Restore backup") }
             }
         }
         item { Text("Playlists", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp)) }
@@ -1712,6 +1964,35 @@ private fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    val refreshState = playlistRefreshStates[playlist.id]
+                    if (refreshState?.inProgress == true) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text("Refreshing ${playlist.type.name} catalogs…", style = MaterialTheme.typography.bodySmall)
+                        }
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    } else if (refreshState?.lastAttemptAt != null) {
+                        Text(
+                            "Last refresh ${if (refreshState.errorMessage == null) "succeeded" else "failed"}: " +
+                                formatFetchDateTime(refreshState.lastAttemptAt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (refreshState.errorMessage == null) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
+                    }
+                    refreshState?.errorMessage?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                     if (playlist.type == PlaylistType.XTREAM) {
                         val expiry = playlist.expiresAtMillis
                         if (expiry == null) {
@@ -1723,7 +2004,11 @@ private fun SettingsScreen(
                         } else {
                             val expired = expiry < System.currentTimeMillis()
                             Text(
-                                "${if (expired) "Expired" else "Expires"} ${formatExpiryDate(expiry)}",
+                                if (expired) {
+                                    "Subscription expired ${formatExpiryDate(expiry)}. Edit credentials or contact your provider."
+                                } else {
+                                    "Expires ${formatExpiryDate(expiry)}"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (expired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1737,6 +2022,10 @@ private fun SettingsScreen(
                             Spacer(Modifier.weight(1f))
                         }
                         TextButton(onClick = { editingPlaylist = playlist }) { Text("Edit") }
+                        TextButton(
+                            onClick = { onRefreshPlaylist(playlist) },
+                            enabled = refreshState?.inProgress != true
+                        ) { Text("Refresh") }
                         IconButton(onClick = { onDeletePlaylist(playlist) }) {
                             Icon(Icons.Default.Delete, "Delete playlist")
                         }
@@ -1879,6 +2168,170 @@ private fun SettingsScreen(
             }
         }
     }
+    if (showExportPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showExportPasswordDialog = false
+                exportPassword = ""
+                exportPasswordConfirmation = ""
+                backupPasswordError = null
+            },
+            title = { Text("Encrypt backup") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Choose a password with at least ${TiviHubBackupFile.MIN_PASSWORD_LENGTH} characters. You will need it to restore this backup.")
+                    OutlinedTextField(
+                        value = exportPassword,
+                        onValueChange = { exportPassword = it; backupPasswordError = null },
+                        label = { Text("Backup password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = exportPasswordConfirmation,
+                        onValueChange = { exportPasswordConfirmation = it; backupPasswordError = null },
+                        label = { Text("Confirm password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                    backupPasswordError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    when {
+                        exportPassword.length < TiviHubBackupFile.MIN_PASSWORD_LENGTH ->
+                            backupPasswordError = "Use at least ${TiviHubBackupFile.MIN_PASSWORD_LENGTH} characters."
+                        exportPassword != exportPasswordConfirmation ->
+                            backupPasswordError = "The passwords do not match."
+                        else -> {
+                            val password = exportPassword.toCharArray()
+                            showExportPasswordDialog = false
+                            exportPassword = ""
+                            exportPasswordConfirmation = ""
+                            backupPasswordError = null
+                            coroutineScope.launch {
+                                try {
+                                    val bytes = onCreateBackup(password)
+                                    pendingExportBytes = bytes
+                                    try {
+                                        exportLauncher.launch("TiviHub-backup.tivihub-backup")
+                                    } catch (error: Exception) {
+                                        pendingExportBytes = null
+                                        bytes.fill(0)
+                                        throw error
+                                    }
+                                } catch (error: Exception) {
+                                    onReportActionError(error)
+                                } finally {
+                                    password.fill('\u0000')
+                                }
+                            }
+                        }
+                    }
+                }) { Text("Choose file") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showExportPasswordDialog = false
+                    exportPassword = ""
+                    exportPasswordConfirmation = ""
+                    backupPasswordError = null
+                }) { Text("Cancel") }
+            }
+        )
+    }
+    restoreUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = {
+                restoreUri = null
+                restorePassword = ""
+                backupPasswordError = null
+            },
+            title = { Text("Unlock backup") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Enter the password used when this backup was created.")
+                    OutlinedTextField(
+                        value = restorePassword,
+                        onValueChange = { restorePassword = it; backupPasswordError = null },
+                        label = { Text("Backup password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                    backupPasswordError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val password = restorePassword.toCharArray()
+                    restorePassword = ""
+                    backupPasswordError = null
+                    coroutineScope.launch {
+                        var bytes: ByteArray? = null
+                        try {
+                            bytes = withContext(Dispatchers.IO) {
+                                val input = context.contentResolver.openInputStream(uri)
+                                    ?: throw IllegalStateException("Could not open the selected backup file.")
+                                input.use(::readBackupFile)
+                            }
+                            backupPreview = onPreviewRestoreBackup(bytes, password)
+                        } catch (error: Exception) {
+                            onReportActionError(error)
+                        } finally {
+                            bytes?.fill(0)
+                            password.fill('\u0000')
+                            restoreUri = null
+                        }
+                    }
+                }) { Text("Preview restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    restoreUri = null
+                    restorePassword = ""
+                    backupPasswordError = null
+                }) { Text("Cancel") }
+            }
+        )
+    }
+    backupPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = {
+                backupPreview = null
+                onCancelBackupRestore()
+            },
+            title = { Text("Replace app data?") },
+            text = {
+                Text(
+                    "This backup contains ${preview.playlistCount} playlists, ${preview.favoriteCount} favorites, and ${preview.libraryCount} library items. " +
+                        "Restoring replaces the current playlists, favorites, library, and backed-up preferences. Cached catalogs and guide data will be cleared."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    coroutineScope.launch {
+                        try {
+                            onDisplaySettingsRestored(onRestoreBackup())
+                            backupPreview = null
+                        } catch (error: Exception) {
+                            onReportActionError(error)
+                        }
+                    }
+                }) { Text("Restore and replace") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    backupPreview = null
+                    onCancelBackupRestore()
+                }) { Text("Cancel") }
+            }
+        )
+    }
     legalInfo?.let { info ->
         AlertDialog(
             onDismissRequest = { legalInfo = null },
@@ -1936,7 +2389,7 @@ private enum class LegalInfo(val title: String, val body: String) {
     ),
     PRIVACY(
         "Privacy information",
-        "Playlist details, cached catalogs and guide listings, favorites, and viewing status are stored locally on this device. Xtream usernames and passwords and an optional OpenSubtitles API key are encrypted using Android Keystore. Other saved data, including server URLs, is kept in app-private storage but is not encrypted by the app. Downloaded external subtitles are temporary app-cache files. Android app-data backup is disabled.\n\nWhen you use a playlist, TiviHub sends requests to the configured playlist server and to media or image endpoints referenced by it. HTTP sources are unencrypted; the app warns and requires confirmation before saving an HTTP playlist URL. When you search OpenSubtitles, the title you enter and your API key are sent to OpenSubtitles; a selected subtitle file is downloaded from its supplied download link. Those providers may receive connection and request data and process it under their own privacy practices. This app build has no TiviHub account service or analytics SDK. The app does not control third-party server logging or retention.\n\nThis summary describes the app's current data behavior and is not legal advice."
+        "Playlist details, cached catalogs and guide listings, favorites, and viewing status are stored locally on this device. Xtream usernames and passwords and an optional OpenSubtitles API key are encrypted using Android Keystore. Other saved data, including server URLs, is kept in app-private storage but is not encrypted by the app. Downloaded external subtitles are temporary app-cache files. Android app-data backup is disabled.\n\nYou can create a password-encrypted backup file containing playlists and credentials, favorites, library items, preferences, and the optional OpenSubtitles API key. TiviHub saves the encrypted file only to the destination you choose and does not upload it. Anyone with the file and password can access its contents; forgotten backup passwords cannot be recovered. Restoring replaces the current playlists, favorites, library, and included preferences, and clears cached catalogs and guide data.\n\nWhen you use a playlist, TiviHub sends requests to the configured playlist server and to media or image endpoints referenced by it. HTTP sources are unencrypted; the app warns and requires confirmation before saving an HTTP playlist URL. When you search OpenSubtitles, the title you enter and your API key are sent to OpenSubtitles; a selected subtitle file is downloaded from its supplied download link. Those providers may receive connection and request data and process it under their own privacy practices. This app build has no TiviHub account service or analytics SDK. The app does not control third-party server logging or retention.\n\nThis summary describes the app's current data behavior and is not legal advice."
     )
 }
 
@@ -2096,9 +2549,33 @@ private fun PosterCard(
                     )
                 }
             }
-            Text(title, Modifier.padding(10.dp), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Box(
+                Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 10.dp, vertical = 8.dp),
+                contentAlignment = Alignment.TopStart
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
+}
+
+private fun readBackupFile(input: InputStream): ByteArray {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    var totalBytes = 0
+    while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        totalBytes += count
+        require(totalBytes <= TiviHubBackupFile.MAX_FILE_SIZE) { "Backup file is too large." }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
 }
 
 private fun isInLibrary(
