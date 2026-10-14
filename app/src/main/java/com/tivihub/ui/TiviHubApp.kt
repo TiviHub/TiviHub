@@ -32,8 +32,16 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
@@ -50,6 +58,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -62,6 +71,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -727,7 +737,7 @@ private fun LiveScreen(
                 }
             ) {
                 Icon(
-                    Icons.Default.Tv,
+                    Icons.Default.MenuBook,
                     contentDescription = null,
                     tint = if (showGuide) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant
@@ -760,8 +770,13 @@ private fun LiveScreen(
                     val isFavorite = favorites.any {
                         it.contentId == channel.id && it.playlistId == channel.playlistId
                     }
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
                     Row(
-                        Modifier.fillMaxWidth().clickable { onSelect(channel) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().clickable { onSelect(channel) }.padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Artwork(channel.logoUrl, Modifier.size(54.dp).clip(RoundedCornerShape(12.dp)), "Live TV")
@@ -787,6 +802,7 @@ private fun LiveScreen(
                         FilledIconButton(onClick = { onPlay(channel) }) {
                             Icon(Icons.Default.PlayArrow, contentDescription = "Play ${channel.name}")
                         }
+                    }
                     }
                 }
             }
@@ -1390,12 +1406,7 @@ private fun MovieDetailsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         TextButton(onClick = onBack) { Text("‹  Movies") }
-        Artwork(
-            movie.posterUrl,
-            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(16.dp)),
-            movie.name
-        )
-        Text(movie.name, style = MaterialTheme.typography.headlineSmall)
+        DetailHero(movie.posterUrl, movie.name)
         val metadata = listOfNotNull(
             movie.year?.toString(),
             movie.rating?.let { "★ ${"%.1f".format(it)}" },
@@ -1451,12 +1462,8 @@ private fun EpisodesScreen(
             item {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     TextButton(onClick = onBack) { Text("‹  Series") }
-                    Artwork(
-                        series.posterUrl,
-                        Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(16.dp)),
-                        series.name
-                    )
-                    Text(series.name, Modifier.padding(top = 12.dp), style = MaterialTheme.typography.headlineSmall)
+                    DetailHero(series.posterUrl, series.name)
+                    Spacer(Modifier.height(12.dp))
                     val metadata = listOfNotNull(
                         series.seasons.takeIf { it > 0 }?.let { "$it seasons" },
                         series.category
@@ -1605,7 +1612,8 @@ private fun LibraryScreen(
                 FilterChip(
                     selected = selectedTab == tab,
                     onClick = { selectedTab = tab },
-                    label = { Text(tab) }
+                    label = { Text(tab) },
+                    colors = libraryChipColors()
                 )
             }
         }
@@ -1618,7 +1626,8 @@ private fun LibraryScreen(
                     FilterChip(
                         selected = selectedSavedSection == subsection,
                         onClick = { selectedSavedSection = subsection },
-                        label = { Text("$subsection (${savedCounts.getValue(subsection)})") }
+                        label = { Text("$subsection (${savedCounts.getValue(subsection)})") },
+                        colors = libraryChipColors()
                     )
                 }
             }
@@ -1641,7 +1650,11 @@ private fun LibraryScreen(
             } else {
                 LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
                     items(visibleLiveFavorites, key = Favorite::id) { favorite ->
-                        Card(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Card(
+                            Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
                             Row(
                                 Modifier.fillMaxWidth().clickable { onOpenFavorite(favorite) }.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -1658,7 +1671,11 @@ private fun LibraryScreen(
                         }
                     }
                     items(visibleSavedItems, key = { "saved_${it.playlistId}_${it.contentType}_${it.contentId}" }) { item ->
-                        Card(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Card(
+                            Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
                             Row(
                                 Modifier.fillMaxWidth().padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -1711,7 +1728,11 @@ private fun LibraryScreen(
             } else {
                 LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
                     items(visibleItems, key = LibraryItem::id) { item ->
-                        Card(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Card(
+                            Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
                             Column(Modifier.fillMaxWidth().padding(12.dp)) {
                                 Row(
                                     Modifier.fillMaxWidth(),
@@ -1763,6 +1784,64 @@ private fun LibraryScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+private enum class SettingsSection(
+    val title: String,
+    val description: String,
+    val icon: ImageVector
+) {
+    PLAYLISTS("Playlists & catalogs", "Sources, refresh schedule and catalog updates", Icons.Default.LiveTv),
+    GUIDE("TV guide (EPG)", "Programme guide refresh and cache", Icons.Default.MenuBook),
+    SUBTITLES("Subtitles", "OpenSubtitles online provider", Icons.Default.ClosedCaption),
+    APPEARANCE("Appearance", "Light, dark or system theme", Icons.Default.Palette),
+    BACKUP("Backup & data", "Encrypted backup, restore and favorites", Icons.Default.Backup),
+    LEGAL("Legal & privacy", "Content rights and privacy information", Icons.Default.Gavel)
+}
+
+@Composable
+private fun libraryChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+)
+
+@Composable
+private fun SettingsMenu(onSelect: (SettingsSection) -> Unit) {
+    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item { Text("Settings", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 8.dp)) }
+        items(SettingsSection.entries, key = SettingsSection::name) { entry ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onSelect(entry) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(entry.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(entry.title, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            entry.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -1852,9 +1931,21 @@ private fun SettingsScreen(
         restoreUri = uri
     }
     val liveFavoriteCount = favorites.count { it.contentType == ContentType.LIVE }
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Appearance", style = MaterialTheme.typography.titleLarge) }
+    var sectionName by rememberSaveable { mutableStateOf<String?>(null) }
+    val section = SettingsSection.entries.firstOrNull { it.name == sectionName }
+    BackHandler(enabled = section != null) { sectionName = null }
+    if (section == null) {
+        SettingsMenu(onSelect = { sectionName = it.name })
+    } else LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { sectionName = null }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to settings")
+                }
+                Text(section.title, style = MaterialTheme.typography.titleLarge)
+            }
+        }
+        if (section == SettingsSection.APPEARANCE) item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 listOf("system", "light", "dark").forEach { choice ->
                     if (theme == choice) {
@@ -1869,8 +1960,7 @@ private fun SettingsScreen(
                 }
             }
         }
-        item {
-            Text("Backup & restore", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
+        if (section == SettingsSection.BACKUP) item {
             Text(
                 "Export playlists, favorites, library items, preferences, and credentials in a password-encrypted backup. Keep the password safe; it cannot be recovered.",
                 style = MaterialTheme.typography.bodySmall,
@@ -1890,7 +1980,7 @@ private fun SettingsScreen(
                 }) { Text("Restore backup") }
             }
         }
-        item { Text("Playlists", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp)) }
+        if (section == SettingsSection.PLAYLISTS) {
         item { Text("Catalog updates", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp)) }
         item {
             Text(
@@ -2034,7 +2124,8 @@ private fun SettingsScreen(
             }
         }
         item { OutlinedButton(onClick = { showPlaylistEditor = true }, modifier = Modifier.fillMaxWidth()) { Text("Add playlist") } }
-        item { Text("EPG", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp)) }
+        }
+        if (section == SettingsSection.GUIDE) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Automatically refresh", Modifier.weight(1f))
@@ -2099,8 +2190,8 @@ private fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        item {
-            Text("Subtitles", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
+        }
+        if (section == SettingsSection.SUBTITLES) item {
             Text("Online subtitle provider", style = MaterialTheme.typography.titleMedium)
             Text(
                 if (openSubtitlesConfigured) {
@@ -2140,8 +2231,7 @@ private fun SettingsScreen(
                 }
             }
         }
-        item { Text("Favorites", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp)) }
-        item {
+        if (section == SettingsSection.BACKUP) item {
             OutlinedButton(
                 onClick = { confirmResetFavorites = true },
                 enabled = liveFavoriteCount > 0,
@@ -2150,8 +2240,7 @@ private fun SettingsScreen(
                 Text("Reset favorites")
             }
         }
-        item { Text("Legal & privacy", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp)) }
-        item {
+        if (section == SettingsSection.LEGAL) item {
             OutlinedButton(
                 onClick = { legalInfo = LegalInfo.CONTENT_AND_RIGHTS },
                 modifier = Modifier.fillMaxWidth()
@@ -2159,7 +2248,7 @@ private fun SettingsScreen(
                 Text("Content & rights")
             }
         }
-        item {
+        if (section == SettingsSection.LEGAL) item {
             OutlinedButton(
                 onClick = { legalInfo = LegalInfo.PRIVACY },
                 modifier = Modifier.fillMaxWidth()
@@ -2533,7 +2622,8 @@ private fun PosterCard(
 ) {
     Card(
         modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column {
             Box {
@@ -2590,6 +2680,44 @@ private fun isInLibrary(
         it.contentId == contentId && it.contentType == contentType && it.playlistId == playlistId
     } || favorites.any {
         it.contentId == contentId && it.contentType == contentType && it.playlistId == playlistId
+    }
+}
+
+@Composable
+private fun DetailHero(url: String?, title: String) {
+    Box(Modifier.fillMaxWidth().height(380.dp).clip(RoundedCornerShape(16.dp))) {
+        if (url.isNullOrBlank()) {
+            Box(
+                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Tv, contentDescription = title, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            AsyncImage(
+                model = url,
+                contentDescription = title,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                alignment = Alignment.TopCenter,
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)
+            )
+        }
+        Box(
+            Modifier.fillMaxSize().background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    0.45f to Color.Transparent,
+                    1f to Color.Black.copy(alpha = 0.92f)
+                )
+            )
+        )
+        Text(
+            title,
+            Modifier.align(Alignment.BottomStart).padding(16.dp),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 3
+        )
     }
 }
 
