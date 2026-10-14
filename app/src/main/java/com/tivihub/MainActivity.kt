@@ -6,7 +6,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ActivityInfo
 import android.graphics.Rect
 import android.util.Rational
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.lifecycle.ViewModel
@@ -17,7 +17,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tivihub.ui.TiviHubApp
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val viewModel: MainViewModel by viewModels {
         val app = application as TiviHubApplication
         MainViewModelFactory(app, app.repository, app.api)
