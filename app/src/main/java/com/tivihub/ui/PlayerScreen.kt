@@ -287,7 +287,8 @@ fun PlayerScreen(
         ) {
             AndroidView(
                 factory = { viewContext ->
-                    MediaRouteButton(viewContext).also {
+                    val themed = android.view.ContextThemeWrapper(viewContext, androidx.appcompat.R.style.Theme_AppCompat)
+                    MediaRouteButton(themed).also {
                         CastButtonFactory.setUpMediaRouteButton(viewContext, it)
                     }
                 },
