@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material3.AlertDialog
@@ -301,7 +301,7 @@ fun PlayerScreen(
             }
             if (guidePrograms.isNotEmpty()) {
                 IconButton(onClick = { showGuide = !showGuide }) {
-                    Icon(Icons.Default.DateRange, contentDescription = "Toggle TV guide", tint = Color.White)
+                    Icon(Icons.Default.MenuBook, contentDescription = "Toggle TV guide", tint = Color.White)
                 }
             }
         }
