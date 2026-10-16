@@ -1113,6 +1113,11 @@ a:focus-visible {
     padding: 0 var(--content-gutter) 108px;
   }
 
+  .app-shell.sidebar-collapsed .main-content {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .topbar {
     position: sticky;
     z-index: 3;
@@ -2910,20 +2915,10 @@ button:disabled {
   -webkit-appearance: none;
 }
 
-.favorite-row {
-  grid-template-columns: 54px minmax(0, 1fr) auto auto;
-}
-
-.favorite-row > img,
-.favorite-row .favorite-art-placeholder {
-  width: 54px;
-  height: 54px;
-}
-
 .favorite-row > div {
   display: grid;
   min-width: 0;
-  gap: 5px;
+  gap: 6px;
 }
 
 .home-continue-section {
@@ -3712,7 +3707,7 @@ button:disabled {
   }
 
   .library-item {
-    grid-template-columns: 50px minmax(0, 1fr) auto;
+    grid-template-columns: 50px minmax(0, 1fr) auto auto;
     gap: 9px;
     padding: 8px;
   }
@@ -3724,13 +3719,13 @@ button:disabled {
   }
 
   .library-item .status-select {
-    grid-column: 2;
-    grid-row: 2;
+    grid-column: 3;
+    grid-row: 1;
   }
 
   .library-item > .icon-button {
-    grid-column: 3;
-    grid-row: 1 / 3;
+    grid-column: 4;
+    grid-row: 1;
   }
 
   .status-select select {
@@ -3738,20 +3733,15 @@ button:disabled {
   }
 
   .favorite-row {
-    grid-template-columns: 44px minmax(0, 1fr) auto auto;
-    gap: 7px;
+    grid-template-columns: 50px minmax(0, 1fr) auto auto;
+    gap: 9px;
     padding: 8px;
   }
 
   .favorite-row > img,
   .favorite-row .favorite-art-placeholder {
-    width: 44px;
-    height: 44px;
-  }
-
-  .favorite-row .icon-button {
-    width: 34px;
-    height: 34px;
+    width: 50px;
+    height: 55px;
   }
 
   .backup-grid {

@@ -701,7 +701,7 @@ export function LibraryPage({
           <div className="favorite-list">
             {favorites.map((favorite) => (
               <article className="favorite-row" key={favorite.id}>
-                {favorite.artworkUrl ? <img alt="" loading="lazy" src={favorite.artworkUrl} /> : <span className="favorite-art-placeholder"><Icon name="favorite" /></span>}
+                {favorite.artworkUrl ? <img alt="" loading="lazy" src={favorite.artworkUrl} /> : <span className="favorite-art-placeholder"><Icon name="movie" /></span>}
                 <div><strong>{favorite.title}</strong><small>{favorite.contentType}</small></div>
                 {favorite.streamUrl && (
                   <button
