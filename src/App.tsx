@@ -3,7 +3,6 @@ import webPackage from "../package.json";
 import { fetchM3u, parseM3uCatalog } from "./providers/m3u";
 import { fetchXmltv } from "./providers/xmltv";
 import { loadXtreamCatalog, loadXtreamEpisodes, loadXtreamShortEpg } from "./providers/xtream";
-import { createDemoPlaylist, DEMO_PLAYLIST_CONTENT, DEMO_PLAYLIST_ID } from "./demo";
 import {
   deletePlaylistDocument,
   deletePlaylist,
@@ -399,30 +398,35 @@ function App() {
   }
 
   async function loadDemoLibrary() {
-    clearNotifications();
-    const existing = sources.find((source) => source.id === DEMO_PLAYLIST_ID);
-    const shouldActivate = !existing || activeSourceId === null;
-    const playlist = createDemoPlaylist(shouldActivate);
-    if (existing) playlist.createdAt = existing.createdAt;
-    const catalog = parseM3uCatalog(DEMO_PLAYLIST_CONTENT, {
-      id: playlist.id,
-      name: playlist.name,
-    });
-    await savePlaylist(playlist);
-    await savePlaylistDocument({ playlistId: playlist.id, content: DEMO_PLAYLIST_CONTENT });
-    if (shouldActivate) await setActivePlaylist(playlist.id);
-    await saveCatalog({
-      playlistId: playlist.id,
-      channels: catalog.channels,
-      movies: catalog.movies,
-      series: catalog.series,
-    });
-    await Promise.all(catalog.series.map((item) =>
-      saveEpisodes(playlist.id, item.id, catalog.episodes.filter((episode) => episode.seriesId === item.id)),
-    ));
-    await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
-    if (shouldActivate) setSection("Live TV");
-    notify("Demo playlist added to this browser. Its sample streams load only when played.", "notice");
+    if (import.meta.env.DEV) {
+      const { createDemoPlaylist, DEMO_PLAYLIST_CONTENT, DEMO_PLAYLIST_ID } = await import("./demo");
+      clearNotifications();
+      const existing = sources.find((source) => source.id === DEMO_PLAYLIST_ID);
+      const shouldActivate = !existing || activeSourceId === null;
+      const playlist = createDemoPlaylist(shouldActivate);
+      if (existing) playlist.createdAt = existing.createdAt;
+      const catalog = parseM3uCatalog(DEMO_PLAYLIST_CONTENT, {
+        id: playlist.id,
+        name: playlist.name,
+      });
+      await savePlaylist(playlist);
+      await savePlaylistDocument({ playlistId: playlist.id, content: DEMO_PLAYLIST_CONTENT });
+      if (shouldActivate) await setActivePlaylist(playlist.id);
+      await saveCatalog({
+        playlistId: playlist.id,
+        channels: catalog.channels,
+        movies: catalog.movies,
+        series: catalog.series,
+      });
+      await Promise.all(catalog.series.map((item) =>
+        saveEpisodes(playlist.id, item.id, catalog.episodes.filter((episode) => episode.seriesId === item.id)),
+      ));
+      await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
+      if (shouldActivate) setSection("Live TV");
+      notify("Demo playlist added to this browser. Its sample streams load only when played.", "notice");
+      return;
+    }
+    throw new Error("Demo imports are only available during development.");
   }
 
   async function refreshSource(source: Playlist) {
@@ -436,17 +440,23 @@ function App() {
       let catalog: { channels: LiveChannel[]; movies: Movie[]; series: Series[] };
       let importedEpisodes: Episode[] = [];
       if (source.demo) {
-        const importedCatalog = parseM3uCatalog(DEMO_PLAYLIST_CONTENT, {
-          id: source.id,
-          name: source.name,
-        });
-        catalog = {
-          channels: importedCatalog.channels,
-          movies: importedCatalog.movies,
-          series: importedCatalog.series,
-        };
-        importedEpisodes = importedCatalog.episodes;
-        await savePlaylistDocument({ playlistId: source.id, content: DEMO_PLAYLIST_CONTENT });
+        if (import.meta.env.DEV) {
+          const { DEMO_PLAYLIST_CONTENT } = await import("./demo");
+          const importedCatalog = parseM3uCatalog(DEMO_PLAYLIST_CONTENT, {
+            id: source.id,
+            name: source.name,
+          });
+          catalog = {
+            channels: importedCatalog.channels,
+            movies: importedCatalog.movies,
+            series: importedCatalog.series,
+          };
+          importedEpisodes = importedCatalog.episodes;
+          await savePlaylistDocument({ playlistId: source.id, content: DEMO_PLAYLIST_CONTENT });
+        } else {
+          notify("This development-only demo source is unavailable in production.", "error");
+          return;
+        }
       } else if (source.type === "M3U") {
         const document = source.fileName ? await getPlaylistDocument(source.id) : undefined;
         const content = document?.content ?? (source.fileName ? undefined : await fetchM3u(source.url));
@@ -1013,7 +1023,7 @@ function App() {
         <div className="refresh-dialog-host" inert={refreshing}>
           <PlaylistDialog
             editing={editingSource}
-            onLoadDemo={loadDemoLibrary}
+            onLoadDemo={import.meta.env.DEV ? loadDemoLibrary : undefined}
             onClose={() => {
               setSourceDialogOpen(false);
               setEditingSource(undefined);

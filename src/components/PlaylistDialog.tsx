@@ -17,7 +17,7 @@ export function PlaylistDialog({
   editing?: Playlist;
   onClose: () => void;
   onConnect: (draft: PlaylistDraft) => Promise<void>;
-  onLoadDemo: () => Promise<void>;
+  onLoadDemo?: () => Promise<void>;
 }) {
   const [type, setType] = useState<PlaylistType>(editing?.type ?? "M3U");
   const [sourceMode, setSourceMode] = useState<"url" | "file">(
@@ -131,6 +131,10 @@ export function PlaylistDialog({
   }
 
   async function loadDemo() {
+    if (!onLoadDemo) {
+      setError("Demo imports are only available during development.");
+      return;
+    }
     setError(null);
     setBusyAction("demo");
     try {
@@ -331,7 +335,7 @@ export function PlaylistDialog({
             Account details and source URLs are encrypted in this browser. Derived stream links stay
             local and may contain provider tokens.
           </p>
-          {!editing && (
+          {import.meta.env.DEV && !editing && onLoadDemo && (
             <div className="demo-playlist-option">
               <div>
                 <strong>Just exploring?</strong>
