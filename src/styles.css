@@ -2921,6 +2921,10 @@ button:disabled {
   gap: 6px;
 }
 
+.favorite-row > button:last-child {
+  grid-column: 4;
+}
+
 .home-continue-section {
   padding-top: 45px;
 }

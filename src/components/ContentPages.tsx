@@ -669,7 +669,7 @@ export function LibraryPage({
   favorites: Favorite[];
   onPlay: (item: PlayableItem, position: number) => void;
   onChangeStatus: (item: LibraryItem, status: LibraryItem["status"]) => void;
-  onRemove: (id: string) => void;
+  onRemove: (id: string, title: string) => void;
   onRemoveFavorite: (favorite: Favorite) => void;
 }) {
   const [tab, setTab] = useState<"Continue watching" | "Watchlist" | "Watched" | "Favorites">("Continue watching");
@@ -772,7 +772,7 @@ export function LibraryPage({
                 </select>
                 <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
               </label>
-              <button aria-label={`Remove ${item.title} from library`} className="icon-button" onClick={() => onRemove(item.id)} type="button">
+              <button aria-label={`Remove ${item.title} from library`} className="icon-button" onClick={() => onRemove(item.id, item.title)} type="button">
                 <Icon name="delete" />
               </button>
             </article>

@@ -592,8 +592,12 @@ function App() {
       addedAt: Date.now(),
     };
     try {
-      await toggleStoredFavorite(favorite);
+      const added = await toggleStoredFavorite(favorite);
       setFavorites(await getFavorites());
+      notify(
+        added ? `Added ${item.name} to favorites.` : `Removed ${item.name} from favorites.`,
+        "notice",
+      );
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : "Could not update favorites.", "error");
     }
@@ -617,6 +621,7 @@ function App() {
         updatedAt: Date.now(),
       });
       setLibrary(await getLibraryItems());
+      notify(`Added ${item.name} to your watchlist.`, "notice");
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : "Could not add this title to your library.", "error");
     }
@@ -658,28 +663,31 @@ function App() {
         updatedAt: Date.now(),
       });
       setLibrary(await getLibraryItems());
+      notify(`${item.title} marked as ${status.toLowerCase()}.`, "notice");
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : "Could not update library status.", "error");
     }
   }
 
-  async function deleteLibraryItem(id: string) {
+  async function deleteLibraryItem(id: string, title: string) {
     try {
       await removeLibraryItem(id);
       setLibrary(await getLibraryItems());
+      notify(`Removed ${title} from your library.`, "notice");
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : "Could not remove this library item.", "error");
     }
   }
 
   async function removeFromLibrary(item: Movie | Series, contentType: "MOVIE" | "SERIES") {
-    await deleteLibraryItem(`${item.playlistId}:${contentType}:${item.id}`);
+    await deleteLibraryItem(`${item.playlistId}:${contentType}:${item.id}`, item.name);
   }
 
   async function removeFavorite(favorite: Favorite) {
     try {
       await toggleStoredFavorite(favorite);
       setFavorites(await getFavorites());
+      notify(`Removed ${favorite.title} from favorites.`, "notice");
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : "Could not remove this favorite.", "error");
     }
@@ -973,7 +981,7 @@ function App() {
                 library={library}
                 onChangeStatus={(item, status) => void changeLibraryStatus(item, status)}
                 onPlay={(item, position) => openPlayback(item, position)}
-                onRemove={(id) => void deleteLibraryItem(id)}
+                onRemove={(id, title) => void deleteLibraryItem(id, title)}
                 onRemoveFavorite={(favorite) => void removeFavorite(favorite)}
               />
             )}
