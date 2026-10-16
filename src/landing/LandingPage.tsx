@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import type { IconName } from "../components/common";
 
 function LandingIcon({ name }: { name: IconName }) {
@@ -22,8 +23,65 @@ const highlights: { icon: IconName; title: string; description: string }[] = [
   },
 ];
 
+const faqCategories = ["All", "Getting started", "Privacy", "Compatibility", "Updates"] as const;
+type FaqCategory = (typeof faqCategories)[number];
+
+const faqItems: { question: string; answer: string; category: Exclude<FaqCategory, "All"> }[] = [
+  {
+    question: "What is TiviHub?",
+    answer: "TiviHub is a desktop player and library for sources you configure. It organizes live TV, guide data, movies, series, favorites, and playback progress in one app.",
+    category: "Getting started",
+  },
+  {
+    question: "Does TiviHub provide playlists, channels, or streams?",
+    answer: "No. TiviHub is player software only. You add sources that you provide and are authorized to use; TiviHub does not supply or host channels, playlists, or media.",
+    category: "Getting started",
+  },
+  {
+    question: "Which sources and media formats can I use?",
+    answer: "TiviHub supports M3U files and URLs, plus Xtream-compatible sources. Playback includes supported HLS and DASH streams. Whether a particular stream works depends on your provider, authorization, network, codecs, and Windows WebView2.",
+    category: "Getting started",
+  },
+  {
+    question: "Where is my library data stored?",
+    answer: "Sources, catalogs, favorites, playback progress, and settings are stored locally on your device. TiviHub does not provide an account, application server, cloud sync, or analytics. Keep an encrypted backup if you need to protect against data loss.",
+    category: "Privacy",
+  },
+  {
+    question: "Does the player contact TiviHub or my provider?",
+    answer: "The installed player is bundled to run locally and has no automatic updater. When you connect a source, refresh content, play media, or search subtitles, it contacts the provider or subtitle service you configured directly. The website host may retain ordinary logs for page visits and downloads.",
+    category: "Privacy",
+  },
+  {
+    question: "Which devices can run TiviHub?",
+    answer: "The current installer is for 64-bit Windows 10 and Windows 11. It uses the system WebView2 runtime. Linux is not released yet, and macOS is not currently targeted.",
+    category: "Compatibility",
+  },
+  {
+    question: "Can TiviHub play DRM-protected streams?",
+    answer: "Protected playback requires authorization and a DRM license service from your source. DRM and codec support vary by provider and system; TiviHub does not provide licenses or bypass access controls.",
+    category: "Compatibility",
+  },
+  {
+    question: "How do I install an update?",
+    answer: "Visit tivihub.nl, download the latest Windows installer, and run it over your existing installation. You do not need to uninstall first. TiviHub has no in-app update check, so keep a backup of important local data.",
+    category: "Updates",
+  },
+];
+
 export default function LandingPage() {
-  const windowsDownloadUrl = import.meta.env.VITE_WINDOWS_DOWNLOAD_URL;
+  const windowsDownloadUrl = import.meta.env.VITE_WINDOWS_DOWNLOAD_URL
+    || "https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe";
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<FaqCategory>("All");
+  const filteredFaq = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return faqItems.filter((item) => {
+      const matchesCategory = category === "All" || item.category === category;
+      const matchesSearch = !query || `${item.question} ${item.answer}`.toLocaleLowerCase().includes(query);
+      return matchesCategory && matchesSearch;
+    });
+  }, [category, search]);
 
   return (
     <div className="landing-page">
@@ -35,6 +93,7 @@ export default function LandingPage() {
         <nav aria-label="Main navigation" className="landing-nav">
           <a href="#features">Features</a>
           <a href="#privacy">Privacy</a>
+          <a href="#faq">FAQ</a>
           <a className="landing-nav-download" href="#download">Download <LandingIcon name="arrow_forward" /></a>
         </nav>
       </header>
@@ -114,6 +173,54 @@ export default function LandingPage() {
                 <p>{item.description}</p>
               </article>
             ))}
+          </div>
+        </section>
+
+        <section aria-labelledby="faq-title" className="landing-faq" id="faq">
+          <div className="landing-section-heading">
+            <div>
+              <p className="landing-eyebrow">GOOD TO KNOW</p>
+              <h2 id="faq-title">Frequently asked questions</h2>
+            </div>
+            <p>Find clear answers about setup, privacy, compatibility, and updates.</p>
+          </div>
+          <div className="landing-faq-tools">
+            <label className="landing-faq-search">
+              <LandingIcon name="search" />
+              <span className="visually-hidden">Search frequently asked questions</span>
+              <input
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search questions..."
+                type="search"
+                value={search}
+              />
+            </label>
+            <div aria-label="Filter frequently asked questions by topic" className="landing-faq-categories">
+              {faqCategories.map((item) => (
+                <button
+                  aria-pressed={category === item}
+                  className={category === item ? "landing-faq-category is-active" : "landing-faq-category"}
+                  key={item}
+                  onClick={() => setCategory(item)}
+                  type="button"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="landing-faq-list">
+            {filteredFaq.length ? filteredFaq.map((item) => (
+              <details className="landing-faq-item" key={item.question}>
+                <summary>
+                  <span>{item.question}</span>
+                  <LandingIcon name="expand_more" />
+                </summary>
+                <p>{item.answer}</p>
+              </details>
+            )) : (
+              <p className="landing-faq-empty" role="status">No answers match that search. Try another term or topic.</p>
+            )}
           </div>
         </section>
       </main>

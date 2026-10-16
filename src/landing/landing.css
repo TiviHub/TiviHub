@@ -480,6 +480,142 @@ a {
   line-height: 1.65;
 }
 
+.landing-faq {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 0 88px;
+}
+
+.landing-faq .landing-section-heading {
+  margin-bottom: 28px;
+}
+
+.landing-faq-tools {
+  display: grid;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.landing-faq-search {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 11px;
+  padding: 0 14px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 3%);
+  color: #a995c3;
+}
+
+.landing-faq-search:focus-within {
+  border-color: rgb(173 121 255 / 55%);
+  box-shadow: 0 0 0 3px rgb(140 75 237 / 12%);
+}
+
+.landing-faq-search .material-icons {
+  font-size: 20px;
+}
+
+.landing-faq-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f3f0fa;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.landing-faq-search input::placeholder {
+  color: #898294;
+}
+
+.landing-faq-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.landing-faq-category {
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 2%);
+  color: #aaa3b6;
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.landing-faq-category:hover,
+.landing-faq-category.is-active {
+  border-color: rgb(173 121 255 / 38%);
+  background: rgb(140 75 237 / 12%);
+  color: #dfc8ff;
+}
+
+.landing-faq-list {
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.landing-faq-item {
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+}
+
+.landing-faq-item summary {
+  display: flex;
+  min-height: 65px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: #e9e4f1;
+  cursor: pointer;
+  font-size: 0.94rem;
+  font-weight: 500;
+  list-style: none;
+}
+
+.landing-faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.landing-faq-item summary .material-icons {
+  flex: 0 0 auto;
+  color: #a77af0;
+  transition: transform 160ms ease;
+}
+
+.landing-faq-item[open] summary .material-icons {
+  transform: rotate(180deg);
+}
+
+.landing-faq-item > p {
+  max-width: 760px;
+  margin: -2px 38px 20px 0;
+  color: #a9a2b3;
+  font-size: 0.83rem;
+  line-height: 1.75;
+}
+
+.landing-faq-empty {
+  margin: 0;
+  padding: 22px 0;
+  color: #aaa3b6;
+  font-size: 0.85rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .landing-footer {
   display: flex;
   min-height: 82px;
@@ -600,6 +736,10 @@ a {
     padding: 65px 0;
   }
 
+  .landing-faq {
+    padding-bottom: 65px;
+  }
+
   .landing-section-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -651,6 +791,15 @@ a {
   .landing-footer > p {
     order: 1;
     width: 100%;
+  }
+
+  .landing-faq-item summary {
+    min-height: 60px;
+    font-size: 0.87rem;
+  }
+
+  .landing-faq-item > p {
+    margin-right: 0;
   }
 }
 

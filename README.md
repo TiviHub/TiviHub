@@ -12,6 +12,8 @@
 <p align="center">
   <a href="https://tivihub.nl">Website</a>
   &nbsp;·&nbsp;
+  <a href="https://github.com/TiviHub/TiviHub/releases/latest">Latest release</a>
+  &nbsp;·&nbsp;
   <a href="./LICENSE">MIT License</a>
 </p>
 
@@ -76,25 +78,32 @@ npm test
 
 | Command | Output |
 | --- | --- |
-| `npm run build` | Static landing page in `dist/site/`. |
+| `npm run build` | Prerendered static landing page in `dist/site/`. |
 | `npm run build:desktop` | Bundled player frontend in `dist/desktop/`. |
 | `npm run tauri:build` | Windows NSIS installer. |
-| `npm run package:windows` | Installer and release-ready website bundle. |
+| `npm run package:windows` | Windows installer, release assets, and website bundle. |
 
-`npm run package:windows` builds the installer, enables the landing-page download button, and stages the installer at `dist/site/downloads/TiviHub-setup.exe`. The generated installer is not tracked in source control.
+`npm run build` prerenders the landing page so its primary content is present in the static HTML for search crawlers. The download button points to the latest GitHub Release installer. `npm run package:windows` builds the installer, the website, and two release assets under `dist/releases/`: a versioned `TiviHub-v<version>-windows-x64.exe` and a stable `TiviHub-setup.exe` filename. Generated installers are not tracked in source control.
 
-To deploy, upload the **contents** of `dist/site/` to the document root for `tivihub.nl` and enable HTTPS. No Node.js runtime, application server, or SPA rewrite is required on the host. The player UI is not included in the website build.
+To deploy, upload the **contents** of `dist/site/` to the document root for `tivihub.nl` and enable HTTPS. No Node.js runtime, application server, or SPA rewrite is required on the host. The player UI and installer are not included in the website build.
 
 ## Releasing updates
 
-TiviHub has no automatic update check. To publish an update:
+TiviHub has no in-app update check. To publish a Windows update:
 
-1. Set the new version in both `package.json` and `src-tauri/tauri.conf.json`.
-2. Run `npm run package:windows` and test the generated installer.
-3. Upload the updated contents of `dist/site/` to the `tivihub.nl` document root, replacing the previous site files and installer.
-4. Tell users to download and run the new installer; they do not need to uninstall the previous version first.
+1. Set the same new version in `package.json` and `src-tauri/tauri.conf.json`.
+2. Run `npm run typecheck`, `npm test`, and `npm run package:windows`; install and test the generated Windows installer.
+3. Commit and push the version change, then create and push its matching tag, for example:
 
-Users must visit the website to learn about releases. Adding in-app update checks would make the installed app contact a release host, so it is intentionally not enabled. User data is stored separately from the installed program; users should still keep backups of important data.
+   ```sh
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+4. The GitHub Actions release workflow verifies the tag matches both version files, builds and tests the Windows installer, then publishes a GitHub Release with a versioned installer and the stable `TiviHub-setup.exe` asset.
+5. The website download button points to `https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe`; it follows the latest published stable release without requiring a website rebuild.
+
+Users visit the website to check for updates and run the new installer over their current installation; they do not need to uninstall first. Adding in-app update checks would make the installed app contact a release host, so they remain disabled. Users should keep backups of important local data.
 
 ## Content and rights
 

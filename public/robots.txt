@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tivihub.nl/sitemap.xml
