@@ -99,7 +99,7 @@ let localKeyPromise: Promise<CryptoKey> | null = null;
 
 async function localEncryptionKey(): Promise<CryptoKey> {
   if (!globalThis.crypto?.subtle) {
-    throw new Error("Secure browser storage is unavailable. Open TiviHub over HTTPS to save credentials.");
+    throw new Error("Secure local storage is unavailable on this device; source credentials cannot be saved.");
   }
   if (!localKeyPromise) {
     localKeyPromise = (async () => {
@@ -141,7 +141,7 @@ async function decryptText(payload: EncryptedPayload): Promise<string> {
     return decoder.decode(cleartext);
   } catch (error) {
     console.error("Could not decrypt local TiviHub data", error);
-    throw new Error("Local encrypted data could not be opened in this browser.");
+    throw new Error("Local encrypted data could not be opened in this TiviHub installation.");
   }
 }
 

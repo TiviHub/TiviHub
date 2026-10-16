@@ -239,7 +239,7 @@ export async function fetchM3u(url: string, signal?: AbortSignal): Promise<strin
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new Error(
-      "The playlist could not be fetched by this browser. The provider may block cross-origin browser access (CORS); try importing the M3U file instead.",
+      "The playlist could not be fetched by TiviHub. The provider may block cross-origin access (CORS); try importing the M3U file instead.",
     );
   }
   if (!response.ok) throw new Error(`Playlist request failed with HTTP ${response.status}.`);

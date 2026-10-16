@@ -4,6 +4,7 @@ dist/
 coverage/
 .vite/
 *.tsbuildinfo
+/src-tauri/target/
 
 # Local configuration and secrets
 .env

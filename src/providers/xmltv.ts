@@ -11,7 +11,7 @@ export async function fetchXmltv(url: string, source: string): Promise<EpgProgra
     response = await fetch(safeUrl, { headers: { Accept: "application/xml, text/xml, */*" } });
   } catch {
     throw new Error(
-      "The EPG could not be fetched by this browser. The provider may block cross-origin access (CORS).",
+      "The EPG could not be fetched by TiviHub. The provider may block cross-origin access (CORS).",
     );
   }
   if (!response.ok) throw new Error(`EPG request failed with HTTP ${response.status}.`);

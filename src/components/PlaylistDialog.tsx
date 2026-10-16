@@ -235,7 +235,7 @@ export function PlaylistDialog({
                   onChange={(event) => setFile(event.target.files?.[0] ?? null)}
                   type="file"
                 />
-                <small>                {file?.name ?? editing?.fileName ?? "Up to 25 MB. The file stays in this browser."}</small>
+                <small>{file?.name ?? editing?.fileName ?? "Up to 25 MB. The file stays on this device."}</small>
               </label>
               <label className="form-field">
                 <span>Base URL for relative streams <em>Optional</em></span>
@@ -325,14 +325,14 @@ export function PlaylistDialog({
               )}
               <p className="form-note">
                 Use only license details supplied by your provider. DRM support depends on its
-                license flow and browser CORS permissions; TiviHub does not proxy license requests.
+                license flow and webview CORS permissions; TiviHub does not proxy license requests.
               </p>
             </details>
           )}
 
           <p className="local-data-note">
             <Icon name="lock" />
-            Account details and source URLs are encrypted in this browser. Derived stream links stay
+            Account details and source URLs are encrypted in this app. Derived stream links stay
             local and may contain provider tokens.
           </p>
           {import.meta.env.DEV && !editing && onLoadDemo && (

@@ -48,11 +48,7 @@ import { SettingsPage } from "./components/SettingsPage";
 
 type Section = "Home" | "Live TV" | "Movies" | "Series" | "Library" | "Settings";
 type ThemePreference = "system" | "light" | "dark";
-
-interface InstallPrompt extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-}
+const ASSET_BASE_URL = import.meta.env.BASE_URL;
 
 const sections: { label: Section; icon: IconName }[] = [
   { label: "Home", icon: "home" },
@@ -101,7 +97,6 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [notificationKey, setNotificationKey] = useState(0);
-  const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null);
   const requestedEpgChannels = useRef(new Set<string>());
   const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshButtonRef = useRef<HTMLButtonElement>(null);
@@ -227,29 +222,13 @@ function App() {
     return () => systemTheme.removeEventListener("change", applyTheme);
   }, [theme]);
 
-  useEffect(() => {
-    const handleInstallAvailable = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPrompt);
-    };
-    window.addEventListener("beforeinstallprompt", handleInstallAvailable);
-    return () => window.removeEventListener("beforeinstallprompt", handleInstallAvailable);
-  }, []);
-
-  async function installApp() {
-    if (!installPrompt) return;
-    await installPrompt.prompt();
-    await installPrompt.userChoice;
-    setInstallPrompt(null);
-  }
-
   function chooseTheme(value: ThemePreference) {
     setTheme(value);
     try {
       window.localStorage.setItem("tivihub.web.theme", value);
     } catch (cause) {
       console.error("Could not save the local theme preference", cause);
-      notify("Could not save the theme preference in this browser.", "error");
+      notify("Could not save the theme preference on this device.", "error");
     }
   }
 
@@ -423,7 +402,7 @@ function App() {
       ));
       await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
       if (shouldActivate) setSection("Live TV");
-      notify("Demo playlist added to this browser. Its sample streams load only when played.", "notice");
+      notify("Development demo added locally. Its sample streams load only when played.", "notice");
       return;
     }
     throw new Error("Demo imports are only available during development.");
@@ -460,7 +439,7 @@ function App() {
       } else if (source.type === "M3U") {
         const document = source.fileName ? await getPlaylistDocument(source.id) : undefined;
         const content = document?.content ?? (source.fileName ? undefined : await fetchM3u(source.url));
-        if (content === undefined) throw new Error("The imported M3U file is missing from local browser storage.");
+        if (content === undefined) throw new Error("The imported M3U file is missing from local app storage.");
         const importedCatalog = parseM3uCatalog(content, {
           id: source.id,
           name: source.name,
@@ -525,7 +504,7 @@ function App() {
   }
 
   async function removeSource(source: Playlist) {
-    if (!window.confirm(`Delete “${source.name}” and all catalog, favorite, guide, and library data linked to it from this browser?`)) return;
+    if (!window.confirm(`Delete “${source.name}” and all catalog, favorite, guide, and library data linked to it from this app?`)) return;
     try {
       await deletePlaylist(source.id);
       const remaining = await getPlaylists();
@@ -766,7 +745,7 @@ function App() {
     <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <aside className="sidebar" aria-label="Primary navigation" inert={refreshing}>
         <button aria-label="TiviHub home" className="brand" onClick={() => setSection("Home")} type="button">
-          <img src="/icons/tivihub-192.png" alt="" />
+          <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
           <span>TiviHub<span className="brand-period">.</span></span>
         </button>
         <p className="nav-caption">YOUR SPACE</p>
@@ -795,7 +774,7 @@ function App() {
       <main className="main-content" inert={refreshing}>
         <header className="topbar">
           <button className="mobile-brand" onClick={() => setSection("Home")} type="button">
-            <img src="/icons/tivihub-192.png" alt="" />
+            <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
             <span>TiviHub<span className="brand-period">.</span></span>
           </button>
           <div className="breadcrumb">
@@ -836,11 +815,6 @@ function App() {
             >
               <Icon name="settings" />
             </button>
-            {installPrompt && (
-              <button className="install-button" onClick={() => void installApp()} type="button">
-                <Icon name="download" /><span>Install</span>
-              </button>
-            )}
           </div>
         </header>
 
@@ -1168,15 +1142,15 @@ function Home({
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="orbit orbit-outer" /><div className="orbit orbit-inner" />
-          <div className="orbit-core"><img src="/icons/tivihub-512.png" alt="" /></div>
+          <div className="orbit-core"><img src={`${ASSET_BASE_URL}icons/tivihub-512.png`} alt="" /></div>
           <span className="orbit-star star-one">✦</span><span className="orbit-star star-two">✧</span>
           <span className="orbit-caption">SIGNAL / 001</span>
         </div>
       </section>
 
       <section className="privacy-strip" aria-label="Privacy and platform highlights">
-        <Highlight icon="devices" label="Made for your screens" detail="Phone to desktop" />
-        <Highlight icon="shield" label="Local-first library" detail="Saved in this browser" />
+        <Highlight icon="devices" label="Made for your screens" detail="Windows desktop" />
+        <Highlight icon="shield" label="Local-first library" detail="Saved on this device" />
         <div className="privacy-status"><span className="status-pulse" /><span>NO TIVIHUB APP SERVER</span></div>
       </section>
 
@@ -1236,7 +1210,7 @@ function Home({
       )}
 
       <footer className="page-footer">
-        <span>TIVIHUB WEB <span className="footer-separator">/</span> BUILT FOR YOUR BROWSER</span>
+        <span>TIVIHUB DESKTOP <span className="footer-separator">/</span> BUILT FOR YOUR SOURCES</span>
         <span>Bring sources you are authorized to use.</span>
       </footer>
     </>

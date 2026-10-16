@@ -1,14 +1,20 @@
 {
-  "name": "tivihub-web",
+  "name": "tivihub",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:desktop": "vite --mode desktop --host 127.0.0.1 --port 1420 --strictPort",
     "build": "tsc -b && vite build",
+    "build:desktop": "tsc -b && vite build --mode desktop",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "package:windows": "node scripts/package-windows.mjs"
   },
   "dependencies": {
     "@fontsource/material-icons": "^5.3.0",
@@ -20,6 +26,7 @@
     "shaka-player": "^5.2.14"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.3",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.0",

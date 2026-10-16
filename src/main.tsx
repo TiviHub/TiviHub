@@ -14,11 +14,3 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>,
 );
-
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    void navigator.serviceWorker
-      .register("/sw.js")
-      .catch((error: unknown) => console.error("TiviHub service worker registration failed", error));
-  });
-}

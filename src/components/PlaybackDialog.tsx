@@ -81,7 +81,7 @@ function asWebVtt(contents: string): string {
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (error && typeof error === "object" && "code" in error && typeof error.code === "number") {
-    return `The browser or provider rejected playback (media error ${error.code}). Check the stream format, CORS access, and DRM configuration.`;
+    return `TiviHub or the provider rejected playback (media error ${error.code}). Check the stream format, CORS access, and DRM configuration.`;
   }
   return "Playback could not be started.";
 }
@@ -182,8 +182,8 @@ export function PlaybackDialog({
     const onVideoError = () => {
       const code = video.error?.code;
       setError(code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
-        ? "This browser cannot decode the selected media format."
-        : "The media source could not be played. Check that it is online and browser-accessible.");
+        ? "This app's webview cannot decode the selected media format."
+        : "The media source could not be played. Check that it is online and accessible to this app.");
       setStatus("Playback failed");
     };
     const onTimeUpdate = () => {
@@ -226,7 +226,7 @@ export function PlaybackDialog({
         const shakaRuntime = shakaModule.default as ShakaRuntime;
         shakaRuntime.polyfill.installAll();
         if (!shakaRuntime.Player.isBrowserSupported()) {
-          throw new Error("This browser does not support the streaming formats required by this source.");
+          throw new Error("This app's webview does not support the streaming formats required by this source.");
         }
         player = new shakaRuntime.Player();
         playerRef.current = player;
@@ -234,7 +234,7 @@ export function PlaybackDialog({
         if (disposed) return;
         player.addEventListener("error", (event: Event) => {
           const shakaError = (event as CustomEvent<{ message?: string; code?: number }>).detail;
-          setError(shakaError?.message || "The stream failed. The provider may block browser access, or this DRM/codec may not be supported.");
+          setError(shakaError?.message || "The stream failed. The provider may block cross-origin access, or this DRM/codec may not be supported.");
           setStatus("Playback failed");
         });
         if (item.drmLicenseUrl) {
@@ -256,7 +256,7 @@ export function PlaybackDialog({
                 { serverCertificateUri: certificateUrl },
               ]));
           }
-          if (!player.configure({ drm })) throw new Error("The browser rejected this DRM configuration.");
+          if (!player.configure({ drm })) throw new Error("This app's webview rejected the DRM configuration.");
         }
         await player.load(item.streamUrl);
         if (disposed) return;
@@ -469,7 +469,7 @@ export function PlaybackDialog({
           </section>
         )}
         <p className="player-disclaimer">
-          Playback and subtitle requests connect directly to their configured hosts. Availability depends on browser codecs, CORS, and source permissions.
+          Playback and subtitle requests connect directly to their configured hosts. Availability depends on the webview codecs, CORS, and source permissions.
         </p>
       </section>
     </div>

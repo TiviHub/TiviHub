@@ -685,7 +685,7 @@ export function LibraryPage({
       <header className="page-intro">
         <p className="eyebrow">SAVED ON THIS DEVICE</p>
         <h1>Your library<span className="neon-text">.</span></h1>
-        <p>Favorites and watch progress stay in this browser.</p>
+        <p>Favorites and watch progress stay in this app.</p>
       </header>
       <div className="library-tabs" role="tablist" aria-label="Library categories">
         {(["Continue watching", "Watchlist", "Watched", "Favorites"] as const).map((value) => (

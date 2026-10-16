@@ -476,30 +476,6 @@ a:focus-visible {
   color: var(--secondary);
 }
 
-.install-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 15px;
-  border: 1px solid var(--outline);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 0.83rem;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
-}
-
-.install-button .material-icons {
-  color: var(--secondary);
-  font-size: 19px;
-}
-
-.install-button:hover {
-  border-color: var(--secondary);
-  box-shadow: 0 0 18px var(--glow);
-}
-
 .hero {
   display: grid;
   min-height: 500px;
@@ -1158,11 +1134,6 @@ a:focus-visible {
   .settings-shortcut {
     width: 39px;
     height: 39px;
-  }
-
-  .install-button {
-    min-height: 39px;
-    padding: 0 12px;
   }
 
   .hero {
@@ -3852,17 +3823,6 @@ button:disabled {
     padding: 0;
   }
 
-  .install-button {
-    width: 36px;
-    height: 36px;
-    min-height: 36px;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .install-button > span:not(.material-icons) {
-    display: none;
-  }
 }
 
 @media (max-width: 380px) {
@@ -3890,22 +3850,6 @@ button:disabled {
     width: 32px;
     height: 32px;
     min-height: 32px;
-  }
-
-  .install-button {
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
-  }
-
-  .install-button {
-    width: 35px;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .install-button > span:not(.material-icons) {
-    display: none;
   }
 
   .dialog-actions {

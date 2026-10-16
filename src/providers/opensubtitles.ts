@@ -37,7 +37,7 @@ async function request(
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     if (error instanceof Error && error.message.startsWith("OpenSubtitles request failed")) throw error;
     throw new Error(
-      "OpenSubtitles could not be reached from this browser. Check your API key and CORS availability.",
+      "OpenSubtitles could not be reached from TiviHub. Check your API key and cross-origin access.",
     );
   }
 }
@@ -126,7 +126,7 @@ export async function downloadOpenSubtitle(
   }
   const file = await fetch(downloadUrl, { signal }).catch((error: unknown) => {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Subtitle download is blocked by cross-origin browser access. Import a subtitle file instead.");
+    throw new Error("Subtitle download is blocked by cross-origin access from this app. Import a subtitle file instead.");
   });
   if (!file.ok) throw new Error(`Subtitle download failed with HTTP ${file.status}.`);
   if (!file.body) throw new Error("Subtitle provider returned an empty file.");

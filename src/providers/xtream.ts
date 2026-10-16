@@ -115,7 +115,7 @@ async function requestJson(
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new Error(
-      `${operation} could not be reached. The server may block browser access (CORS), use HTTP from an HTTPS page, or be offline. The request went directly from this browser to the provider.`,
+      `${operation} could not be reached. The provider may block cross-origin access (CORS), or be offline. The request went directly from this app to the provider.`,
     );
   }
   if (!response.ok) throw new Error(`${operation} failed with HTTP ${response.status}.`);

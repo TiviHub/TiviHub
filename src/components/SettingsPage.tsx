@@ -114,7 +114,7 @@ export function SettingsPage({
 
   async function applyBackup() {
     if (!pendingSnapshot) return;
-    if (!window.confirm("Replace all TiviHub data saved in this browser with this backup? This cannot be undone.")) return;
+    if (!window.confirm("Replace all TiviHub data saved by this app with this backup? This cannot be undone.")) return;
     setBackupBusy(true);
     setBackupError(null);
     try {
@@ -125,7 +125,7 @@ export function SettingsPage({
       setPendingSnapshot(null);
       setBackupFile(null);
       setImportPassword("");
-      setBackupNotice("Backup restored to this browser.");
+      setBackupNotice("Backup restored to this app.");
     } catch (cause) {
       setBackupError(cause instanceof Error ? cause.message : "Could not restore this backup.");
     } finally {
@@ -213,7 +213,7 @@ export function SettingsPage({
       <div className="settings-card">
         <div className="settings-card-heading">
           <div className="settings-heading-icon"><Icon name="subtitles" /></div>
-          <div><h2>Subtitles</h2><p>Optional OpenSubtitles search from the browser.</p></div>
+          <div><h2>Subtitles</h2><p>Optional OpenSubtitles search from this app.</p></div>
         </div>
         <form className="settings-form" onSubmit={(event) => void saveKey(event)}>
           <label className="form-field">
@@ -226,7 +226,7 @@ export function SettingsPage({
               value={keyDraft}
             />
           </label>
-          <p className="form-note">Encrypted in this browser and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.</p>
+          <p className="form-note">Encrypted in this app and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.</p>
           <button className="secondary-button" type="submit"><Icon name="lock" /> Save key</button>
           {keyNotice && <p className="settings-message" role="status">{keyNotice}</p>}
         </form>
@@ -284,14 +284,14 @@ export function SettingsPage({
         </div>
         <p className="privacy-description">
           Playlists, credentials, favorites, playback progress, and settings stay on this device.
-          Backups are encrypted files that you choose where to save. Browser requests go directly
-          to your provider and subtitle service. Your static
-          hosting provider can still log ordinary website requests, and external providers receive
-          your connection and playback requests. Cached stream links can contain provider tokens.
-          Local storage is not protection against malicious code running on this site or browser
+          Backups are encrypted files that you choose where to save. The installed app does not
+          contact TiviHub servers. Playback and subtitle requests go directly to their configured
+          providers, which receive your connection and request details. The website host may log
+          visits and installer downloads. Cached stream links can contain provider tokens.
+          Local storage is not protection against malicious code running on this device or
           extensions.
         </p>
-        <div className="privacy-tag"><span className="status-pulse" /> DATA STAYS IN THIS BROWSER</div>
+        <div className="privacy-tag"><span className="status-pulse" /> DATA STAYS ON THIS DEVICE</div>
       </div>
 
       <div className="settings-card legal-settings">
@@ -301,7 +301,7 @@ export function SettingsPage({
         </div>
         <div className="legal-notice-copy">
           <p>
-            TiviHub is a browser-based player and catalog organizer for sources you configure.
+            TiviHub is a desktop player and catalog organizer for sources you configure.
             It does not supply, sell, license, or host your channels or media, and it does not
             verify that a provider or source is authorized.
           </p>
@@ -312,7 +312,7 @@ export function SettingsPage({
               apply where you use the app.
             </li>
             <li>
-              Playback and guide requests go directly from your browser to the configured provider.
+              Playback and guide requests go directly from this app to the configured provider.
               Subtitle searches go directly to OpenSubtitles. Those services have their own terms
               and privacy practices; TiviHub does not control them.
             </li>
