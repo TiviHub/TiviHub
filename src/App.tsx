@@ -42,6 +42,7 @@ import type {
 } from "./types";
 import { CatalogPage, LibraryPage, MovieDetail, SeriesDetail } from "./components/ContentPages";
 import { Icon, type IconName } from "./components/common";
+import { DesktopWindowControls } from "./components/DesktopWindowControls";
 import { PlaybackDialog } from "./components/PlaybackDialog";
 import { PlaylistDialog, type PlaylistDraft } from "./components/PlaylistDialog";
 import { SettingsPage } from "./components/SettingsPage";
@@ -780,6 +781,7 @@ function App() {
           <div className="breadcrumb">
             <span>PLAYER</span><span className="breadcrumb-slash">/</span><span className="breadcrumb-current">{section.toUpperCase()}</span>
           </div>
+          <div aria-hidden="true" className="titlebar-drag-region" data-tauri-drag-region />
           <div className="topbar-actions">
             {sources.length > 0 && (
               <label className="source-switcher">
@@ -815,6 +817,7 @@ function App() {
             >
               <Icon name="settings" />
             </button>
+            <DesktopWindowControls />
           </div>
         </header>
 

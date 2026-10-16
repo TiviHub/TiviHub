@@ -457,6 +457,53 @@ a:focus-visible {
   gap: 10px;
 }
 
+.titlebar-drag-region {
+  align-self: stretch;
+  min-width: 18px;
+  flex: 1 1 auto;
+  -webkit-app-region: drag;
+}
+
+.window-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--outline-soft);
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.window-control:hover {
+  border-color: var(--outline-soft);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.window-control .material-icons {
+  font-size: 19px;
+}
+
+.window-control-close:hover {
+  border-color: rgb(255 105 125 / 34%);
+  background: rgb(255 73 96 / 15%);
+  color: #ff8799;
+}
+
 .icon-button {
   display: inline-grid;
   width: 42px;

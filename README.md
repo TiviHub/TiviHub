@@ -85,6 +85,17 @@ npm test
 
 To deploy, upload the **contents** of `dist/site/` to the document root for `tivihub.nl` and enable HTTPS. No Node.js runtime, application server, or SPA rewrite is required on the host. The player UI is not included in the website build.
 
+## Releasing updates
+
+TiviHub has no automatic update check. To publish an update:
+
+1. Set the new version in both `package.json` and `src-tauri/tauri.conf.json`.
+2. Run `npm run package:windows` and test the generated installer.
+3. Upload the updated contents of `dist/site/` to the `tivihub.nl` document root, replacing the previous site files and installer.
+4. Tell users to download and run the new installer; they do not need to uninstall the previous version first.
+
+Users must visit the website to learn about releases. Adding in-app update checks would make the installed app contact a release host, so it is intentionally not enabled. User data is stored separately from the installed program; users should still keep backups of important data.
+
 ## Content and rights
 
 TiviHub is a player and catalog organizer for sources users configure. It does not supply, sell, license, host, or verify channels or media. Users are responsible for accessing sources and content they are authorized to use and for complying with applicable law and provider terms. Third-party media, programme data, artwork, names, and trademarks remain the property of their respective owners.
