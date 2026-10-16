@@ -12,10 +12,12 @@ export function PlaylistDialog({
   editing,
   onClose,
   onConnect,
+  onLoadDemo,
 }: {
   editing?: Playlist;
   onClose: () => void;
   onConnect: (draft: PlaylistDraft) => Promise<void>;
+  onLoadDemo: () => Promise<void>;
 }) {
   const [type, setType] = useState<PlaylistType>(editing?.type ?? "M3U");
   const [sourceMode, setSourceMode] = useState<"url" | "file">(
@@ -30,7 +32,7 @@ export function PlaylistDialog({
   const [drmLicenseUrl, setDrmLicenseUrl] = useState(editing?.drmLicenseUrl ?? "");
   const [drmSystem, setDrmSystem] = useState<DrmSystem>(editing?.drmSystem ?? "com.widevine.alpha");
   const [drmCertificateUrl, setDrmCertificateUrl] = useState(editing?.drmCertificateUrl ?? "");
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<"connect" | "demo" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -114,7 +116,7 @@ export function PlaylistDialog({
       createdAt: editing?.createdAt ?? createdAt,
     };
 
-    setBusy(true);
+    setBusyAction("connect");
     try {
       await onConnect({
         playlist,
@@ -124,7 +126,20 @@ export function PlaylistDialog({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not connect to this source.");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
+    }
+  }
+
+  async function loadDemo() {
+    setError(null);
+    setBusyAction("demo");
+    try {
+      await onLoadDemo();
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load the demo playlist.");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -272,10 +287,13 @@ export function PlaylistDialog({
               </label>
               <label className="form-field">
                 <span>DRM system</span>
-                <select onChange={(event) => setDrmSystem(event.target.value as DrmSystem)} value={drmSystem}>
-                  <option value="com.widevine.alpha">Widevine (Chrome / Edge)</option>
-                  <option value="com.apple.fps">FairPlay (Safari)</option>
-                </select>
+                <span className="select-control">
+                  <select onChange={(event) => setDrmSystem(event.target.value as DrmSystem)} value={drmSystem}>
+                    <option value="com.widevine.alpha">Widevine (Chrome / Edge)</option>
+                    <option value="com.apple.fps">FairPlay (Safari)</option>
+                  </select>
+                  <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
+                </span>
               </label>
               <label className="form-field">
                 <span>DRM license URL <em>Optional</em></span>
@@ -313,13 +331,30 @@ export function PlaylistDialog({
             Account details and source URLs are encrypted in this browser. Derived stream links stay
             local and may contain provider tokens.
           </p>
+          {!editing && (
+            <div className="demo-playlist-option">
+              <div>
+                <strong>Just exploring?</strong>
+                <p>Import a sample M3U with live feeds, movies, and series to explore TiviHub without a provider.</p>
+              </div>
+              <button
+                className="secondary-button"
+                disabled={busyAction !== null}
+                onClick={() => void loadDemo()}
+                type="button"
+              >
+                {busyAction === "demo" ? <span className="spinner" /> : <Icon name="playlist_play" />}
+                {busyAction === "demo" ? "Importing…" : "Import demo"}
+              </button>
+            </div>
+          )}
           {error && <p className="form-error" role="alert">{error}</p>}
 
           <div className="dialog-actions">
             <button className="secondary-button" onClick={onClose} type="button">Cancel</button>
-            <button className="primary-button" disabled={busy} type="submit">
-              {busy ? <span className="spinner" /> : <Icon name="link" />}
-              {busy ? (editing ? "Saving…" : "Connecting…") : editing ? "Save changes" : "Connect source"}
+            <button className="primary-button" disabled={busyAction !== null} type="submit">
+              {busyAction === "connect" ? <span className="spinner" /> : <Icon name="link" />}
+              {busyAction === "connect" ? (editing ? "Saving…" : "Connecting…") : editing ? "Save changes" : "Connect source"}
             </button>
           </div>
         </form>

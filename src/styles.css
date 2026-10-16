@@ -131,6 +131,7 @@ a:focus-visible {
   border-right: 1px solid var(--outline-soft);
   background: color-mix(in srgb, var(--sidebar) 94%, transparent);
   backdrop-filter: blur(18px);
+  transition: width 240ms ease, padding 240ms ease;
 }
 
 .brand,
@@ -154,7 +155,13 @@ a:focus-visible {
   margin: 0 0 58px 7px;
 }
 
-.brand img,
+.brand img {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  box-shadow: 0 0 20px var(--glow);
+}
+
 .mobile-brand img {
   width: 35px;
   height: 35px;
@@ -180,10 +187,13 @@ a:focus-visible {
 }
 
 .nav-caption {
+  max-height: 2em;
   margin: 0 12px 12px;
+  overflow: hidden;
   color: var(--faint);
   font-size: 0.65rem;
   letter-spacing: 0.13em;
+  transition: max-height 180ms ease, margin 180ms ease, opacity 140ms ease;
 }
 
 .desktop-nav {
@@ -204,7 +214,14 @@ a:focus-visible {
   color: var(--muted);
   cursor: pointer;
   text-align: left;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  transition:
+    width 240ms ease,
+    min-height 240ms ease,
+    gap 180ms ease,
+    padding 180ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .nav-item .material-icons {
@@ -275,6 +292,32 @@ a:focus-visible {
   font-size: 0.68rem;
 }
 
+.sidebar-collapse {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.sidebar-collapse:hover {
+  border-color: var(--outline-soft);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.sidebar-collapse .material-icons {
+  font-size: 21px;
+}
+
 .online-indicator,
 .status-pulse {
   position: relative;
@@ -293,6 +336,83 @@ a:focus-visible {
   min-height: 100vh;
   margin-left: 256px;
   padding: 0 var(--content-gutter) 34px;
+  transition: width 240ms ease, margin-left 240ms ease;
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+  width: 80px;
+  padding-right: 12px;
+  padding-left: 12px;
+}
+
+.app-shell.sidebar-collapsed .main-content {
+  width: calc(100% - 80px);
+  margin-left: 80px;
+}
+
+.app-shell.sidebar-collapsed .brand {
+  width: 100%;
+  justify-content: center;
+  gap: 0;
+  margin-left: 0;
+  overflow: hidden;
+}
+
+.app-shell.sidebar-collapsed .brand > span {
+  width: 0;
+  flex: 0 0 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity 140ms ease, flex-basis 180ms ease;
+}
+
+.app-shell.sidebar-collapsed .nav-caption {
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  opacity: 0;
+}
+
+.app-shell.sidebar-collapsed .desktop-nav {
+  justify-items: center;
+}
+
+.app-shell.sidebar-collapsed .nav-item {
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+.app-shell.sidebar-collapsed .nav-item > span:not(.material-icons) {
+  width: 0;
+  flex: 0 0 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity 140ms ease, flex-basis 180ms ease;
+}
+
+.app-shell.sidebar-collapsed .nav-item.active::before {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .sidebar-footer {
+  justify-content: center;
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.app-shell.sidebar-collapsed .sidebar-footer > .online-indicator,
+.app-shell.sidebar-collapsed .sidebar-version {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .sidebar-collapse {
+  margin-left: 0;
 }
 
 .topbar {
@@ -318,6 +438,13 @@ a:focus-visible {
 
 .breadcrumb-current {
   color: var(--muted);
+}
+
+.source-switcher,
+.category-select,
+.player-track-select,
+.page-size-control {
+  position: relative;
 }
 
 .breadcrumb-slash {
@@ -1300,11 +1427,43 @@ button:disabled {
 .player-track-select select {
   width: 100%;
   min-width: 0;
+  padding-right: 30px;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--text);
+  appearance: none;
   font: inherit;
+  -webkit-appearance: none;
+}
+
+.select-control {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.select-chevron .material-icons {
+  font-size: 16px;
+}
+
+.source-switcher > .select-chevron,
+.category-select > .select-chevron,
+.player-track-select > .select-chevron {
+  right: 19px;
 }
 
 .source-switcher option,
@@ -1605,6 +1764,12 @@ button:disabled {
   font-size: 0.83rem;
 }
 
+.form-field select {
+  padding-right: 30px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 .form-field input:focus,
 .form-field select:focus,
 .subtitle-search input:focus {
@@ -1686,6 +1851,30 @@ button:disabled {
 .local-data-note .material-icons {
   color: var(--success);
   font-size: 17px;
+}
+
+.demo-playlist-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid var(--outline-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-raised) 65%, transparent);
+}
+
+.demo-playlist-option strong {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.demo-playlist-option p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.45;
 }
 
 .form-error {
@@ -1991,12 +2180,14 @@ button:disabled {
 .page-size-control select {
   min-width: 68px;
   height: 38px;
-  padding: 0 10px;
+  padding: 0 30px 0 10px;
   border: 1px solid var(--outline-soft);
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
+  appearance: none;
   font: inherit;
+  -webkit-appearance: none;
 }
 
 .page-size-control option {
@@ -2502,11 +2693,12 @@ button:disabled {
 }
 
 .detail-meta {
+  align-items: flex-end;
   color: var(--muted);
   font-size: 0.82rem;
 }
 
-.movie-detail-meta span + span {
+.detail-meta span + span {
   padding-left: 9px;
   border-left: 1px solid var(--outline);
 }
@@ -2697,16 +2889,25 @@ button:disabled {
   white-space: nowrap;
 }
 
+.status-select {
+  position: relative;
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+}
+
 .status-select select {
   max-width: 130px;
   min-height: 35px;
-  padding: 0 8px;
+  padding: 0 30px 0 8px;
   border: 1px solid var(--outline);
   border-radius: 9px;
   background: var(--surface-raised);
   color: var(--text);
+  appearance: none;
   font: inherit;
   font-size: 0.72rem;
+  -webkit-appearance: none;
 }
 
 .favorite-row {
@@ -2873,8 +3074,7 @@ button:disabled {
   aspect-ratio: 16 / 9;
 }
 
-.home-card-progress,
-.library-progress {
+.home-card-progress {
   position: absolute;
   right: 10px;
   bottom: 9px;
@@ -2885,8 +3085,7 @@ button:disabled {
   background: rgb(255 255 255 / 42%);
 }
 
-.home-card-progress > span,
-.library-progress > span {
+.home-card-progress > span {
   display: block;
   height: 100%;
   background: var(--secondary);
@@ -3451,33 +3650,33 @@ button:disabled {
     font-size: 0.7rem;
   }
 
-  .movie-detail-page .series-detail-header {
+  .series-detail-page .series-detail-header {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 16px;
     padding: 18px;
   }
 
-  .movie-detail-page .series-detail-header > img,
-  .movie-detail-page .movie-detail-poster {
+  .series-detail-page .series-detail-header > img,
+  .series-detail-page .movie-detail-poster {
     width: clamp(130px, 45vw, 160px);
     max-height: none;
     justify-self: center;
   }
 
-  .movie-detail-page .series-detail-header h1 {
+  .series-detail-page .series-detail-header h1 {
     font-size: 1.7rem;
     line-height: 1.05;
   }
 
-  .movie-detail-page .series-detail-header p:not(.eyebrow) {
+  .series-detail-page .series-detail-header p:not(.eyebrow) {
     max-height: none;
     margin: 12px 0;
     overflow: visible;
     font-size: 0.85rem;
   }
 
-  .movie-detail-page .movie-detail-actions {
+  .series-detail-page .movie-detail-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
@@ -3485,12 +3684,12 @@ button:disabled {
     margin-top: 16px;
   }
 
-  .movie-detail-page .movie-detail-actions .primary-button {
+  .series-detail-page .movie-detail-actions .primary-button {
     min-height: 44px;
     grid-column: 1 / -1;
   }
 
-  .movie-detail-page .movie-detail-actions .secondary-button {
+  .series-detail-page .movie-detail-actions .secondary-button {
     min-width: 0;
     min-height: 44px;
     justify-content: center;
@@ -3499,36 +3698,6 @@ button:disabled {
     font-size: 0.68rem;
     line-height: 1.2;
     text-align: center;
-  }
-
-  .series-detail-page:not(.movie-detail-page) .series-detail-header {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 16px;
-    padding: 18px;
-  }
-
-  .series-detail-page:not(.movie-detail-page) .series-detail-header > img {
-    width: clamp(130px, 45vw, 160px);
-    max-height: none;
-    justify-self: center;
-  }
-
-  .series-detail-page:not(.movie-detail-page) .series-detail-header h1 {
-    font-size: 1.7rem;
-    line-height: 1.05;
-  }
-
-  .series-detail-page:not(.movie-detail-page) .series-detail-header p:not(.eyebrow) {
-    max-width: none;
-    max-height: none;
-    margin: 12px 0;
-    overflow: visible;
-    font-size: 0.85rem;
-  }
-
-  .series-detail-page:not(.movie-detail-page) .series-detail-header .secondary-button {
-    min-height: 44px;
   }
 
   .episode-row {
@@ -3659,6 +3828,10 @@ button:disabled {
     flex: 0 1 auto;
     gap: 7px;
     padding: 0 9px;
+  }
+
+  .source-switcher > .select-chevron {
+    right: 17px;
   }
 
   .source-switcher select {

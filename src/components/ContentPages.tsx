@@ -303,6 +303,7 @@ export function CatalogPage({
             >
               {categories.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
+            <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
           </label>
         </div>
       </header>
@@ -422,6 +423,7 @@ export function CatalogPage({
             >
               {[12, 24, 48, 96].map((size) => <option key={size} value={size}>{size}</option>)}
             </select>
+            <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
           </label>
           <div className="pagination-buttons">
             <button
@@ -452,21 +454,25 @@ export function MovieDetail({
   movie,
   favorite,
   inLibrary,
+  continueWatching,
   onBack,
   onPlay,
   onFavorite,
   onAddToLibrary,
+  onRemoveFromLibrary,
 }: {
   movie: Movie;
   favorite: boolean;
   inLibrary: boolean;
+  continueWatching: boolean;
   onBack: () => void;
   onPlay: () => void;
   onFavorite: () => void;
   onAddToLibrary: () => void;
+  onRemoveFromLibrary: () => void;
 }) {
   return (
-    <section className="series-detail-page movie-detail-page">
+    <section className="series-detail-page">
       <button className="back-button" onClick={onBack} type="button"><Icon name="arrow_back" /> Movies</button>
       <header className="series-detail-header">
         {movie.posterUrl ? <img alt="" src={movie.posterUrl} /> : <div className="movie-detail-poster"><Icon name="movie" /></div>}
@@ -480,7 +486,7 @@ export function MovieDetail({
           <p>{movie.overview || "No overview was provided by this source."}</p>
           <div className="movie-detail-actions">
             <button className="primary-button" onClick={onPlay} type="button">
-              <Icon name="play_arrow" /> Watch movie
+              <Icon name="play_arrow" /> {continueWatching ? "Continue watching" : "Watch movie"}
             </button>
             <button
               aria-pressed={favorite}
@@ -489,23 +495,38 @@ export function MovieDetail({
               type="button"
             >
               <Icon name={favorite ? "favorite" : "favorite_border"} />
-              {favorite ? "In favorites" : "Add to favorites"}
+              {favorite ? "Remove from favorites" : "Add to favorites"}
             </button>
             <button
               aria-pressed={inLibrary}
               className={`secondary-button${inLibrary ? " selected" : ""}`}
-              disabled={inLibrary}
-              onClick={onAddToLibrary}
+              onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >
-              <Icon name={inLibrary ? "check" : "library_add"} />
-              {inLibrary ? "In your library" : "Add to watchlist"}
+              <Icon name={inLibrary ? "delete" : "library_add"} />
+              {inLibrary ? "Remove from library" : "Add to watchlist"}
             </button>
           </div>
         </div>
       </header>
     </section>
   );
+}
+
+function playableEpisode(series: Series, episode: Episode): PlayableItem {
+  return {
+    id: episode.id,
+    playlistId: episode.playlistId,
+    contentType: "EPISODE",
+    title: `${series.name} · S${episode.season} E${episode.number} · ${episode.name}`,
+    streamUrl: episode.streamUrl,
+    artworkUrl: episode.posterUrl || series.posterUrl,
+    drmLicenseUrl: episode.drmLicenseUrl,
+    drmSystem: episode.drmSystem,
+    live: false,
+    parentId: series.id,
+    parentTitle: series.name,
+  };
 }
 
 export function SeriesDetail({
@@ -517,6 +538,11 @@ export function SeriesDetail({
   onPlay,
   onFavorite,
   favorite,
+  inLibrary,
+  continueWatching,
+  onContinueWatching,
+  onAddToLibrary,
+  onRemoveFromLibrary,
 }: {
   series: Series;
   episodes: Episode[];
@@ -526,36 +552,66 @@ export function SeriesDetail({
   onPlay: (item: PlayableItem) => void;
   onFavorite: () => void;
   favorite: boolean;
+  inLibrary: boolean;
+  continueWatching: boolean;
+  onContinueWatching: () => void;
+  onAddToLibrary: () => void;
+  onRemoveFromLibrary: () => void;
 }) {
   const [season, setSeason] = useState<number | "all">("all");
   const seasons = [...new Set(episodes.map((episode) => episode.season))].sort((a, b) => a - b);
   const visible = episodes
     .filter((episode) => season === "all" || episode.season === season)
     .sort((a, b) => a.season - b.season || a.number - b.number);
+  const firstEpisode = [...episodes].sort((a, b) => a.season - b.season || a.number - b.number)[0];
 
   return (
     <section className="series-detail-page">
       <button className="back-button" onClick={onBack} type="button"><Icon name="arrow_back" /> Series</button>
       <header className="series-detail-header">
-        {series.posterUrl && <img alt="" src={series.posterUrl} />}
+        {series.posterUrl
+          ? <img alt="" src={series.posterUrl} />
+          : <div className="movie-detail-poster"><Icon name="tv" /></div>}
         <div>
-          <p className="eyebrow">SERIES / {series.seasons} SEASONS</p>
+          <p className="eyebrow">SERIES DETAILS / {series.seasons} {series.seasons === 1 ? "SEASON" : "SEASONS"}</p>
           <h1>{series.name}<span className="neon-text">.</span></h1>
           <div className="detail-meta">
             <span>{series.rating !== undefined ? `★ ${series.rating.toFixed(1)}` : "No rating"}</span>
             {series.year !== undefined && <span>{series.year}</span>}
             {series.category && <span>{series.category}</span>}
           </div>
-          {series.overview && <p>{series.overview}</p>}
-          <button
-            aria-pressed={favorite}
-            className={`secondary-button${favorite ? " selected" : ""}`}
-            onClick={onFavorite}
-            type="button"
-          >
-            <Icon name={favorite ? "favorite" : "favorite_border"} />
-            {favorite ? "In favorites" : "Add to favorites"}
-          </button>
+          <p>{series.overview || "No overview was provided by this source."}</p>
+          <div className="movie-detail-actions">
+            <button
+              className="primary-button"
+              disabled={!continueWatching && (loading || !firstEpisode)}
+              onClick={() => {
+                if (continueWatching) onContinueWatching();
+                else if (firstEpisode) onPlay(playableEpisode(series, firstEpisode));
+              }}
+              type="button"
+            >
+              <Icon name="play_arrow" /> {continueWatching ? "Continue watching" : "Play first episode"}
+            </button>
+            <button
+              aria-pressed={favorite}
+              className={`secondary-button${favorite ? " selected" : ""}`}
+              onClick={onFavorite}
+              type="button"
+            >
+              <Icon name={favorite ? "favorite" : "favorite_border"} />
+              {favorite ? "Remove from favorites" : "Add to favorites"}
+            </button>
+            <button
+              aria-pressed={inLibrary}
+              className={`secondary-button${inLibrary ? " selected" : ""}`}
+              onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
+              type="button"
+            >
+              <Icon name={inLibrary ? "delete" : "library_add"} />
+              {inLibrary ? "Remove from library" : "Add to watchlist"}
+            </button>
+          </div>
         </div>
       </header>
       <div className="episode-heading">
@@ -571,6 +627,7 @@ export function SeriesDetail({
               <option value="all">All seasons</option>
               {seasons.map((value) => <option key={value} value={value}>Season {value}</option>)}
             </select>
+            <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
           </label>
         )}
       </div>
@@ -584,19 +641,7 @@ export function SeriesDetail({
           <button
             className="episode-row"
             key={episode.id}
-            onClick={() => onPlay({
-              id: episode.id,
-              playlistId: episode.playlistId,
-              contentType: "EPISODE",
-              title: `${series.name} · S${episode.season} E${episode.number} · ${episode.name}`,
-              streamUrl: episode.streamUrl,
-              artworkUrl: episode.posterUrl || series.posterUrl,
-              drmLicenseUrl: episode.drmLicenseUrl,
-              drmSystem: episode.drmSystem,
-              live: false,
-              parentId: series.id,
-              parentTitle: series.name,
-            })}
+            onClick={() => onPlay(playableEpisode(series, episode))}
             type="button"
           >
             <span className="episode-play"><Icon name="play_arrow" /></span>
@@ -725,6 +770,7 @@ export function LibraryPage({
                   <option value="WATCHING">Watching</option>
                   <option value="WATCHED">Watched</option>
                 </select>
+                <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
               </label>
               <button aria-label={`Remove ${item.title} from library`} className="icon-button" onClick={() => onRemove(item.id)} type="button">
                 <Icon name="delete" />

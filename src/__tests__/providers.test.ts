@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseM3u } from "../providers/m3u";
+import demoM3u from "../fixtures/demo.m3u?raw";
+import { parseM3u, parseM3uCatalog } from "../providers/m3u";
 import { downloadOpenSubtitle, searchOpenSubtitles } from "../providers/opensubtitles";
 import { parseXmltvDate } from "../providers/xmltv";
 import {
@@ -35,6 +36,19 @@ describe("M3U provider parsing", () => {
       .toThrow(/missing #EXTM3U/i);
     expect(() => parseM3u("#EXTM3U\n#EXTINF:-1,Channel\njavascript:alert(1)", { id: "bad", name: "Bad" }))
       .toThrow(/HTTP or HTTPS/);
+  });
+
+  it("separates live, movie, and episodic entries from a realistic grouped M3U", () => {
+    const catalog = parseM3uCatalog(demoM3u, { id: "demo", name: "Demo" });
+
+    expect(catalog.channels).toHaveLength(3);
+    expect(catalog.movies).toHaveLength(2);
+    expect(catalog.series).toHaveLength(1);
+    expect(catalog.series[0]).toMatchObject({ name: "Open Film Showcase", seasons: 1 });
+    expect(catalog.episodes).toHaveLength(2);
+    expect(catalog.episodes.map((episode) => [episode.season, episode.number, episode.name]))
+      .toEqual([[1, 1, "Big Buck Bunny"], [1, 2, "Tears of Steel"]]);
+    expect(catalog.movies[0]).toMatchObject({ name: "Big Buck Bunny (2008)", year: 2008, rating: 8 });
   });
 });
 

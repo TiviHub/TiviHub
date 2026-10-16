@@ -16,6 +16,7 @@ export interface Playlist {
   drmCertificateUrl?: string;
   epgUrl?: string;
   fileName?: string;
+  demo?: boolean;
   expiresAtMillis?: number;
   createdAt: number;
 }

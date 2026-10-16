@@ -1,4 +1,4 @@
-import type { DrmSystem, LiveChannel } from "../types";
+import type { DrmSystem, Episode, LiveChannel, Movie, Series } from "../types";
 import { readResponseText, validateHttpsUrl } from "./http";
 
 const MAX_PLAYLIST_BYTES = 25 * 1024 * 1024;
@@ -9,6 +9,18 @@ interface PlaylistContext {
   url?: string;
   drmLicenseUrl?: string;
   drmSystem?: DrmSystem;
+}
+
+export interface M3uCatalog {
+  channels: LiveChannel[];
+  movies: Movie[];
+  series: Series[];
+  episodes: Episode[];
+}
+
+interface PendingEntry {
+  attributes: Record<string, string>;
+  name: string;
 }
 
 function parseAttributes(source: string): Record<string, string> {
@@ -46,7 +58,46 @@ function resolveStream(value: string, baseUrl?: string): string {
   return result.toString();
 }
 
-export function parseM3u(content: string, context: PlaylistContext): LiveChannel[] {
+function episodeDetails(entry: PendingEntry, index: number): {
+  seriesName: string;
+  season: number;
+  number: number;
+  name: string;
+} {
+  const attributes = entry.attributes;
+  const groupParts = (attributes["group-title"] ?? "")
+    .split(/\s*(?:\||\/|>)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const seriesGroupIndex = groupParts.findIndex((part) => /\b(series|shows|tv shows)\b/i.test(part));
+  const groupedName = seriesGroupIndex >= 0
+    ? groupParts.slice(seriesGroupIndex + 1).find((part) => !/^season\s*\d+$/i.test(part))
+    : undefined;
+  const explicitSeriesName = attributes["series-title"] || attributes["series-name"] || groupedName;
+  const title = entry.name || attributes["tvg-name"] || attributes["tvg-id"] || "Episode";
+  const marker = /(?:\bS(\d{1,2})\s*E(\d{1,3})\b|\b(\d{1,2})x(\d{1,3})\b)\s*[-_.:]?\s*(.*)$/i.exec(title);
+  const rawSeason = Number(attributes.season ?? attributes["tvg-season"] ?? marker?.[1] ?? marker?.[3] ?? 1);
+  const rawNumber = Number(attributes.episode ?? attributes["tvg-episode"] ?? marker?.[2] ?? marker?.[4] ?? index + 1);
+  const season = Number.isInteger(rawSeason) && rawSeason > 0 ? rawSeason : 1;
+  const number = Number.isInteger(rawNumber) && rawNumber > 0 ? rawNumber : index + 1;
+  const seriesName = explicitSeriesName ??
+    (marker ? title.slice(0, marker.index).trim().replace(/[\s\-_.:|]+$/, "") : "");
+
+  return {
+    seriesName: seriesName || title,
+    season,
+    number,
+    name: marker?.[5]?.trim() || (seriesName ? `Episode ${number}` : title),
+  };
+}
+
+function itemKind(group: string): "live" | "movie" | "series" {
+  if (/\b(series|tv shows|tv-show|tvshows|shows)\b/i.test(group)) return "series";
+  if (/\b(movie|movies|film|films|vod)\b/i.test(group)) return "movie";
+  return "live";
+}
+
+export function parseM3uCatalog(content: string, context: PlaylistContext): M3uCatalog {
   if (new TextEncoder().encode(content).byteLength > MAX_PLAYLIST_BYTES) {
     throw new Error("Playlist is larger than the supported 25 MB limit.");
   }
@@ -57,7 +108,11 @@ export function parseM3u(content: string, context: PlaylistContext): LiveChannel
   }
 
   const channels: LiveChannel[] = [];
-  let pending: { name: string; attributes: Record<string, string> } | null = null;
+  const movies: Movie[] = [];
+  const series: Series[] = [];
+  const episodes: Episode[] = [];
+  const seriesByName = new Map<string, Series>();
+  let pending: PendingEntry | null = null;
   const playlistDrmLicenseUrl = context.drmLicenseUrl;
 
   for (const rawLine of lines) {
@@ -90,25 +145,90 @@ export function parseM3u(content: string, context: PlaylistContext): LiveChannel
     const drmLicenseUrl = rawDrmLicenseUrl
       ? validateHttpsUrl(rawDrmLicenseUrl, "DRM license URL")
       : undefined;
-    const id = `${context.id}:live:${channels.length}`;
-    channels.push({
-      id,
-      playlistId: context.id,
-      name,
-      group: metadata.attributes["group-title"]?.trim() || "General",
-      streamUrl,
-      logoUrl: metadata.attributes["tvg-logo"] || metadata.attributes.logo || undefined,
-      tvgId: metadata.attributes["tvg-id"] || undefined,
-      drmLicenseUrl,
-      drmSystem: context.drmSystem,
-    });
+    const group = metadata.attributes["group-title"]?.trim() || "General";
+    const logoUrl = metadata.attributes["tvg-logo"] ||
+      metadata.attributes.logo ||
+      metadata.attributes.poster ||
+      metadata.attributes.cover ||
+      undefined;
+    const kind = itemKind(group);
+    if (kind === "movie") {
+      const year = Number(/\((\d{4})\)/.exec(name)?.[1] ?? metadata.attributes.year);
+      const rating = Number(metadata.attributes.rating);
+      movies.push({
+        id: `${context.id}:movie:${movies.length}`,
+        playlistId: context.id,
+        name,
+        streamUrl,
+        posterUrl: logoUrl,
+        overview: metadata.attributes.description || undefined,
+        year: Number.isInteger(year) && year > 1800 ? year : undefined,
+        rating: Number.isFinite(rating) && rating > 0 ? rating : undefined,
+        category: group,
+        drmLicenseUrl,
+        drmSystem: context.drmSystem,
+      });
+    } else if (kind === "series") {
+      const detail = episodeDetails(metadata, episodes.length);
+      const seriesKey = detail.seriesName.trim().toLocaleLowerCase();
+      let seriesItem = seriesByName.get(seriesKey);
+      if (!seriesItem) {
+        seriesItem = {
+          id: `${context.id}:series:${series.length}`,
+          playlistId: context.id,
+          name: detail.seriesName,
+          posterUrl: logoUrl,
+          overview: metadata.attributes.description || undefined,
+          seasons: detail.season,
+          category: group,
+          year: undefined,
+          rating: undefined,
+        };
+        seriesByName.set(seriesKey, seriesItem);
+        series.push(seriesItem);
+      } else {
+        seriesItem.seasons = Math.max(seriesItem.seasons, detail.season);
+      }
+      episodes.push({
+        id: `${context.id}:episode:${episodes.length}`,
+        playlistId: context.id,
+        seriesId: seriesItem.id,
+        season: detail.season,
+        number: detail.number,
+        name: detail.name,
+        streamUrl,
+        posterUrl: logoUrl,
+        drmLicenseUrl,
+        drmSystem: context.drmSystem,
+      });
+    } else {
+      channels.push({
+        id: `${context.id}:live:${channels.length}`,
+        playlistId: context.id,
+        name,
+        group,
+        streamUrl,
+        logoUrl,
+        tvgId: metadata.attributes["tvg-id"] || undefined,
+        drmLicenseUrl,
+        drmSystem: context.drmSystem,
+      });
+    }
     pending = null;
   }
 
-  if (channels.length === 0) {
+  if (channels.length + movies.length + episodes.length === 0) {
+    throw new Error("No media entries were found in this playlist.");
+  }
+  return { channels, movies, series, episodes };
+}
+
+export function parseM3u(content: string, context: PlaylistContext): LiveChannel[] {
+  const catalog = parseM3uCatalog(content, context);
+  if (catalog.channels.length === 0) {
     throw new Error("No channel entries were found in this playlist.");
   }
-  return channels;
+  return catalog.channels;
 }
 
 export async function fetchM3u(url: string, signal?: AbortSignal): Promise<string> {

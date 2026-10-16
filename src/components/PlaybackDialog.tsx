@@ -409,6 +409,7 @@ export function PlaybackDialog({
                 <option key={track.id} value={track.id}>{track.label}</option>
               ))}
             </select>
+            <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
           </label>
           <label className="secondary-button subtitle-file-button">
             <Icon name="library_add" />
@@ -468,7 +469,7 @@ export function PlaybackDialog({
           </section>
         )}
         <p className="player-disclaimer">
-          Playback and subtitles connect directly to your provider. Availability depends on browser codecs, CORS, and provider authorization.
+          Playback and subtitle requests connect directly to their configured hosts. Availability depends on browser codecs, CORS, and source permissions.
         </p>
       </section>
     </div>

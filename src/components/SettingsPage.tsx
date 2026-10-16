@@ -17,6 +17,7 @@ export function SettingsPage({
   onChooseTheme,
   sources,
   activeSourceId,
+  onAddSource,
   onActivate,
   onEdit,
   onDelete,
@@ -29,6 +30,7 @@ export function SettingsPage({
   onChooseTheme: (theme: ThemePreference) => void;
   sources: Playlist[];
   activeSourceId: string | null;
+  onAddSource: () => void;
   onActivate: (id: string) => void;
   onEdit: (source: Playlist) => void;
   onDelete: (source: Playlist) => void;
@@ -168,7 +170,12 @@ export function SettingsPage({
           <div><h2>Your sources</h2><p>Sources and catalogs are stored on this device.</p></div>
         </div>
         {sources.length === 0 ? (
-          <p className="settings-empty">No sources connected yet. Use “Add source” to connect your playlist.</p>
+          <>
+            <p className="settings-empty">No sources connected yet. Add a playlist to browse your media.</p>
+            <button className="primary-button settings-action" onClick={onAddSource} type="button">
+              <Icon name="add" /> Add source
+            </button>
+          </>
         ) : (
           <div className="source-list">
             {sources.map((source) => (

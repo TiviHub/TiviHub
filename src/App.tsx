@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import webPackage from "../package.json";
-import { fetchM3u, parseM3u } from "./providers/m3u";
+import { fetchM3u, parseM3uCatalog } from "./providers/m3u";
 import { fetchXmltv } from "./providers/xmltv";
 import { loadXtreamCatalog, loadXtreamEpisodes, loadXtreamShortEpg } from "./providers/xtream";
+import { createDemoPlaylist, DEMO_PLAYLIST_CONTENT, DEMO_PLAYLIST_ID } from "./demo";
 import {
   deletePlaylistDocument,
   deletePlaylist,
@@ -75,6 +76,7 @@ function readThemePreference(): ThemePreference {
 
 function App() {
   const [section, setSection] = useState<Section>("Home");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(readThemePreference);
   const [sources, setSources] = useState<Playlist[]>([]);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
@@ -329,23 +331,26 @@ function App() {
     clearNotifications();
     const playlist = draft.playlist;
     let catalog: { channels: LiveChannel[]; movies: Movie[]; series: Series[] };
+    let importedEpisodes: Episode[] = [];
     if (playlist.type === "M3U") {
       const content = draft.fileContent ??
         (playlist.fileName
           ? (await getPlaylistDocument(playlist.id))?.content
           : await fetchM3u(playlist.url));
       if (!content) throw new Error("The local M3U file could not be read.");
+      const importedCatalog = parseM3uCatalog(content, {
+        id: playlist.id,
+        name: playlist.name,
+        url: playlist.url || undefined,
+        drmLicenseUrl: playlist.drmLicenseUrl,
+        drmSystem: playlist.drmSystem,
+      });
       catalog = {
-        channels: parseM3u(content, {
-          id: playlist.id,
-          name: playlist.name,
-          url: playlist.url || undefined,
-          drmLicenseUrl: playlist.drmLicenseUrl,
-          drmSystem: playlist.drmSystem,
-        }),
-        movies: [],
-        series: [],
+        channels: importedCatalog.channels,
+        movies: importedCatalog.movies,
+        series: importedCatalog.series,
       };
+      importedEpisodes = importedCatalog.episodes;
     } else {
       const result = await loadXtreamCatalog(playlist);
       playlist.expiresAtMillis = result.expiresAtMillis;
@@ -363,6 +368,11 @@ function App() {
     }
     if (shouldActivate) await setActivePlaylist(playlist.id);
     await saveCatalog({ playlistId: playlist.id, ...catalog });
+    if (importedEpisodes.length > 0) {
+      await Promise.all(catalog.series.map((item) =>
+        saveEpisodes(playlist.id, item.id, importedEpisodes.filter((episode) => episode.seriesId === item.id)),
+      ));
+    }
     await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
     if (shouldActivate) {
       if (isNewSource) setSection("Live TV");
@@ -388,6 +398,33 @@ function App() {
     setSourceDialogOpen(true);
   }
 
+  async function loadDemoLibrary() {
+    clearNotifications();
+    const existing = sources.find((source) => source.id === DEMO_PLAYLIST_ID);
+    const shouldActivate = !existing || activeSourceId === null;
+    const playlist = createDemoPlaylist(shouldActivate);
+    if (existing) playlist.createdAt = existing.createdAt;
+    const catalog = parseM3uCatalog(DEMO_PLAYLIST_CONTENT, {
+      id: playlist.id,
+      name: playlist.name,
+    });
+    await savePlaylist(playlist);
+    await savePlaylistDocument({ playlistId: playlist.id, content: DEMO_PLAYLIST_CONTENT });
+    if (shouldActivate) await setActivePlaylist(playlist.id);
+    await saveCatalog({
+      playlistId: playlist.id,
+      channels: catalog.channels,
+      movies: catalog.movies,
+      series: catalog.series,
+    });
+    await Promise.all(catalog.series.map((item) =>
+      saveEpisodes(playlist.id, item.id, catalog.episodes.filter((episode) => episode.seriesId === item.id)),
+    ));
+    await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
+    if (shouldActivate) setSection("Live TV");
+    notify("Demo playlist added to this browser. Its sample streams load only when played.", "notice");
+  }
+
   async function refreshSource(source: Playlist) {
     const activeElement = document.activeElement;
     refreshReturnFocusRef.current = activeElement instanceof HTMLElement && activeElement !== document.body
@@ -397,21 +434,36 @@ function App() {
     clearNotifications();
     try {
       let catalog: { channels: LiveChannel[]; movies: Movie[]; series: Series[] };
-      if (source.type === "M3U") {
+      let importedEpisodes: Episode[] = [];
+      if (source.demo) {
+        const importedCatalog = parseM3uCatalog(DEMO_PLAYLIST_CONTENT, {
+          id: source.id,
+          name: source.name,
+        });
+        catalog = {
+          channels: importedCatalog.channels,
+          movies: importedCatalog.movies,
+          series: importedCatalog.series,
+        };
+        importedEpisodes = importedCatalog.episodes;
+        await savePlaylistDocument({ playlistId: source.id, content: DEMO_PLAYLIST_CONTENT });
+      } else if (source.type === "M3U") {
         const document = source.fileName ? await getPlaylistDocument(source.id) : undefined;
         const content = document?.content ?? (source.fileName ? undefined : await fetchM3u(source.url));
         if (content === undefined) throw new Error("The imported M3U file is missing from local browser storage.");
+        const importedCatalog = parseM3uCatalog(content, {
+          id: source.id,
+          name: source.name,
+          url: source.url || undefined,
+          drmLicenseUrl: source.drmLicenseUrl,
+          drmSystem: source.drmSystem,
+        });
         catalog = {
-          channels: parseM3u(content, {
-            id: source.id,
-            name: source.name,
-            url: source.url || undefined,
-            drmLicenseUrl: source.drmLicenseUrl,
-            drmSystem: source.drmSystem,
-          }),
-          movies: [],
-          series: [],
+          channels: importedCatalog.channels,
+          movies: importedCatalog.movies,
+          series: importedCatalog.series,
         };
+        importedEpisodes = importedCatalog.episodes;
       } else {
         const result = await loadXtreamCatalog(source);
         source.expiresAtMillis = result.expiresAtMillis;
@@ -419,7 +471,16 @@ function App() {
         await savePlaylist(source);
       }
       await saveCatalog({ playlistId: source.id, ...catalog });
+      if (importedEpisodes.length > 0) {
+        await Promise.all(catalog.series.map((item) =>
+          saveEpisodes(source.id, item.id, importedEpisodes.filter((episode) => episode.seriesId === item.id)),
+        ));
+      }
       await reloadLocalData(source.id);
+      if (source.demo) {
+        notify("Demo playlist restored from its bundled M3U fixture.", "notice");
+        return;
+      }
       notify("Catalog updated from your provider.", "notice");
       try {
         const count = await loadGuide(source);
@@ -611,6 +672,10 @@ function App() {
     }
   }
 
+  async function removeFromLibrary(item: Movie | Series, contentType: "MOVIE" | "SERIES") {
+    await deleteLibraryItem(`${item.playlistId}:${contentType}:${item.id}`);
+  }
+
   async function removeFavorite(favorite: Favorite) {
     try {
       await toggleStoredFavorite(favorite);
@@ -658,16 +723,36 @@ function App() {
     .filter((item) => item.status === "WATCHING" && item.playlistId === activeSourceId)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 4);
+  const movieProgress = selectedMovie
+    ? library
+      .filter((item) =>
+      item.contentId === selectedMovie.id &&
+      item.contentType === "MOVIE" &&
+      item.status === "WATCHING",
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+    : undefined;
+  const seriesEpisodeProgress = selectedSeries
+    ? library
+      .filter((item) =>
+      item.playlistId === selectedSeries.playlistId &&
+      item.contentType === "EPISODE" &&
+      item.parentId === selectedSeries.id &&
+      item.status === "WATCHING" &&
+      Boolean(item.streamUrl),
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+    : undefined;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <aside className="sidebar" aria-label="Primary navigation" inert={refreshing}>
-        <button className="brand" onClick={() => setSection("Home")} type="button">
+        <button aria-label="TiviHub home" className="brand" onClick={() => setSection("Home")} type="button">
           <img src="/icons/tivihub-192.png" alt="" />
           <span>TiviHub<span className="brand-period">.</span></span>
         </button>
         <p className="nav-caption">YOUR SPACE</p>
-        <nav className="desktop-nav">
+        <nav className="desktop-nav" id="desktop-navigation">
           {sections.map((item) => (
             <NavItem key={item.label} icon={item.icon} label={item.label} active={section === item.label} onClick={() => setSection(item.label)} />
           ))}
@@ -675,6 +760,17 @@ function App() {
         <div className="sidebar-footer">
           <span className="online-indicator" />
           <span className="sidebar-version">TiviHub v{webPackage.version}</span>
+          <button
+            aria-controls="desktop-navigation"
+            aria-expanded={!sidebarCollapsed}
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            className="sidebar-collapse"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            type="button"
+          >
+            <Icon name={sidebarCollapsed ? "chevron_right" : "chevron_left"} />
+          </button>
         </div>
       </aside>
 
@@ -695,18 +791,21 @@ function App() {
                 <select aria-label="Active playlist" onChange={(event) => void activateSource(event.target.value)} value={activeSourceId ?? ""}>
                   {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
                 </select>
+                <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
               </label>
             )}
-            <button
-              aria-label="Refresh current source"
-              className="icon-button refresh-button"
-              disabled={!activeSource || refreshing}
-              onClick={() => void refreshCurrentSource()}
-              ref={refreshButtonRef}
-              type="button"
-            >
-              <Icon name="refresh" />
-            </button>
+            {sources.length > 0 && (
+              <button
+                aria-label="Refresh current source"
+                className="icon-button refresh-button"
+                disabled={!activeSource || refreshing}
+                onClick={() => void refreshCurrentSource()}
+                ref={refreshButtonRef}
+                type="button"
+              >
+                <Icon name="refresh" />
+              </button>
+            )}
             <button className="add-source-button" onClick={openAddSource} type="button">
               <Icon name="add" /><span>Add source</span>
             </button>
@@ -754,6 +853,7 @@ function App() {
             ) : section === "Settings" ? (
               <SettingsPage
                 activeSourceId={activeSourceId}
+                onAddSource={openAddSource}
                 apiKey={subtitleApiKey}
                 onActivate={(id) => void activateSource(id)}
                 onChooseTheme={chooseTheme}
@@ -772,14 +872,13 @@ function App() {
               <MovieDetail
                 favorite={favorites.some((favorite) => favorite.contentId === selectedMovie.id)}
                 inLibrary={library.some((entry) => entry.contentId === selectedMovie.id && entry.contentType === "MOVIE")}
+                continueWatching={Boolean(movieProgress)}
                 movie={selectedMovie}
                 onAddToLibrary={() => void addToWatchlist(selectedMovie, "MOVIE")}
                 onBack={() => setSelectedMovie(null)}
                 onFavorite={() => void toggleFavorite(selectedMovie, "MOVIE")}
+                onRemoveFromLibrary={() => void removeFromLibrary(selectedMovie, "MOVIE")}
                 onPlay={() => {
-                  const progress = library.find((entry) =>
-                    entry.contentId === selectedMovie.id && entry.contentType === "MOVIE",
-                  );
                   openPlayback({
                     id: selectedMovie.id,
                     playlistId: selectedMovie.playlistId,
@@ -790,7 +889,7 @@ function App() {
                     drmLicenseUrl: selectedMovie.drmLicenseUrl,
                     drmSystem: selectedMovie.drmSystem,
                     live: false,
-                  }, progress?.positionMillis ?? 0);
+                  }, movieProgress?.positionMillis ?? 0);
                 }}
               />
             ) : section === "Live TV" || section === "Movies" ? (
@@ -822,8 +921,28 @@ function App() {
                   episodes={episodes}
                   error={episodeError}
                   favorite={favorites.some((favorite) => favorite.contentId === selectedSeries.id)}
+                  inLibrary={library.some((entry) => entry.contentId === selectedSeries.id && entry.contentType === "SERIES")}
+                  continueWatching={Boolean(seriesEpisodeProgress)}
                   loading={episodeLoading}
                   onBack={() => setSelectedSeries(null)}
+                  onAddToLibrary={() => void addToWatchlist(selectedSeries, "SERIES")}
+                  onRemoveFromLibrary={() => void removeFromLibrary(selectedSeries, "SERIES")}
+                  onContinueWatching={() => {
+                    if (!seriesEpisodeProgress?.streamUrl) return;
+                    openPlayback({
+                      id: seriesEpisodeProgress.contentId,
+                      playlistId: seriesEpisodeProgress.playlistId,
+                      contentType: "EPISODE",
+                      title: seriesEpisodeProgress.title,
+                      streamUrl: seriesEpisodeProgress.streamUrl,
+                      artworkUrl: seriesEpisodeProgress.artworkUrl,
+                      drmLicenseUrl: seriesEpisodeProgress.drmLicenseUrl,
+                      drmSystem: seriesEpisodeProgress.drmSystem,
+                      live: false,
+                      parentId: seriesEpisodeProgress.parentId,
+                      parentTitle: seriesEpisodeProgress.parentTitle,
+                    }, seriesEpisodeProgress.positionMillis);
+                  }}
                   onFavorite={() => void toggleFavorite(selectedSeries, "SERIES")}
                   onPlay={(item) => openPlayback(item)}
                   series={selectedSeries}
@@ -886,6 +1005,7 @@ function App() {
         <div className="refresh-dialog-host" inert={refreshing}>
           <PlaylistDialog
             editing={editingSource}
+            onLoadDemo={loadDemoLibrary}
             onClose={() => {
               setSourceDialogOpen(false);
               setEditingSource(undefined);

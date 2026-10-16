@@ -19,8 +19,9 @@ TiviHub organizes and plays compatible media from user-configured M3U and Xtream
 
 ## Highlights
 
-- **Your sources, your browser:** Import an M3U file or connect to a remote M3U URL or Xtream-compatible provider.
+- **Your sources, your browser:** Import an M3U file or connect to a remote M3U URL or Xtream-compatible provider. M3U groups labeled Movies/VOD and Series/TV Shows are organized as on-demand media; series episodes use common `S01E02` or `1x02` naming.
 - **One media library:** Browse live channels, recent TV guide data, movies, series, and episodes.
+- **Try without provider credentials:** Load the bundled IPTV-style demo M3U with sample HLS feeds, movies, and series. The demo catalog stays in this browser; openly licensed Blender Foundation film samples are requested directly from their hosts when played. Demo live entries are test feeds, not broadcast TV channels.
 - **Playback and progress:** Use browser-native media playback or Shaka Player for supported HLS and DASH streams; keep favorites, watchlists, and playback progress locally.
 - **Built for different screens:** Responsive phone and desktop layouts, light and dark themes, and PWA installation where supported.
 - **Portable local data:** Export and restore an encrypted backup protected by a password you choose.
@@ -31,7 +32,7 @@ Playback and guide availability depend on provider authorization, CORS, network 
 
 TiviHub has no TiviHub account service, application API, analytics, or cloud sync. Playlists, catalogs, guide data, favorites, library entries, playback progress, and settings are stored in the browser's local storage. Source credentials, source URLs, and the optional OpenSubtitles API key are encrypted in IndexedDB with a key held by that browser. Derived stream URLs can contain provider tokens and are also stored locally.
 
-The app sends requests directly from the browser to the provider configured by the user and to OpenSubtitles when subtitle search is used. Those services receive the request details and the user's network address. Providers must allow browser CORS requests; HTTPS pages also commonly cannot access insecure HTTP sources. TiviHub does not proxy or relay those requests. Static hosting providers may retain ordinary website access logs.
+When media is played or subtitles are searched, the browser contacts the configured provider or bundled demo-stream host and OpenSubtitles directly. Those services receive the request details and the user's network address. Providers must allow browser CORS requests; HTTPS pages also commonly cannot access insecure HTTP sources. TiviHub does not proxy or relay those requests. Static hosting providers may retain ordinary website access logs.
 
 Browser storage is limited to that browser and device. Clearing site data, changing browsers, or losing the device can remove local data. Export a backup if you need to move or preserve it. Local storage does not protect data from malicious same-origin code, compromised browser extensions, or access to an unlocked device.
 
