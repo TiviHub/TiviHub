@@ -46,4 +46,8 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $versionedInstaller = "dist/releases/TiviHub-$tag-windows-x64.exe"
-          gh release create $tag $versionedInstaller dist/releases/TiviHub-setup.exe --verify-tag --title "TiviHub $tag" --generate-notes
+          if ($tag.Contains('-')) {
+            gh release create $tag $versionedInstaller dist/releases/TiviHub-setup.exe --verify-tag --title "TiviHub $tag" --generate-notes --prerelease
+          } else {
+            gh release create $tag $versionedInstaller dist/releases/TiviHub-setup.exe --verify-tag --title "TiviHub $tag" --generate-notes
+          }

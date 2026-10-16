@@ -16,4 +16,4 @@ Please include the affected version or commit, impact, and concise reproduction 
 
 ## Supported versions
 
-Until the first public beta, only the latest source on `main` is supported. Once public releases begin, security fixes will target the latest supported release.
+The latest published release is supported. During beta, this means the latest published prerelease; security fixes will target the latest supported release.

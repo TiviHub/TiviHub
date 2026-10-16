@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://tivihub.nl">Website</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/TiviHub/TiviHub/releases/latest">Latest release</a>
+  <a href="https://github.com/TiviHub/TiviHub/releases">Releases</a>
   &nbsp;·&nbsp;
   <a href="./LICENSE">MIT License</a>
 </p>
@@ -39,6 +39,8 @@ Playback depends on provider authorization and availability, network access, COR
 | Windows 10/11, x64 | Installer available | Tauri desktop app using the system WebView2 runtime. |
 | Linux | Not yet released | A package may follow after playback and distribution testing. |
 | macOS | Not currently targeted | No installer is provided. |
+
+The first public release is **v1.0.0-beta.1**. This is an early beta; expect incomplete features and report issues through the repository's issue tracker. See available builds on the [GitHub Releases page](https://github.com/TiviHub/TiviHub/releases).
 
 The installer is currently unsigned. Windows may display an unknown-publisher or SmartScreen warning until a code-signing certificate is used.
 
@@ -83,9 +85,9 @@ npm test
 | `npm run tauri:build` | Windows NSIS installer. |
 | `npm run package:windows` | Windows installer, release assets, and website bundle. |
 
-`npm run build` prerenders the landing page so its primary content is present in the static HTML for search crawlers. The download button points to the latest GitHub Release installer. `npm run package:windows` builds the installer, the website, and two release assets under `dist/releases/`: a versioned `TiviHub-v<version>-windows-x64.exe` and a stable `TiviHub-setup.exe` filename. Generated installers are not tracked in source control.
+`npm run build` prerenders the landing page so its primary content is present in the static HTML for search crawlers. Its download button points to the latest stable GitHub Release installer. `npm run package:windows` builds the installer, the website (with its download button pinned to the current version's GitHub Release asset), and two release assets under `dist/releases/`: a versioned `TiviHub-v<version>-windows-x64.exe` and a stable `TiviHub-setup.exe` filename. Generated installers are not tracked in source control.
 
-To deploy, upload the **contents** of `dist/site/` to the document root for `tivihub.nl` and enable HTTPS. No Node.js runtime, application server, or SPA rewrite is required on the host. The player UI and installer are not included in the website build.
+To deploy the release-ready landing page, wait until the release has been published, then upload the **contents** of `dist/site/` to the document root for `tivihub.nl` and enable HTTPS. The release build links directly to its versioned GitHub asset, so deploy the site bundle from the same version. No Node.js runtime, application server, or SPA rewrite is required on the host. The player UI and installer are not included in the website build.
 
 ## Releasing updates
 
