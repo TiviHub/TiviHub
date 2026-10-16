@@ -5,112 +5,62 @@
 <h1 align="center">TiviHub</h1>
 
 <p align="center">
-  <strong>A local-first desktop media hub.</strong><br>
-  Organize and play media from sources you choose.
+  <strong>Your media, organized your way.</strong><br>
+  An open-source desktop player for sources you choose.
 </p>
 
 <p align="center">
   <a href="https://tivihub.nl">Website</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/TiviHub/TiviHub/releases">Releases</a>
+  <a href="https://github.com/TiviHub/TiviHub/releases/download/v1.0.0-beta.1/TiviHub-setup.exe">Download for Windows</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/TiviHub/TiviHub/releases">All releases</a>
   &nbsp;·&nbsp;
   <a href="./LICENSE">MIT License</a>
 </p>
 
-TiviHub is a desktop player and library for user-configured M3U and Xtream-compatible sources. The public website at [`tivihub.nl`](https://tivihub.nl) is a static landing and download page; the player is bundled in a Windows installer and runs locally.
+TiviHub brings the media sources you configure into one desktop library. Browse live channels and guide data, movies, series, and episodes, then keep favorites and playback progress together on your device.
 
-TiviHub does not provide playlists, channels, streams, or media.
+TiviHub is a player and organizer, not a content service. It does not provide playlists, channels, streams, or media. You bring sources you are authorized to use.
 
-## Features
+## What you can do
 
-- **Bring your own sources:** Import an M3U file or connect to an M3U URL or Xtream-compatible provider.
-- **One organized library:** Browse live channels, TV guide data, movies, series, and episodes.
-- **Playback and progress:** Play supported HLS and DASH streams, save favorites and watch progress, and continue where you left off.
-- **Device-local data:** Keep sources, catalogs, favorites, playback progress, and settings on the device. Export or restore an encrypted backup to move data.
-- **Personalize the player:** Choose a light, dark, or system theme.
-- **Development-only demo:** A bundled sample playlist is available during local development and omitted from production builds.
+- **Connect your sources:** Import an M3U file or URL, or configure an Xtream-compatible source.
+- **Keep your library organized:** Browse live TV, programme guide data, movies, series, and episodes in one place.
+- **Pick up where you left off:** Save favorites and playback progress on your device.
+- **Make it yours:** Choose a light, dark, or system theme.
+- **Back up your data:** Export and restore an encrypted backup when moving to another device.
 
-Playback depends on provider authorization and availability, network access, CORS policy, supported formats and codecs, and the operating system's webview.
+Playback supports compatible HLS and DASH streams. Whether a particular stream works depends on your provider, authorization, network, CORS policy, codecs, and Windows WebView2.
 
-## Platform support
+## Download
 
-| Platform | Availability | Notes |
-| --- | --- | --- |
-| Windows 10/11, x64 | Installer available | Tauri desktop app using the system WebView2 runtime. |
-| Linux | Not yet released | A package may follow after playback and distribution testing. |
-| macOS | Not currently targeted | No installer is provided. |
+**[Download TiviHub v1.0.0-beta.1 for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/download/v1.0.0-beta.1/TiviHub-setup.exe)**
 
-The first public release is **v1.0.0-beta.1**. This is an early beta; expect incomplete features and report issues through the repository's issue tracker. See available builds on the [GitHub Releases page](https://github.com/TiviHub/TiviHub/releases).
+This is an early beta, so features may change and you may encounter issues. The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
 
-The installer is currently unsigned. Windows may display an unknown-publisher or SmartScreen warning until a code-signing certificate is used.
-
-Protected playback requires authorization and a DRM license service provided by the user's source. TiviHub does not provide licenses or bypass DRM or other access controls. DRM and codec support vary by provider, operating system, and device; test the exact streams on the intended platform.
+Windows is currently the only released platform. Linux is not available yet, and macOS is not currently targeted. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) for the current installer and release notes.
 
 ## Privacy and local data
 
-The installed player includes its UI and assets. It does not need to load from TiviHub hosting and has no TiviHub account service, application server, analytics, cloud sync, or automatic updater.
+The installed player runs with its interface and assets bundled. It has no TiviHub account, application server, analytics, cloud sync, or automatic updater. Sources, catalogs, favorites, playback progress, and settings are stored locally on your device.
 
-When a user connects a remote source, refreshes a playlist, plays media, or searches for subtitles, the app contacts the configured provider or subtitle service directly. Those services receive the request details and the user's network address. TiviHub does not proxy or relay those requests. The static website host may retain ordinary logs for page visits and installer downloads.
+When you connect a remote source, refresh content, play media, or search for subtitles, TiviHub connects directly to the provider or subtitle service you configured. Those services receive the request and your network address; TiviHub does not proxy or relay it. Installer downloads are served by GitHub, not by the TiviHub website host.
 
-App data is local to the device and installation. Data from a previous browser-based version is not automatically transferred; export an encrypted backup there and import it in the desktop app. Clearing app data or losing the device can remove local data, so keep a backup if it matters. Local storage does not protect data from malware, a compromised operating-system account, or access to an unlocked device.
+Keep backups of important data. Clearing app data or losing access to your device can remove your local library. Local storage does not protect data from malware, a compromised operating-system account, or access to an unlocked device.
 
-## Development
+## Playback and content
 
-Install Node.js 20 or later. To run or package the native desktop app, install the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system. Windows builds require Rust and the Microsoft C++ build tools.
+Protected playback requires authorization and a DRM license service from your source. DRM and codec support vary by provider and device. TiviHub does not supply licenses or bypass DRM or other access controls.
 
-```sh
-npm ci
-npm run dev
-```
+You are responsible for using sources and content you are authorized to access and for following applicable law and provider terms. Third-party media, programme data, artwork, names, and trademarks remain the property of their respective owners.
 
-`npm run dev` serves the landing page. To serve the player frontend in Vite, use `npm run dev:desktop`. To run it inside the native desktop shell, use:
+## Open source and contributions
 
-```sh
-npm run tauri:dev
-```
+The source code is public so you can inspect how TiviHub works. **You do not need to build it yourself to use the app**—download the Windows installer above.
 
-Run validation with:
-
-```sh
-npm run typecheck
-npm test
-```
-
-## Production builds
-
-| Command | Output |
-| --- | --- |
-| `npm run build` | Prerendered static landing page in `dist/site/`. |
-| `npm run build:desktop` | Bundled player frontend in `dist/desktop/`. |
-| `npm run tauri:build` | Windows NSIS installer. |
-| `npm run package:windows` | Windows installer, release assets, and website bundle. |
-
-`npm run build` prerenders the landing page so its primary content is present in the static HTML for search crawlers. Its download button points to the latest stable GitHub Release installer. `npm run package:windows` builds the installer, the website (with its download button pinned to the current version's GitHub Release asset), and two release assets under `dist/releases/`: a versioned `TiviHub-v<version>-windows-x64.exe` and a stable `TiviHub-setup.exe` filename. Generated installers are not tracked in source control.
-
-To deploy the release-ready landing page, wait until the release has been published, then upload the **contents** of `dist/site/` to the document root for `tivihub.nl` and enable HTTPS. The release build links directly to its versioned GitHub asset, so deploy the site bundle from the same version. No Node.js runtime, application server, or SPA rewrite is required on the host. The player UI and installer are not included in the website build.
-
-## Releasing updates
-
-TiviHub has no in-app update check. To publish a Windows update:
-
-1. Set the same new version in `package.json` and `src-tauri/tauri.conf.json`.
-2. Run `npm run typecheck`, `npm test`, and `npm run package:windows`; install and test the generated Windows installer.
-3. Commit and push the version change, then create and push its matching tag, for example:
-
-   ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
-   ```
-
-4. The GitHub Actions release workflow verifies the tag matches both version files, builds and tests the Windows installer, then publishes a GitHub Release with a versioned installer and the stable `TiviHub-setup.exe` asset.
-5. The website download button points to `https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe`; it follows the latest published stable release without requiring a website rebuild.
-
-Users visit the website to check for updates and run the new installer over their current installation; they do not need to uninstall first. Adding in-app update checks would make the installed app contact a release host, so they remain disabled. Users should keep backups of important local data.
-
-## Content and rights
-
-TiviHub is a player and catalog organizer for sources users configure. It does not supply, sell, license, host, or verify channels or media. Users are responsible for accessing sources and content they are authorized to use and for complying with applicable law and provider terms. Third-party media, programme data, artwork, names, and trademarks remain the property of their respective owners.
+Suggestions, bug reports, and code contributions are welcome. Open an issue to discuss a change or submit a pull request. See [CONTRIBUTING.md](./CONTRIBUTING.md) for contributor guidance and [SECURITY.md](./SECURITY.md) for reporting security issues privately.
 
 ## License
 
-TiviHub is distributed under the [MIT License](./LICENSE). This license applies to the TiviHub software only and does not grant rights to third-party content or brands.
+TiviHub software is distributed under the [MIT License](./LICENSE). This license applies to the software only and does not grant rights to third-party content or brands.
