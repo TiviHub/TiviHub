@@ -10,7 +10,7 @@ If private vulnerability reporting is unavailable, contact the repository mainta
 
 ## Scope
 
-Reports are welcome for vulnerabilities in TiviHub's application code, build/release workflow, and handling of user or provider credentials. Issues in third-party playlist providers or services should be reported to those providers.
+Reports are welcome for vulnerabilities in TiviHub's application code and handling of user or provider credentials. Issues in third-party playlist providers or services should be reported to those providers.
 
 Please include the affected version or commit, impact, and concise reproduction steps. Do not include real playlist URLs, provider credentials, personal data, or signing-key material.
 

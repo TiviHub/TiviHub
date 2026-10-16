@@ -1,183 +1,88 @@
-<div align="center">
-
 # TiviHub
 
-**Your playlists. Your library. One Android IPTV player.**
+<p align="center">
+  <img src="./public/icons/tivihub-192.png" width="88" alt="TiviHub logo">
+</p>
 
-Browse and play live TV, movies, and series from playlists and provider accounts you configure.
+<p align="center">
+  <strong>A local-first media library and browser player.</strong><br>
+  An installable static PWA for the sources you choose.
+</p>
 
-[![Android CI](https://github.com/TiViHub/TiviHub/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/TiViHub/TiviHub/actions/workflows/android.yml)
-[![Latest release](https://img.shields.io/github/v/release/TiViHub/TiviHub?display_name=tag&sort=semver)](https://github.com/TiViHub/TiviHub/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/oreo)
+<p align="center">
+  <a href="https://player.tivihub.nl">Open TiviHub Player</a>
+  &nbsp;·&nbsp; No TiviHub account
+  &nbsp;·&nbsp; No application server
+</p>
 
-</div>
+TiviHub organizes and plays compatible media from user-configured M3U and Xtream sources. The app runs in the browser and stores its library on the device. The production site consists of static files and can be hosted on ordinary HTTPS web hosting.
 
-> [!IMPORTANT]
-> **TiviHub does not provide or host channels, movies, series, playlists, or streams.** You must supply sources that you are authorized to access and use. You are responsible for complying with applicable laws and your providers' terms.
+## Highlights
 
-TiviHub is a native Android player for organizing and watching content from your own M3U/M3U8 playlists and Xtream-compatible services. It brings live TV, movies, series, programme information, playback progress, favorites, and a personal library together in a content-first interface.
+- **Your sources, your browser:** Import an M3U file or connect to a remote M3U URL or Xtream-compatible provider.
+- **One media library:** Browse live channels, recent TV guide data, movies, series, and episodes.
+- **Playback and progress:** Use browser-native media playback or Shaka Player for supported HLS and DASH streams; keep favorites, watchlists, and playback progress locally.
+- **Built for different screens:** Responsive phone and desktop layouts, light and dark themes, and PWA installation where supported.
+- **Portable local data:** Export and restore an encrypted backup protected by a password you choose.
 
-## Features
+Playback and guide availability depend on provider authorization, CORS, network access, stream formats, device codecs, and browser DRM support.
 
-- **Live TV** — browse channels and groups, view channel details, and mark favorites.
-- **Movies and series** — explore provider catalogs by category, search titles, view available metadata, and save favorites.
-- **Google Cast** — cast live channels, movies, and episodes to nearby Cast devices from the player.
-- **Playlist support** — add M3U/M3U8 playlists for live channels or Xtream-compatible accounts for live TV, movies, series, episodes, and provider metadata.
-- **Playlist management** — switch sources from the app bar, see per-playlist catalog refresh times, and refresh an individual source with progress and actionable connection/account errors.
-- **TV guide** — view cached XMLTV programme information when supplied by the active source.
-- **Playback** — play compatible streams with AndroidX Media3, including HLS, DASH, and supported Widevine DRM sources.
-- **Continue watching** — save movie and episode progress locally and resume playback.
-- **Subtitles** — use embedded subtitles or search/download subtitles with your own OpenSubtitles API key.
-- **Library and favorites** — keep saved live channels, movies, and series together, with saved-item counts.
-- **Encrypted backup and restore** — move playlists, credentials, favorites, library items, and app preferences between devices with a password-protected backup.
-- **Flexible catalog layout** — choose an automatic or fixed grid-column count for movies and series.
-- **Local data** — cache catalogs and guide data, with controls to refresh them.
-- **Material 3** — use system, light, or dark themes.
-- **Playback orientation** — browse in portrait and use the device's orientation during playback.
+## Privacy and data
 
-Available features and metadata depend on your playlist provider, content, device, and network.
+TiviHub has no TiviHub account service, application API, analytics, or cloud sync. Playlists, catalogs, guide data, favorites, library entries, playback progress, and settings are stored in the browser's local storage. Source credentials, source URLs, and the optional OpenSubtitles API key are encrypted in IndexedDB with a key held by that browser. Derived stream URLs can contain provider tokens and are also stored locally.
 
-## Download and install
+The app sends requests directly from the browser to the provider configured by the user and to OpenSubtitles when subtitle search is used. Those services receive the request details and the user's network address. Providers must allow browser CORS requests; HTTPS pages also commonly cannot access insecure HTTP sources. TiviHub does not proxy or relay those requests. Static hosting providers may retain ordinary website access logs.
 
-Download the latest versioned APK from [GitHub Releases](https://github.com/TiViHub/TiviHub/releases). Each release includes a SHA-256 checksum and the APK signing certificate's SHA-256 fingerprint.
+Browser storage is limited to that browser and device. Clearing site data, changing browsers, or losing the device can remove local data. Export a backup if you need to move or preserve it. Local storage does not protect data from malicious same-origin code, compromised browser extensions, or access to an unlocked device.
 
-1. Download the APK to your Android device.
-2. Open it from your browser or file manager and allow installation from that source if Android asks.
-3. Add a playlist or provider account in TiviHub's settings.
+## Browser and playback support
 
-Android may warn because the APK is installed outside Google Play. Install only releases from this repository. To update an existing installation, the new APK must be signed with the same release key; uninstalling the app first may remove its local data.
+TiviHub is designed for current Safari, Chrome, and Microsoft Edge on phones, tablets, and desktop computers. Browser capabilities vary by operating system and device. HTTPS is required for modern media and cryptographic APIs; `localhost` is suitable for development.
 
-### Verify the APK checksum
+The player does not supply DRM licenses or bypass access controls. Protected playback requires authorization and compatible license services from the configured provider. License requests go directly from the browser to that provider.
 
-The checksum helps detect accidental or in-transit changes. In PowerShell, run this from the folder containing the downloaded APK and checksum file:
+| Browser family | DRM considerations |
+| --- | --- |
+| Chrome and Edge | Widevine may be available when supported and enabled by the browser and device. |
+| Safari | Protected playback typically uses FairPlay. Providers may require custom certificate or license handling that cannot be inferred generically. |
+| Chrome on iOS | Uses WebKit and has media limitations similar to Safari; it cannot play Widevine-only streams. |
 
-```powershell
-$apk = ".\TiviHub-vX.Y.Z.apk"
-$checksumFile = ".\TiviHub-vX.Y.Z-SHA256SUMS.txt"
-$expected = (Get-Content $checksumFile).Split(' ')[0]
-$actual = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actual -ne $expected) { throw "APK checksum mismatch" }
-Write-Output "APK checksum matches"
+Test the specific provider and stream on the target device. The presence of playback controls does not guarantee that a stream is compatible or authorized.
+
+## Develop locally
+
+Install Node.js 20 or later, then run from the repository root:
+
+```sh
+npm ci
+npm run dev
 ```
 
-A checksum alone does not prove who published an APK. Each release also publishes the signing certificate's SHA-256 fingerprint. Verify the APK with Android SDK Build Tools' `apksigner verify --print-certs <apk>` and compare the result to the fingerprint file. Trust that fingerprint only after independently confirming the expected value.
+Run checks and produce the static production build:
 
-## Build from source
-
-### Requirements
-
-- Android 8.0 (API 26) or later to run the app.
-- JDK 17.
-- Android SDK Platform 36 and Build Tools 36.0.0.
-- A playlist or provider account that you are authorized to use.
-
-Open the repository root in Android Studio, or use the Gradle wrapper from a terminal. The first build downloads the Gradle distribution, Android Gradle Plugin, and dependencies.
-
-**Windows PowerShell**
-
-```powershell
-.\gradlew.bat :app:assembleDebug
+```sh
+npm run typecheck
+npm test
+npm run build
 ```
 
-**macOS / Linux**
+The build is written to `dist/`. Node.js is used only for local development and building; it is not needed on the deployed host. The repository intentionally has no CI/CD build or deployment pipeline.
 
-```bash
-./gradlew :app:assembleDebug
-```
+## Deploy to static hosting
 
-The debug APK is created at `app/build/outputs/apk/debug/app-debug.apk` (on Windows, `app\build\outputs\apk\debug\app-debug.apk`). To install it on a connected device or emulator:
+1. Run `npm ci` and `npm run build` locally.
+2. Upload the **contents** of `dist/` to the document root for `player.tivihub.nl`.
+3. Enable HTTPS and serve `sw.js` from the site root so the PWA can register its service worker.
+4. Configure application-navigation requests to fall back to `index.html`, and serve JavaScript, CSS, and `manifest.webmanifest` with appropriate MIME types.
 
-```powershell
-.\gradlew.bat :app:installDebug
-```
+The service worker caches the application shell and static build assets. Provider responses, media streams, subtitle results, and playback are not cached; offline use is limited to the app shell and previously cached static assets.
 
-### Tests and lint
+## Content and rights
 
-Run the same checks as the CI workflow:
+TiviHub is a browser-based player and catalog organizer for sources users configure. It does not supply, sell, license, or host channels or media, and it does not verify that a provider or source is authorized.
 
-```powershell
-.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-```
+Users are responsible for using sources and content they are authorized to access and for complying with copyright rules, provider terms, territorial restrictions, and applicable laws. TiviHub does not provide DRM licenses or bypass DRM, authentication, subscriptions, geographic controls, or other technical protection measures. Third-party media, programme data, artwork, names, and trademarks remain the property of their respective owners.
 
-On macOS or Linux, replace `.\gradlew.bat` with `./gradlew`.
+## License
 
-## Releases
-
-GitHub Actions runs unit tests, lint, and a debug build on pushes to `main` and pull requests. A push to `main` also builds a signed release APK; its APK, checksum, and certificate fingerprint are available in the run's **Artifacts** section for 14 days.
-
-To publish a versioned release, maintainers create and push a semantic version tag:
-
-```powershell
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
-git push origin vX.Y.Z
-```
-
-The tag becomes the Android version name. GitHub Actions assigns an increasing Android version code, verifies the signed APK, generates its checksum and certificate fingerprint, then publishes the files to [GitHub Releases](https://github.com/TiViHub/TiviHub/releases) with generated release notes. Treat published version tags as immutable.
-
-### Release signing setup (maintainers)
-
-Release signing is configured through GitHub Actions secrets in an environment named `release`. Never commit a keystore, password, or encoded keystore to this repository. Keep an offline backup of the keystore and credentials; losing them prevents compatible APK updates.
-
-1. Create a dedicated keystore on a trusted machine, outside the repository:
-
-   ```powershell
-   keytool -genkeypair -v `
-     -keystore "$HOME\tivihub-release.p12" `
-     -alias tivihub-release `
-     -keyalg RSA -keysize 2048 -validity 10000 `
-     -dname "CN=TiviHub, O=TiviHub Project"
-   ```
-
-   The certificate subject is visible in APK signature metadata and is not identity-verified by Android. Use a project identity rather than personal contact details.
-
-2. In the repository's **Settings → Environments**, create the `release` environment and add these **environment secrets**:
-   - `TIVIHUB_RELEASE_KEYSTORE_BASE64` — Base64-encoded keystore bytes.
-   - `TIVIHUB_UPLOAD_STORE_PASSWORD` — keystore password.
-   - `TIVIHUB_UPLOAD_KEY_ALIAS` — the key alias.
-   - `TIVIHUB_UPLOAD_KEY_PASSWORD` — password for the key alias.
-
-   Restrict deployments to `main` and `v*` tags. Require approval from a trusted reviewer where available. GitHub plan limitations may affect which environment protection rules are available.
-
-   With GitHub CLI installed and authenticated, encode and upload the keystore without printing its contents:
-
-   ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\tivihub-release.p12")) |
-     gh secret set TIVIHUB_RELEASE_KEYSTORE_BASE64 --env release --repo TiViHub/TiviHub
-   ```
-
-3. Protect `main` and `v*` tags using the repository's available rules. Require pull requests and passing checks for `main`, review of workflow/build changes, and restrict tag creation to trusted maintainers. Keep signing secrets scoped to the `release` environment.
-
-The release workflow stops with an explicit error if a signing secret is missing. It does not publish an unsigned release APK.
-
-## Privacy and security
-
-- Playlists, catalog caches, favorites, library items, playback progress, and guide data are stored in app-private local storage.
-- Playlist passwords and the optional OpenSubtitles API key are encrypted using Android Keystore-backed AES-GCM encryption.
-- Other saved data, including playlist server URLs, is not encrypted by the app. Android app-data backup is disabled.
-- TiviHub sends requests to servers configured by the user. OpenSubtitles searches send the search text and API key to that third-party service.
-- For playlist compatibility, Android cleartext traffic is enabled. HTTP connections are not encrypted in transit; the playlist editor warns and requires confirmation before saving an HTTP playlist. Use HTTPS sources whenever available.
-- No IPTV content or provider credentials are included in this repository. Do not share real playlist URLs, credentials, API keys, signing material, private URLs, or personal data in issues, pull requests, tests, screenshots, or commits.
-- User-created backups contain playlist details, provider credentials, favorites, library items, app preferences, and the optional OpenSubtitles API key. The entire backup is encrypted with a password before it is written to the destination you choose; TiviHub does not upload it. Anyone with the backup file and its password can access its contents. The password cannot be recovered. Restoring replaces existing playlists, favorites, library items, and backed-up preferences, and clears cached catalogs and guide data.
-
-For vulnerability reporting, see [SECURITY.md](SECURITY.md). Please report security issues privately rather than in public issues.
-
-## Backup and restore
-
-Open **Settings → Backup & restore** to create or restore a backup. Choose a password of at least eight characters and store it separately from the backup file. The backup is encrypted locally with authenticated AES-GCM encryption and a key derived from your password; it is saved only to the destination you select. TiviHub cannot recover a forgotten password.
-
-Backups include playlists and their credentials, favorites, library items, theme, catalog layout and refresh preferences, and the optional OpenSubtitles API key. They do not include downloaded catalogs or cached TV guide data. Restore first previews item counts and requires confirmation; confirming replaces the current playlists, favorites, library, and included preferences, then clears catalog and guide caches. Keep a separate copy of anything you do not want replaced.
-
-## Contributing
-
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before opening a pull request. Keep changes focused, add or update tests for changed behavior, and run the checks listed above.
-
-## Project and license
-
-TiviHub is built with Kotlin, Jetpack Compose and Material 3, AndroidX Media3, Room, OkHttp, and Kotlin Coroutines.
-
-This project is distributed under the [MIT License](LICENSE). Third-party libraries and assets may have their own licenses and terms. The project license does not grant rights to third-party content or trademarks.
-
-## Legal note
-
-TiviHub is a media player, not a content provider. Users are responsible for their playlists, services, and rights to access and use content. The project does not endorse or guarantee third-party playlists, streams, DRM licenses, or subtitles.
+TiviHub is distributed under the [MIT License](./LICENSE). The license applies to TiviHub software only; it does not grant rights to third-party content or brands.

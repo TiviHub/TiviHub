@@ -1,30 +1,26 @@
 # Contributing to TiviHub
 
-Thanks for considering a contribution. Changes should improve the Android app while preserving user privacy, safe credential handling, and compatibility with supported playlist formats.
+Thanks for your interest in contributing to TiviHub Web. Contributions should preserve the app's local-first design, protect user and provider credentials, and keep the deployed product static.
 
-## Before opening a pull request
+## Development checks
 
-1. Open the repository root in Android Studio, or use the Gradle wrapper.
-2. Make a focused change and add or update tests for behavior that changes.
-3. Run the checks used by continuous integration:
+Use Node.js 20 or later:
 
-   ```powershell
-   .\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-   ```
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run build
+```
 
-4. Describe the user-visible change, implementation, and verification in the pull request.
+The repository intentionally has no CI/CD build or deployment pipeline. Run checks locally before opening a pull request, and describe the change and the checks you performed.
 
 ## Code expectations
 
-- Follow the Kotlin, Compose, MVVM, persistence, and networking patterns already in the project.
-- Keep parsers, URL construction, and other data transformations testable.
-- Report failures instead of silently returning success-shaped empty data.
-- Never log or commit playlist URLs containing credentials, provider details, API keys, passwords, signing keys, personal information, or private screenshots.
-- Do not add bundled playlists or copyrighted media.
-- Keep dependencies and their licenses aligned with the project's Android and JDK requirements.
-- Do not put secrets in pull-request code or workflows. Release signing secrets are available only to the protected `release` environment; untrusted changes must never be run with signing credentials.
-- Follow the [Code of Conduct](./CODE_OF_CONDUCT.md). Report security issues privately as described in [SECURITY.md](./SECURITY.md), not in public issues.
-
-## Releases
-
-Only project maintainers should create `vX.Y.Z` release tags. The GitHub Actions workflow signs release APKs using secrets scoped to the `release` environment; never request or expose that key in a pull request, issue, commit, or workflow artifact. Protect `main` and `v*` tags, and require review of workflow and signing-configuration changes before merging.
+- Follow the existing React, TypeScript, and CSS patterns.
+- Keep provider parsers, storage logic, and transformations testable.
+- Surface errors instead of silently substituting empty or success-shaped results.
+- Do not add credentials, private playlist URLs, API keys, personal data, or copyrighted media.
+- Keep user data in browser storage; do not add a TiviHub application server, account service, analytics, or proxy without discussing the architectural change first.
+- Do not add CI/CD workflows or require a Node.js runtime on the static host.
+- Follow the [Code of Conduct](./CODE_OF_CONDUCT.md). Report security issues privately as described in [SECURITY.md](./SECURITY.md).

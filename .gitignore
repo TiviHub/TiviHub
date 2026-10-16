@@ -1,12 +1,14 @@
-# Android Studio and Gradle
-.gradle/
-.idea/
-.kotlin/
-**/build/
-*.iml
-local.properties
+# Node dependencies and generated output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
 
-# Signing keys and local secrets
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+local.properties
 *.jks
 *.keystore
 *.p12
@@ -15,6 +17,8 @@ local.properties
 keystore.properties
 secrets.properties
 
-# OS/editor files
+# Editor and operating-system files
+.idea/
+*.iml
 .DS_Store
 Thumbs.db
