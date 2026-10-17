@@ -24,6 +24,12 @@ describe("encrypted backups", () => {
     await expect(decryptBackup(encrypted, "a-long-test-password")).resolves.toEqual(snapshot);
   });
 
+  it("preserves adult-content visibility in encrypted backups", async () => {
+    const settingsSnapshot = { ...snapshot, showAdultContent: true };
+    const encrypted = await encryptBackup(settingsSnapshot, "a-long-test-password");
+    await expect(decryptBackup(encrypted, "a-long-test-password")).resolves.toEqual(settingsSnapshot);
+  });
+
   it("rejects a wrong password and an invalid backup", async () => {
     const encrypted = await encryptBackup(snapshot, "a-long-test-password");
     await expect(decryptBackup(encrypted, "another-password"))

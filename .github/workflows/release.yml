@@ -46,8 +46,12 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $versionedInstaller = "dist/releases/TiviHub-$tag-windows-x64.exe"
+          $releaseNotes = "docs/releases/$tag.md"
+          if (-not (Test-Path $releaseNotes)) {
+            throw "Release notes file is missing: $releaseNotes"
+          }
           if ($tag.Contains('-')) {
-            gh release create $tag $versionedInstaller dist/releases/TiviHub-setup.exe --verify-tag --title "TiviHub $tag" --generate-notes --prerelease
+            gh release create $tag $versionedInstaller dist/releases/TiviHub-setup.exe --verify-tag --title "TiviHub $tag" --notes-file $releaseNotes --prerelease
           } else {
-            gh release create $tag $versionedInstaller dist/releases/TiviHub-setup.exe --verify-tag --title "TiviHub $tag" --generate-notes
+            gh release create $tag $versionedInstaller dist/releases/TiviHub-setup.exe --verify-tag --title "TiviHub $tag" --notes-file $releaseNotes
           }

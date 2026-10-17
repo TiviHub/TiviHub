@@ -1,10 +1,10 @@
 export async function readResponseText(
   response: Response,
-  maxBytes: number,
+  maxBytes: number | undefined,
   label: string,
 ): Promise<string> {
   const declaredSize = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredSize) && declaredSize > maxBytes) {
+  if (maxBytes !== undefined && Number.isFinite(declaredSize) && declaredSize > maxBytes) {
     throw new Error(`${label} is larger than the supported ${Math.floor(maxBytes / (1024 * 1024))} MB limit.`);
   }
 
@@ -18,7 +18,7 @@ export async function readResponseText(
       const result = await reader.read();
       if (result.done) break;
       total += result.value.byteLength;
-      if (total > maxBytes) {
+      if (maxBytes !== undefined && total > maxBytes) {
         await reader.cancel();
         throw new Error(`${label} is larger than the supported ${Math.floor(maxBytes / (1024 * 1024))} MB limit.`);
       }

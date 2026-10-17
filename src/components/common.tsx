@@ -29,6 +29,7 @@ export type IconName =
   | "favorite_border"
   | "search"
   | "filter_list"
+  | "sort"
   | "schedule"
   | "chevron_left"
   | "chevron_right"

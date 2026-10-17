@@ -466,15 +466,19 @@ export function PlaybackDialog({
             </select>
             <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
           </label>
-          <label className="secondary-button subtitle-file-button">
-            <Icon name="library_add" />
-            Import subtitle
-            <input accept=".srt,.vtt,text/vtt,application/x-subrip" onChange={(event) => void importSubtitle(event)} type="file" />
-          </label>
-          <button className="secondary-button" onClick={() => setSubtitleOpen((open) => !open)} type="button">
-            <Icon name="search" />
-            OpenSubtitles
-          </button>
+          {!item.live && (
+            <>
+              <label className="secondary-button subtitle-file-button">
+                <Icon name="library_add" />
+                Import subtitle
+                <input accept=".srt,.vtt,text/vtt,application/x-subrip" onChange={(event) => void importSubtitle(event)} type="file" />
+              </label>
+              <button className="secondary-button" onClick={() => setSubtitleOpen((open) => !open)} type="button">
+                <Icon name="search" />
+                OpenSubtitles
+              </button>
+            </>
+          )}
           {isTauri() && (
             <button
               aria-expanded={castOpen}
@@ -539,7 +543,7 @@ export function PlaybackDialog({
           </section>
         )}
 
-        {subtitleOpen && (
+        {!item.live && subtitleOpen && (
           <section className="subtitle-panel" aria-label="Search OpenSubtitles">
             <form
               className="subtitle-search"

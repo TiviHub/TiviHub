@@ -419,6 +419,7 @@ export async function getOpenSubtitlesApiKey(): Promise<string> {
 
 export async function createSnapshot(
   theme: UserDataSnapshot["theme"],
+  showAdultContent = false,
 ): Promise<UserDataSnapshot> {
   const database = await databasePromise;
   const [storedPlaylists, documents, channels, movies, series, episodes, favorites, library, epg] =
@@ -447,6 +448,7 @@ export async function createSnapshot(
     epg,
     openSubtitlesApiKey: await getOpenSubtitlesApiKey(),
     theme,
+    showAdultContent,
   };
 }
 

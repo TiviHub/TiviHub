@@ -1,7 +1,7 @@
 import type { DrmSystem, Episode, LiveChannel, Movie, Series } from "../types";
 import { readResponseText, validateHttpsUrl } from "./http";
 
-const MAX_PLAYLIST_BYTES = 25 * 1024 * 1024;
+export const MAX_M3U_BYTES = 200 * 1024 * 1024;
 
 interface PlaylistContext {
   id: string;
@@ -98,8 +98,8 @@ function itemKind(group: string): "live" | "movie" | "series" {
 }
 
 export function parseM3uCatalog(content: string, context: PlaylistContext): M3uCatalog {
-  if (new TextEncoder().encode(content).byteLength > MAX_PLAYLIST_BYTES) {
-    throw new Error("Playlist is larger than the supported 25 MB limit.");
+  if (new TextEncoder().encode(content).byteLength > MAX_M3U_BYTES) {
+    throw new Error("Playlist is larger than the supported 200 MB limit.");
   }
 
   const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -243,7 +243,7 @@ export async function fetchM3u(url: string, signal?: AbortSignal): Promise<strin
     );
   }
   if (!response.ok) throw new Error(`Playlist request failed with HTTP ${response.status}.`);
-  return readResponseText(response, MAX_PLAYLIST_BYTES, "Playlist");
+  return readResponseText(response, MAX_M3U_BYTES, "Playlist");
 }
 
 export function validateHttpUrl(value: string, label: string): string {

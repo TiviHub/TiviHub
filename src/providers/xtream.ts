@@ -12,7 +12,7 @@ interface XtreamPayload {
   [key: string]: unknown;
 }
 
-const MAX_XTREAM_RESPONSE_BYTES = 100 * 1024 * 1024;
+const MAX_XTREAM_RESPONSE_BYTES = 200 * 1024 * 1024;
 const MAX_SHORT_EPG_RESPONSE_BYTES = 512 * 1024;
 const MAX_SHORT_EPG_CHANNELS = 96;
 const SHORT_EPG_PROGRAMS_PER_CHANNEL = 3;
@@ -147,6 +147,16 @@ function stringValue(value: unknown): string | undefined {
   return undefined;
 }
 
+function catalogYear(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const text = stringValue(value);
+    if (!text) continue;
+    const years = text.match(/\b(?:18|19|20|21|22)\d{2}\b/g);
+    if (years?.length) return Number(years[years.length - 1]);
+  }
+  return undefined;
+}
+
 function optionalNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -269,7 +279,7 @@ export async function loadXtreamCatalog(
       streamUrl: xtreamStreamUrl(playlist, "movie", providerId, extension),
       posterUrl: stringValue(item.stream_icon),
       overview: stringValue(item.plot),
-      year: Number((stringValue(item.releasedate) || stringValue(item.year) || "").slice(0, 4)) || undefined,
+      year: catalogYear(item.releasedate, item.releaseDate, item.release_date, item.year, name),
       rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
       categoryId,
       category: categoryId ? movieCategories.get(categoryId) || "Uncategorized" : undefined,
@@ -293,7 +303,7 @@ export async function loadXtreamCatalog(
       seasons: Array.isArray(item.seasons) ? item.seasons.length : 0,
       categoryId,
       category: categoryId ? seriesCategories.get(categoryId) || "Uncategorized" : undefined,
-      year: Number((stringValue(item.year) || "").slice(0, 4)) || undefined,
+      year: catalogYear(item.year, item.releasedate, item.releaseDate, item.release_date, name),
       rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
       addedAtMillis: epochMillis(item.added) ?? epochMillis(item.last_modified),
     }];

@@ -3,6 +3,12 @@ import { isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
 import { checkForUpdate, type AvailableUpdate } from "./updates";
+import { isAdultContent } from "./adultContent";
+import {
+  canAutoRefreshCatalog,
+  catalogRefreshDueAt,
+  isCatalogRefreshDue,
+} from "./catalogCache";
 import { fetchM3u, parseM3uCatalog } from "./providers/m3u";
 import { fetchXmltv } from "./providers/xmltv";
 import { loadXtreamCatalog, loadXtreamEpisodes, loadXtreamShortEpg } from "./providers/xtream";
@@ -32,6 +38,7 @@ import {
   toggleFavorite as toggleStoredFavorite,
 } from "./storage/database";
 import type {
+  ContentType,
   EpgProgram,
   Episode,
   Favorite,
@@ -73,11 +80,21 @@ function readThemePreference(): ThemePreference {
   }
 }
 
+function readShowAdultContent(): boolean {
+  try {
+    return window.localStorage.getItem("tivihub.web.show-adult-content") === "true";
+  } catch (error) {
+    console.error("Could not read the local adult-content preference", error);
+    return false;
+  }
+}
+
 function App() {
   const isDesktopApp = isTauri();
   const [section, setSection] = useState<Section>("Home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(readThemePreference);
+  const [showAdultContent, setShowAdultContent] = useState(readShowAdultContent);
   const [sources, setSources] = useState<Playlist[]>([]);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [channels, setChannels] = useState<LiveChannel[]>([]);
@@ -106,11 +123,14 @@ function App() {
   const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "current" | "available" | "error">("idle");
   const [updateError, setUpdateError] = useState<string | null>(null);
   const requestedEpgChannels = useRef(new Set<string>());
+  const activeSourceIdRef = useRef(activeSourceId);
+  activeSourceIdRef.current = activeSourceId;
   const updateCheckController = useRef<AbortController | null>(null);
   const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshButtonRef = useRef<HTMLButtonElement>(null);
   const refreshOverlayRef = useRef<HTMLDivElement>(null);
   const refreshReturnFocusRef = useRef<HTMLElement | null>(null);
+  const catalogRefreshInFlight = useRef(new Set<string>());
 
   const activeSource = sources.find((source) => source.id === activeSourceId) ?? null;
 
@@ -281,6 +301,16 @@ function App() {
     }
   }
 
+  function chooseShowAdultContent(value: boolean) {
+    setShowAdultContent(value);
+    try {
+      window.localStorage.setItem("tivihub.web.show-adult-content", String(value));
+    } catch (cause) {
+      console.error("Could not save the local adult-content preference", cause);
+      notify("Could not save the adult-content preference on this device.", "error");
+    }
+  }
+
   async function loadGuide(source: Playlist): Promise<number | null> {
     if (!source.epgUrl && source.type === "XTREAM") return null;
     if (!source.epgUrl) {
@@ -400,6 +430,8 @@ function App() {
         saveEpisodes(playlist.id, item.id, importedEpisodes.filter((episode) => episode.seriesId === item.id)),
       ));
     }
+    playlist.lastCatalogRefreshAt = Date.now();
+    await savePlaylist(playlist);
     await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
     if (shouldActivate) {
       if (isNewSource) setSection("Live TV");
@@ -457,13 +489,22 @@ function App() {
     throw new Error("Demo imports are only available during development.");
   }
 
-  async function refreshSource(source: Playlist) {
-    const activeElement = document.activeElement;
-    refreshReturnFocusRef.current = activeElement instanceof HTMLElement && activeElement !== document.body
-      ? activeElement
-      : refreshButtonRef.current;
-    setRefreshing(true);
-    clearNotifications();
+  async function refreshSource(source: Playlist, options: { background?: boolean } = {}) {
+    const background = options.background ?? false;
+    if (catalogRefreshInFlight.current.has(source.id)) {
+      if (!background) notify("A catalog refresh is already in progress.", "notice");
+      return;
+    }
+    catalogRefreshInFlight.current.add(source.id);
+    const updatedSource = { ...source };
+    if (!background) {
+      const activeElement = document.activeElement;
+      refreshReturnFocusRef.current = activeElement instanceof HTMLElement && activeElement !== document.body
+        ? activeElement
+        : refreshButtonRef.current;
+      setRefreshing(true);
+      clearNotifications();
+    }
     try {
       let catalog: { channels: LiveChannel[]; movies: Movie[]; series: Series[] };
       let importedEpisodes: Episode[] = [];
@@ -503,10 +544,9 @@ function App() {
         };
         importedEpisodes = importedCatalog.episodes;
       } else {
-        const result = await loadXtreamCatalog(source);
-        source.expiresAtMillis = result.expiresAtMillis;
+        const result = await loadXtreamCatalog(updatedSource);
+        updatedSource.expiresAtMillis = result.expiresAtMillis;
         catalog = result;
-        await savePlaylist(source);
       }
       await saveCatalog({ playlistId: source.id, ...catalog });
       if (importedEpisodes.length > 0) {
@@ -514,9 +554,12 @@ function App() {
           saveEpisodes(source.id, item.id, importedEpisodes.filter((episode) => episode.seriesId === item.id)),
         ));
       }
-      await reloadLocalData(source.id);
-      if (source.demo) {
-        notify("Demo playlist restored from its bundled M3U fixture.", "notice");
+      updatedSource.lastCatalogRefreshAt = Date.now();
+      updatedSource.active = activeSourceIdRef.current === source.id;
+      await savePlaylist(updatedSource);
+      await reloadLocalData(background ? undefined : source.id);
+      if (background || source.demo) {
+        if (!background) notify("Demo playlist restored from its bundled M3U fixture.", "notice");
         return;
       }
       notify("Catalog updated from your provider.", "notice");
@@ -533,9 +576,46 @@ function App() {
         "error");
       }
     } finally {
-      setRefreshing(false);
+      catalogRefreshInFlight.current.delete(source.id);
+      if (!background) setRefreshing(false);
     }
   }
+
+  const refreshSourceRef = useRef(refreshSource);
+  refreshSourceRef.current = refreshSource;
+  useEffect(() => {
+    if (!ready || !activeSource || !canAutoRefreshCatalog(activeSource)) return;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const schedule = (delayMillis: number) => {
+      timer = window.setTimeout(checkRefresh, Math.max(0, delayMillis));
+    };
+    const checkRefresh = () => {
+      if (cancelled) return;
+      if (!isCatalogRefreshDue(activeSource)) {
+        schedule(catalogRefreshDueAt(activeSource) - Date.now());
+        return;
+      }
+      if (catalogRefreshInFlight.current.has(activeSource.id)) {
+        schedule(60 * 60 * 1000);
+        return;
+      }
+      void refreshSourceRef.current(activeSource, { background: true }).catch((cause: unknown) => {
+        if (cancelled) return;
+        console.error("Automatic catalog refresh failed; cached catalog remains available", cause);
+        const detail = cause instanceof Error ? ` ${cause.message}` : "";
+        notify(`Automatic refresh failed. Your cached catalog is still available.${detail}`, "error");
+        schedule(60 * 60 * 1000);
+      });
+    };
+
+    checkRefresh();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [activeSource, ready]);
 
   async function activateSource(sourceId: string) {
     clearNotifications();
@@ -546,7 +626,7 @@ function App() {
       setEpisodes([]);
       setSection("Home");
       const source = sources.find((entry) => entry.id === sourceId);
-      if (source) notify(`Using “${source.name}”. Refresh when you want to check for catalog updates.`, "notice");
+      if (source) notify(`Using “${source.name}”. Catalogs refresh automatically every 24 hours.`, "notice");
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : "Could not switch sources.", "error");
     }
@@ -765,12 +845,54 @@ function App() {
     });
   }
 
-  const continueWatching = library
+  const adultContentIds = {
+    LIVE: new Set(channels.filter((item) => isAdultContent(item.name, item.group)).map((item) => item.id)),
+    MOVIE: new Set(movies.filter((item) => isAdultContent(item.name, item.category)).map((item) => item.id)),
+    SERIES: new Set(series.filter((item) => isAdultContent(item.name, item.category)).map((item) => item.id)),
+  };
+  function isAdultSavedContent(
+    contentType: ContentType,
+    contentId: string,
+    title: string,
+    parentId?: string,
+    parentTitle?: string,
+  ): boolean {
+    const catalogType = contentType === "EPISODE" ? "SERIES" : contentType;
+    return adultContentIds[catalogType].has(contentId) ||
+      (contentType === "EPISODE" && adultContentIds.SERIES.has(parentId ?? "")) ||
+      isAdultContent(title, parentTitle);
+  }
+  const visibleChannels = showAdultContent
+    ? channels
+    : channels.filter((item) => !isAdultContent(item.name, item.group));
+  const visibleMovies = showAdultContent
+    ? movies
+    : movies.filter((item) => !isAdultContent(item.name, item.category));
+  const visibleSeries = showAdultContent
+    ? series
+    : series.filter((item) => !isAdultContent(item.name, item.category));
+  const visibleEpisodes = showAdultContent
+    ? episodes
+    : episodes.filter((item) => !isAdultContent(item.name));
+  const visibleEpg = showAdultContent
+    ? epg
+    : epg.filter((item) => !isAdultContent(item.title));
+  const visibleLibrary = showAdultContent
+    ? library
+    : library.filter((item) =>
+      !isAdultSavedContent(item.contentType, item.contentId, item.title, item.parentId, item.parentTitle),
+    );
+  const visibleFavorites = showAdultContent
+    ? favorites
+    : favorites.filter((item) =>
+      !isAdultSavedContent(item.contentType, item.contentId, item.title),
+    );
+  const continueWatching = visibleLibrary
     .filter((item) => item.status === "WATCHING" && item.playlistId === activeSourceId)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 4);
   const movieProgress = selectedMovie
-    ? library
+    ? visibleLibrary
       .filter((item) =>
       item.contentId === selectedMovie.id &&
       item.contentType === "MOVIE" &&
@@ -779,7 +901,7 @@ function App() {
       .sort((a, b) => b.updatedAt - a.updatedAt)[0]
     : undefined;
   const seriesEpisodeProgress = selectedSeries
-    ? library
+    ? visibleLibrary
       .filter((item) =>
       item.playlistId === selectedSeries.playlistId &&
       item.contentType === "EPISODE" &&
@@ -912,11 +1034,11 @@ function App() {
           <>
             {section === "Home" ? (
               <Home
-                channels={channels}
-                epg={epg}
-                movies={movies}
+                channels={visibleChannels}
+                epg={visibleEpg}
+                movies={visibleMovies}
                 onLoadGuideForChannels={(requestedChannels) => void loadGuideForChannels(requestedChannels)}
-                series={series}
+                series={visibleSeries}
                 source={activeSource}
                 sourceCount={sources.length}
                 continueWatching={continueWatching}
@@ -937,6 +1059,7 @@ function App() {
                 apiKey={subtitleApiKey}
                 onActivate={(id) => void activateSource(id)}
                 onChooseTheme={chooseTheme}
+                onSetShowAdultContent={chooseShowAdultContent}
                 onDataRestored={onDataRestored}
                 onDelete={(source) => void removeSource(source)}
                 onEdit={(source) => {
@@ -947,11 +1070,12 @@ function App() {
                 onSaveApiKey={saveApiKey}
                 sources={sources}
                 theme={theme}
+                showAdultContent={showAdultContent}
               />
-            ) : section === "Movies" && selectedMovie ? (
+            ) : section === "Movies" && selectedMovie && (showAdultContent || !isAdultContent(selectedMovie.name, selectedMovie.category)) ? (
               <MovieDetail
-                favorite={favorites.some((favorite) => favorite.contentId === selectedMovie.id)}
-                inLibrary={library.some((entry) => entry.contentId === selectedMovie.id && entry.contentType === "MOVIE")}
+                favorite={visibleFavorites.some((favorite) => favorite.contentId === selectedMovie.id)}
+                inLibrary={visibleLibrary.some((entry) => entry.contentId === selectedMovie.id && entry.contentType === "MOVIE")}
                 continueWatching={Boolean(movieProgress)}
                 movie={selectedMovie}
                 onAddToLibrary={() => void addToWatchlist(selectedMovie, "MOVIE")}
@@ -975,13 +1099,13 @@ function App() {
             ) : section === "Live TV" || section === "Movies" ? (
               <CatalogPage
                 key={section}
-                channels={channels}
-                epg={epg}
-                favorites={favorites}
+                channels={visibleChannels}
+                epg={visibleEpg}
+                favorites={visibleFavorites}
                 guideLoading={guideLoadCount > 0}
-                library={library}
+                library={visibleLibrary}
                 loading={refreshing}
-                movies={movies}
+                movies={visibleMovies}
                 onAddToLibrary={(item, type) => void addToWatchlist(item, type)}
                 onLoadGuideForChannels={(visibleChannels) => void loadGuideForChannels(visibleChannels)}
                 onOpenMovie={(movie) => {
@@ -993,18 +1117,19 @@ function App() {
                 onPlay={(item) => openPlayback(item)}
                 onToggleFavorite={(item, type) => void toggleFavorite(item, type)}
                 section={section}
-                series={series}
+                series={visibleSeries}
               />
             ) : section === "Series" ? (
-              selectedSeries ? (
+              selectedSeries && (showAdultContent || !isAdultContent(selectedSeries.name, selectedSeries.category)) ? (
                 <SeriesDetail
-                  episodes={episodes}
+                  episodes={visibleEpisodes}
                   error={episodeError}
-                  favorite={favorites.some((favorite) => favorite.contentId === selectedSeries.id)}
-                  inLibrary={library.some((entry) => entry.contentId === selectedSeries.id && entry.contentType === "SERIES")}
+                  favorite={visibleFavorites.some((favorite) => favorite.contentId === selectedSeries.id)}
+                  inLibrary={visibleLibrary.some((entry) => entry.contentId === selectedSeries.id && entry.contentType === "SERIES")}
                   continueWatching={Boolean(seriesEpisodeProgress)}
                   loading={episodeLoading}
                   onBack={() => setSelectedSeries(null)}
+                  showAdultContent={showAdultContent}
                   onAddToLibrary={() => void addToWatchlist(selectedSeries, "SERIES")}
                   onRemoveFromLibrary={() => void removeFromLibrary(selectedSeries, "SERIES")}
                   onContinueWatching={() => {
@@ -1030,13 +1155,13 @@ function App() {
               ) : (
                 <CatalogPage
                   key="Series"
-                  channels={channels}
-                  epg={epg}
-                  favorites={favorites}
+                  channels={visibleChannels}
+                  epg={visibleEpg}
+                  favorites={visibleFavorites}
                   guideLoading={guideLoadCount > 0}
-                  library={library}
+                  library={visibleLibrary}
                   loading={refreshing}
-                  movies={movies}
+                  movies={visibleMovies}
                   onAddToLibrary={(item, type) => void addToWatchlist(item, type)}
                   onLoadGuideForChannels={(visibleChannels) => void loadGuideForChannels(visibleChannels)}
                   onOpenMovie={setSelectedMovie}
@@ -1044,13 +1169,13 @@ function App() {
                   onPlay={(item) => openPlayback(item)}
                   onToggleFavorite={(item, type) => void toggleFavorite(item, type)}
                   section="Series"
-                  series={series}
+                  series={visibleSeries}
                 />
               )
             ) : (
               <LibraryPage
-                favorites={favorites}
-                library={library}
+                favorites={visibleFavorites}
+                library={visibleLibrary}
                 onChangeStatus={(item, status) => void changeLibraryStatus(item, status)}
                 onPlay={(item, position) => openPlayback(item, position)}
                 onRemove={(id, title) => void deleteLibraryItem(id, title)}

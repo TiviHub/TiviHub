@@ -148,7 +148,8 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
     !arrayFields.every((field) => Array.isArray(snapshot[field])) ||
     typeof snapshot.openSubtitlesApiKey !== "string" ||
     snapshot.openSubtitlesApiKey.length > 10_000 ||
-    !["system", "light", "dark"].includes(snapshot.theme ?? "")
+    !["system", "light", "dark"].includes(snapshot.theme ?? "") ||
+    (snapshot.showAdultContent !== undefined && typeof snapshot.showAdultContent !== "boolean")
   ) {
     throw new Error("Backup data is incomplete or from an unsupported version.");
   }
@@ -189,7 +190,8 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !optionalSecureUrl(playlist.drmCertificateUrl) ||
       !optionalHttpUrl(playlist.epgUrl) ||
       !optionalText(playlist.fileName, 255) ||
-      !optionalFinite(playlist.expiresAtMillis)
+      !optionalFinite(playlist.expiresAtMillis) ||
+      !optionalFinite(playlist.lastCatalogRefreshAt)
     ) {
       throw new Error("Backup contains an invalid playlist.");
     }
@@ -205,10 +207,9 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !validId(document.playlistId) ||
       !playlistIds.has(document.playlistId) ||
       documentIds.has(document.playlistId) ||
-      typeof document.content !== "string" ||
-      encoder.encode(document.content).byteLength > 25 * 1024 * 1024
+      typeof document.content !== "string"
     ) {
-      throw new Error("Backup contains an invalid or oversized local playlist file.");
+      throw new Error("Backup contains an invalid local playlist file.");
     }
     documentIds.add(document.playlistId);
   }

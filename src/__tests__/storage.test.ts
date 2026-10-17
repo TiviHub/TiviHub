@@ -143,7 +143,8 @@ describe("local IndexedDB storage", () => {
   it("restores snapshots with credentials encrypted again in local storage", async () => {
     const source = playlist("storage-test-restore");
     await savePlaylist(source);
-    const snapshot = await createSnapshot("light");
+    const snapshot = await createSnapshot("light", true);
+    expect(snapshot.showAdultContent).toBe(true);
     await restoreSnapshot(snapshot);
     await expect(getPlaylists()).resolves.toContainEqual(expect.objectContaining({
       id: source.id,

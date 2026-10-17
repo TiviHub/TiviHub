@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import demoM3u from "../fixtures/demo.m3u?raw";
-import { parseM3u, parseM3uCatalog } from "../providers/m3u";
+import { fetchM3u, parseM3u, parseM3uCatalog } from "../providers/m3u";
 import { downloadOpenSubtitle, searchOpenSubtitles } from "../providers/opensubtitles";
 import { parseXmltvDate } from "../providers/xmltv";
 import {
@@ -49,6 +49,31 @@ describe("M3U provider parsing", () => {
     expect(catalog.episodes.map((episode) => [episode.season, episode.number, episode.name]))
       .toEqual([[1, 1, "Big Buck Bunny"], [1, 2, "Tears of Steel"]]);
     expect(catalog.movies[0]).toMatchObject({ name: "Big Buck Bunny (2008)", year: 2008, rating: 8 });
+  });
+
+  it("parses M3U files larger than 25 MB", () => {
+    const comment = "#".concat("x".repeat(25 * 1024 * 1024));
+    const content = `#EXTM3U\n${comment}\n#EXTINF:-1,Channel\nhttps://provider.example/live.m3u8\n`;
+    expect(parseM3uCatalog(content, { id: "large", name: "Large" }).channels).toHaveLength(1);
+  });
+
+  it("fetches M3U playlists larger than the former 25 MB limit", async () => {
+    const content = "#EXTM3U\n";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(content, {
+      status: 200,
+      headers: { "Content-Length": String(26 * 1024 * 1024) },
+    })));
+
+    await expect(fetchM3u("https://provider.example/large.m3u")).resolves.toBe(content);
+  });
+
+  it("rejects M3U responses larger than 200 MB", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("#EXTM3U\n", {
+      status: 200,
+      headers: { "Content-Length": String(201 * 1024 * 1024) },
+    })));
+
+    await expect(fetchM3u("https://provider.example/large.m3u")).rejects.toThrow(/200 MB limit/);
   });
 });
 
@@ -142,15 +167,18 @@ describe("Xtream URL construction", () => {
       get_live_categories: [{ category_id: "1", category_name: "News" }],
       get_live_streams: [{ stream_id: 101, name: "Evening News", category_id: "1", epg_channel_id: "news.demo" }],
       get_vod_categories: [],
-      get_vod_streams: [{ stream_id: 201, name: "Example Film", container_extension: "mkv", category_id: "9", rating: "7.6" }],
+      get_vod_streams: [{ stream_id: 201, name: "Example Film", releaseDate: "18/11/2025", container_extension: "mkv", category_id: "9", rating: "7.6" }],
       get_series_categories: [{ category_id: "2", category_name: "Drama" }],
-      get_series: [{ series_id: 301, name: "Example Show", category_id: "2", year: "2024", rating_5based: "4.2", seasons: [{ season_number: 1 }] }],
+      get_series: [{ series_id: 301, name: "Example Show", category_id: "2", year: "2018 - 2024", rating_5based: "4.2", seasons: [{ season_number: 1 }] }],
     };
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input));
       return new Response(JSON.stringify(responses[url.searchParams.get("action") ?? ""]), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Length": String(101 * 1024 * 1024),
+          "Content-Type": "application/json",
+        },
       });
     }));
 
@@ -164,6 +192,7 @@ describe("Xtream URL construction", () => {
     expect(catalog.movies[0]).toMatchObject({
       name: "Example Film",
       category: "Uncategorized",
+      year: 2025,
       rating: 7.6,
       streamUrl: "https://provider.example:8443/base/movie/user%20name/pass%2Fword/201.mkv",
     });
@@ -174,6 +203,20 @@ describe("Xtream URL construction", () => {
       year: 2024,
       rating: 4.2,
     });
+  });
+
+  it("rejects Xtream responses larger than 200 MB", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      user_info: { auth: 1, status: "Active" },
+    }), {
+      status: 200,
+      headers: {
+        "Content-Length": String(201 * 1024 * 1024),
+        "Content-Type": "application/json",
+      },
+    })));
+
+    await expect(loadXtreamCatalog(playlist)).rejects.toThrow(/200 MB limit/);
   });
 
   it("loads a bounded short guide per channel and decodes provider text", async () => {

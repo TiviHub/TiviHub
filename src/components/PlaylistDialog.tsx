@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { DrmSystem, Playlist, PlaylistType } from "../types";
 import { validateHttpsUrl } from "../providers/http";
+import { MAX_M3U_BYTES } from "../providers/m3u";
 import { Icon } from "./common";
 
 export interface PlaylistDraft {
@@ -62,8 +63,8 @@ export function PlaylistDialog({
       setError("Choose an M3U playlist file.");
       return;
     }
-    if (file && file.size > 25 * 1024 * 1024) {
-      setError("Playlist files are limited to 25 MB.");
+    if (file && file.size > MAX_M3U_BYTES) {
+      setError("Playlist files are limited to 200 MB.");
       return;
     }
     if ((type === "XTREAM" || sourceMode === "url") && !url.trim()) {
@@ -214,18 +215,25 @@ export function PlaylistDialog({
           </label>
 
           {sourceMode === "url" || type === "XTREAM" ? (
-            <label className="form-field">
-              <span>{type === "M3U" ? "Playlist URL" : "Provider server URL"}</span>
-              <input
-                autoComplete="url"
-                inputMode="url"
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder={type === "M3U" ? "https://provider.example/list.m3u" : "https://provider.example"}
-                required
-                type="url"
-                value={url}
-              />
-            </label>
+            <>
+              <label className="form-field">
+                <span>{type === "M3U" ? "Playlist URL" : "Provider server URL"}</span>
+                <input
+                  autoComplete="url"
+                  inputMode="url"
+                  onChange={(event) => setUrl(event.target.value)}
+                  placeholder={type === "M3U" ? "https://provider.example/list.m3u" : "https://provider.example"}
+                  required
+                  type="url"
+                  value={url}
+                />
+              </label>
+              <p className="form-note">
+                {type === "M3U"
+                  ? "M3U playlist downloads are limited to 200 MB."
+                  : "Each Xtream API response is limited to 200 MB."}
+              </p>
+            </>
           ) : (
             <>
               <label className="form-field">
@@ -235,8 +243,9 @@ export function PlaylistDialog({
                   onChange={(event) => setFile(event.target.files?.[0] ?? null)}
                   type="file"
                 />
-                <small>{file?.name ?? editing?.fileName ?? "Up to 25 MB. The file stays on this device."}</small>
+                <small>{file?.name ?? editing?.fileName ?? "No file selected"}</small>
               </label>
+              <p className="form-note">M3U files are limited to 200 MB. The file stays on this device.</p>
               <label className="form-field">
                 <span>Base URL for relative streams <em>Optional</em></span>
                 <input

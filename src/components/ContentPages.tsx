@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
+import { isAdultContent } from "../adultContent";
 import type {
   EpgProgram,
   Episode,
@@ -9,6 +10,7 @@ import type {
   PlayableItem,
   Series,
 } from "../types";
+import { sortCatalogItems, type CatalogSort } from "../catalogSorting";
 import { Icon } from "./common";
 
 type CatalogSection = "Live TV" | "Movies" | "Series";
@@ -249,12 +251,19 @@ export function CatalogPage({
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
+  const [sort, setSort] = useState<CatalogSort>("added");
+  const [isSorting, startSortTransition] = useTransition();
   const [liveView, setLiveView] = useState<"Channels" | "Guide">("Channels");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(24);
+  const deferredQuery = useDeferredValue(query);
   useEffect(() => setPage(1), [section]);
   const items = section === "Live TV" ? channels : section === "Movies" ? movies : series;
-  const favoriteIds = new Set(favorites.map((favorite) => favorite.contentId));
+  const favoriteIds = useMemo(() => new Set(favorites.map((favorite) => favorite.contentId)), [favorites]);
+  const libraryIds = useMemo(
+    () => new Set(library.map((entry) => `${entry.contentType}:${entry.contentId}`)),
+    [library],
+  );
   const guideByChannel = useMemo(() => {
     const now = Date.now();
     const byChannel = new Map<string, EpgProgram[]>();
@@ -284,10 +293,27 @@ export function CatalogPage({
         left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })),
     ];
   }, [items]);
-  const filtered = items.filter((item) => {
-    const matchesQuery = `${item.name} ${categoryOf(item)}`.toLowerCase().includes(query.trim().toLowerCase());
-    return matchesQuery && (category === "All" || categoryOf(item) === category);
-  });
+  const sortedItems = useMemo(() => section === "Movies"
+    ? sortCatalogItems(movies, sort)
+    : section === "Series"
+      ? sortCatalogItems(series, sort)
+      : channels,
+  [channels, movies, section, series, sort]);
+  const searchableItems = useMemo(
+    () => sortedItems.map((item) => {
+      const categoryName = categoryOf(item);
+      return { item, category: categoryName, searchText: `${item.name} ${categoryName}`.toLowerCase() };
+    }),
+    [sortedItems],
+  );
+  const filtered = useMemo(() => {
+    const normalizedQuery = deferredQuery.trim().toLowerCase();
+    return searchableItems
+      .filter(({ category: itemCategory, searchText }) =>
+        searchText.includes(normalizedQuery) && (category === "All" || itemCategory === category),
+      )
+      .map(({ item }) => item);
+  }, [category, deferredQuery, searchableItems]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const paginatedItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -357,10 +383,36 @@ export function CatalogPage({
             </select>
             <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
           </label>
+          {(section === "Movies" || section === "Series") && (
+            <label className="category-select sort-select">
+              <Icon name="sort" />
+              <span className="sr-only">Sort {section.toLowerCase()}</span>
+              <select
+                aria-label={`Sort ${section.toLowerCase()}`}
+                onChange={(event) => {
+                  const nextSort = event.target.value as CatalogSort;
+                  startSortTransition(() => setSort(nextSort));
+                  setPage(1);
+                }}
+                value={sort}
+              >
+                <option value="added">Default (Latest Added)</option>
+                <option value="name">Alphabetical (A-Z)</option>
+                <option value="year">Year (Newest)</option>
+                <option value="rating">Rating (Highest)</option>
+              </select>
+              <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
+            </label>
+          )}
         </div>
       </header>
 
-      {loading && <div className="inline-status"><span className="spinner" /> Updating your catalog…</div>}
+      {(loading || isSorting) && (
+        <div aria-live="polite" className="inline-status">
+          <span className="spinner" />
+          {isSorting ? "Sorting your catalog…" : "Updating your catalog…"}
+        </div>
+      )}
       {items.length === 0 ? (
         <div className="catalog-empty">
           <div className="empty-icon"><Icon name={section === "Live TV" ? "live_tv" : section === "Movies" ? "movie" : "tv"} /></div>
@@ -423,7 +475,7 @@ export function CatalogPage({
               <CatalogCard
                 currentProgram={currentProgram}
                 isFavorite={favoriteIds.has(item.id)}
-                inLibrary={library.some((entry) => entry.contentId === item.id && entry.contentType === contentType)}
+                inLibrary={libraryIds.has(`${contentType}:${item.id}`)}
                 item={item}
                 key={item.id}
                 onFavorite={() => onToggleFavorite(item, contentType)}
@@ -584,6 +636,7 @@ function playableEpisode(series: Series, episode: Episode): PlayableItem {
 export function SeriesDetail({
   series,
   episodes,
+  showAdultContent,
   loading,
   error,
   onBack,
@@ -598,6 +651,7 @@ export function SeriesDetail({
 }: {
   series: Series;
   episodes: Episode[];
+  showAdultContent: boolean;
   loading: boolean;
   error: string | null;
   onBack: () => void;
@@ -611,11 +665,14 @@ export function SeriesDetail({
   onRemoveFromLibrary: () => void;
 }) {
   const [season, setSeason] = useState<number | "all">("all");
-  const seasons = [...new Set(episodes.map((episode) => episode.season))].sort((a, b) => a - b);
-  const visible = episodes
+  const availableEpisodes = showAdultContent
+    ? episodes
+    : episodes.filter((episode) => !isAdultContent(episode.name));
+  const seasons = [...new Set(availableEpisodes.map((episode) => episode.season))].sort((a, b) => a - b);
+  const visible = availableEpisodes
     .filter((episode) => season === "all" || episode.season === season)
     .sort((a, b) => a.season - b.season || a.number - b.number);
-  const firstEpisode = [...episodes].sort((a, b) => a.season - b.season || a.number - b.number)[0];
+  const firstEpisode = [...availableEpisodes].sort((a, b) => a.season - b.season || a.number - b.number)[0];
 
   return (
     <section className="series-detail-page">
@@ -685,7 +742,7 @@ export function SeriesDetail({
       </div>
       {loading && <div className="inline-status"><span className="spinner" /> Loading episodes…</div>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      {!loading && !error && episodes.length === 0 && (
+      {!loading && !error && availableEpisodes.length === 0 && (
         <div className="catalog-empty compact-empty"><h2>No episodes found</h2><p>The provider returned no episode details for this series.</p></div>
       )}
       <div className="episode-list">

@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://tivihub.nl">Website</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/TiviHub/TiviHub/releases/download/v1.1.0-beta.1/TiviHub-setup.exe">Download for Windows</a>
+  <a href="https://github.com/TiviHub/TiviHub/releases/download/v1.2.0-beta.1/TiviHub-setup.exe">Download for Windows</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/TiviHub/TiviHub/releases">All releases</a>
   &nbsp;·&nbsp;
@@ -43,6 +43,7 @@ TiviHub is a player and organizer, not a content service. It does not provide pl
 ## What you can do
 
 - **Connect your sources:** Import an M3U file or URL, or configure an Xtream-compatible source.
+- **Keep catalogs ready:** Remote catalogs are cached on your device and refresh automatically every 24 hours; you can refresh them manually at any time.
 - **Keep your library organized:** Browse live TV, programme guide data, movies, series, and episodes in one place.
 - **Pick up where you left off:** Save favorites and playback progress on your device.
 - **Cast to Google Cast devices:** Send compatible, unprotected streams directly from the provider to a Chromecast on your local network.
@@ -53,7 +54,7 @@ Playback supports compatible HLS and DASH streams. Whether a particular stream w
 
 ## Download
 
-**[Download TiviHub v1.1.0-beta.1 for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/download/v1.1.0-beta.1/TiviHub-setup.exe)**
+**[Download TiviHub v1.2.0-beta.1 for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/download/v1.2.0-beta.1/TiviHub-setup.exe)**
 
 This is an early beta, so features may change and you may encounter issues. The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
 

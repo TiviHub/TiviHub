@@ -18,6 +18,7 @@ export interface Playlist {
   fileName?: string;
   demo?: boolean;
   expiresAtMillis?: number;
+  lastCatalogRefreshAt?: number;
   createdAt: number;
 }
 
@@ -141,6 +142,7 @@ export interface UserDataSnapshot {
   epg: EpgProgram[];
   openSubtitlesApiKey: string;
   theme: "system" | "light" | "dark";
+  showAdultContent?: boolean;
 }
 
 export type CatalogContent = LiveChannel | Movie | Episode;

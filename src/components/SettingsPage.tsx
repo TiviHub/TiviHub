@@ -15,6 +15,8 @@ const themeChoices: { value: ThemePreference; label: string; icon: "brightness_a
 export function SettingsPage({
   theme,
   onChooseTheme,
+  showAdultContent,
+  onSetShowAdultContent,
   sources,
   activeSourceId,
   onAddSource,
@@ -28,6 +30,8 @@ export function SettingsPage({
 }: {
   theme: ThemePreference;
   onChooseTheme: (theme: ThemePreference) => void;
+  showAdultContent: boolean;
+  onSetShowAdultContent: (show: boolean) => void;
   sources: Playlist[];
   activeSourceId: string | null;
   onAddSource: () => void;
@@ -72,7 +76,7 @@ export function SettingsPage({
     }
     setBackupBusy(true);
     try {
-      const snapshot = await createSnapshot(theme);
+      const snapshot = await createSnapshot(theme, showAdultContent);
       const encrypted = await encryptBackup(snapshot, backupPassword);
       const url = URL.createObjectURL(new Blob([encrypted], { type: "application/json" }));
       const anchor = document.createElement("a");
@@ -120,6 +124,7 @@ export function SettingsPage({
     try {
       await restoreSnapshot(pendingSnapshot);
       onChooseTheme(pendingSnapshot.theme);
+      onSetShowAdultContent(pendingSnapshot.showAdultContent ?? false);
       setKeyDraft(pendingSnapshot.openSubtitlesApiKey);
       await onDataRestored();
       setPendingSnapshot(null);
@@ -166,8 +171,26 @@ export function SettingsPage({
 
       <div className="settings-card">
         <div className="settings-card-heading">
+          <div className="settings-heading-icon"><Icon name="shield" /></div>
+          <div><h2>Adult content</h2><p>Choose whether adult movies, series, and TV are shown.</p></div>
+        </div>
+        <label className="adult-content-toggle">
+          <span>
+            <strong>Show adult content</strong>
+            <small>Matches Adult, XXX, Porn, Erotic, and 18+ labels in titles and categories.</small>
+          </span>
+          <input
+            checked={showAdultContent}
+            onChange={(event) => onSetShowAdultContent(event.target.checked)}
+            type="checkbox"
+          />
+        </label>
+      </div>
+
+      <div className="settings-card">
+        <div className="settings-card-heading">
           <div className="settings-heading-icon"><Icon name="playlist_play" /></div>
-          <div><h2>Your sources</h2><p>Sources and catalogs are stored on this device.</p></div>
+          <div><h2>Your sources</h2><p>Remote catalogs are cached locally, auto-refresh every 24 hours, and can be refreshed anytime.</p></div>
         </div>
         {sources.length === 0 ? (
           <>
@@ -184,6 +207,13 @@ export function SettingsPage({
                 <div className="source-row-copy">
                   <strong>{source.name}</strong>
                   <small>{source.type}{source.expiresAtMillis ? ` · Expires ${new Date(source.expiresAtMillis).toLocaleDateString()}` : ""}</small>
+                  <small title={source.lastCatalogRefreshAt
+                    ? `Last catalog refresh: ${new Date(source.lastCatalogRefreshAt).toLocaleString()}`
+                    : "A catalog refresh has not been recorded for this source yet."}>
+                    Last refresh: {source.lastCatalogRefreshAt
+                      ? new Date(source.lastCatalogRefreshAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })
+                      : "Not recorded"}
+                  </small>
                 </div>
                 {source.id !== activeSourceId && (
                   <button className="secondary-button source-select-button" onClick={() => onActivate(source.id)} type="button">Use</button>
