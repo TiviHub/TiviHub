@@ -258,22 +258,24 @@ export function SettingsPage({
             ))}
           </div>
         )}
-        <button className="secondary-button settings-action" onClick={onAddSource} type="button">
-          <Icon name="add" /> {sources.length === 0 ? "Add source" : "Add another source"}
-        </button>
-        {activeSourceId && (
-          <button
-            className="secondary-button settings-action"
-            disabled={epgBusy}
-            onClick={async () => {
-              setEpgBusy(true);
-              try { await onRefreshEpg(); } finally { setEpgBusy(false); }
-            }}
-            type="button"
-          >
-            <Icon name="schedule" /> {epgBusy ? "Updating guide…" : "Refresh TV guide"}
+        <div className="settings-actions">
+          <button className="secondary-button" onClick={onAddSource} type="button">
+            <Icon name="add" /> {sources.length === 0 ? "Add source" : "Add another source"}
           </button>
-        )}
+          {activeSourceId && (
+            <button
+              className="secondary-button"
+              disabled={epgBusy}
+              onClick={async () => {
+                setEpgBusy(true);
+                try { await onRefreshEpg(); } finally { setEpgBusy(false); }
+              }}
+              type="button"
+            >
+              <Icon name="schedule" /> {epgBusy ? "Updating guide…" : "Refresh TV guide"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="settings-card">
@@ -353,15 +355,23 @@ export function SettingsPage({
           excludes media titles, source names, URLs, credentials, raw error messages, and stack traces.
           Review the file before sharing it.
         </p>
-        <button
-          className="secondary-button settings-action"
-          disabled={diagnosticsBusy}
-          onClick={() => void downloadDiagnostics()}
-          type="button"
-        >
-          <Icon name="download" /> {diagnosticsBusy ? "Preparing log…" : "Download diagnostic log"}
-        </button>
-        {diagnosticsNotice && <p aria-live="polite" className="settings-message" role="status">{diagnosticsNotice}</p>}
+        <div className="diagnostics-download-row">
+          <button
+            className="secondary-button"
+            disabled={diagnosticsBusy}
+            onClick={() => void downloadDiagnostics()}
+            type="button"
+          >
+            <Icon name="download" /> {diagnosticsBusy ? "Preparing log…" : "Download diagnostic log"}
+          </button>
+          {diagnosticsNotice && (
+            <p aria-live="polite" className="settings-message" role="status">{diagnosticsNotice}</p>
+          )}
+        </div>
+        <p className="form-note">
+          TiviHub saves the log automatically in your Downloads folder as{" "}
+          <code>tivihub-diagnostics-YYYY-MM-DD.json</code>.
+        </p>
       </div>
 
       <div className="settings-card privacy-settings">

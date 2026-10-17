@@ -65,32 +65,37 @@
   display: flex;
   gap: 13px;
   overflow-x: auto;
+  width: calc(100% + var(--content-gutter));
+  margin-right: calc(0px - var(--content-gutter));
   overscroll-behavior-inline: contain;
   padding: 2px 2px 12px;
+  cursor: grab;
   scrollbar-color: var(--outline) transparent;
   scrollbar-width: thin;
-  scroll-snap-type: x proximity;
+  scroll-snap-type: x mandatory;
+}
+
+.catalog-featured-track.is-dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
+  user-select: none;
 }
 
 .catalog-featured-track > .catalog-card {
-  width: clamp(145px, 16vw, 190px);
-  flex: 0 0 clamp(145px, 16vw, 190px);
+  flex: 0 0 clamp(180px, 20vw, 245px);
   scroll-snap-align: start;
 }
 
-.catalog-rank-badge {
-  position: absolute;
-  z-index: 1;
-  bottom: 9px;
-  left: 9px;
-  padding: 5px 7px;
-  border: 1px solid rgb(255 255 255 / 20%);
-  border-radius: 999px;
-  background: rgb(9 8 15 / 78%);
-  color: #fff;
-  font-family: "Roboto Mono", monospace;
-  font-size: 0.57rem;
-  letter-spacing: 0.04em;
+.catalog-featured-track[data-count="5"] > .catalog-card {
+  flex-basis: calc(23.25% - 12px);
+}
+
+.catalog-featured-track[data-count="4"] > .catalog-card {
+  flex-basis: calc(30.3% - 12px);
+}
+
+.catalog-featured-track[data-count="3"] > .catalog-card {
+  flex-basis: calc(43.5% - 11px);
 }
 
 :root[data-theme="light"] {
@@ -1464,6 +1469,11 @@ a:focus-visible {
 }
 
 @media (max-width: 1120px) {
+  .catalog-featured-track[data-count="5"] > .catalog-card,
+  .catalog-featured-track[data-count="4"] > .catalog-card {
+    flex-basis: calc(30.3% - 12px);
+  }
+
   .main-content {
     --content-gutter: 34px;
     padding-right: var(--content-gutter);
@@ -1612,6 +1622,12 @@ a:focus-visible {
 }
 
 @media (max-width: 560px) {
+  .catalog-featured-track[data-count="5"] > .catalog-card,
+  .catalog-featured-track[data-count="4"] > .catalog-card,
+  .catalog-featured-track[data-count="3"] > .catalog-card {
+    flex-basis: calc(43.5% - 11px);
+  }
+
   .main-content {
     --content-gutter: 18px;
     padding-right: var(--content-gutter);
@@ -1620,7 +1636,7 @@ a:focus-visible {
 
   .topbar {
     margin-right: -18px;
-    margin-left: -18px;
+    margin-left: -40px;
     padding-right: 15px;
     padding-left: 18px;
   }
@@ -2614,6 +2630,7 @@ button:disabled {
 
 .form-note {
   margin: 0;
+  padding-top: 4px;
 }
 
 .form-row {
@@ -4075,8 +4092,23 @@ button:disabled {
   color: #ff8294;
 }
 
-.settings-action {
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 16px;
+}
+
+.diagnostics-download-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.diagnostics-download-row .settings-message {
+  margin: 0;
 }
 
 .settings-empty {

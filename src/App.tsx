@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
 import { checkForUpdate, type AvailableUpdate } from "./updates";
 import { isAdultContent } from "./adultContent";
+import { sortCatalogItems } from "./catalogSorting";
 import { getDiagnosticLogSnapshot } from "./diagnosticLog";
 import {
   canAutoRefreshCatalog,
@@ -61,7 +62,7 @@ import type {
   Series,
 } from "./types";
 import { CatalogPage, LibraryPage, MovieDetail, SeriesDetail } from "./components/ContentPages";
-import { Icon, type IconName } from "./components/common";
+import { HorizontalDragTrack, Icon, type IconName } from "./components/common";
 import { DesktopWindowControls } from "./components/DesktopWindowControls";
 import { GlobalSearchDialog } from "./components/GlobalSearchDialog";
 import { PlaybackDialog } from "./components/PlaybackDialog";
@@ -1106,12 +1107,14 @@ function App() {
   const visibleChannels = showAdultContent
     ? channels
     : channels.filter((item) => !isAdultContent(item.name, item.group));
-  const visibleMovies = showAdultContent
-    ? movies
-    : movies.filter((item) => !isAdultContent(item.name, item.category));
-  const visibleSeries = showAdultContent
-    ? series
-    : series.filter((item) => !isAdultContent(item.name, item.category));
+  const visibleMovies = useMemo(
+    () => showAdultContent ? movies : movies.filter((item) => !isAdultContent(item.name, item.category)),
+    [movies, showAdultContent],
+  );
+  const visibleSeries = useMemo(
+    () => showAdultContent ? series : series.filter((item) => !isAdultContent(item.name, item.category)),
+    [series, showAdultContent],
+  );
   const visibleEpisodes = showAdultContent
     ? episodes
     : episodes.filter((item) => !isAdultContent(item.name));
@@ -1746,6 +1749,8 @@ function MediaHome({
   onPlay: (item: PlayableItem, position: number) => void;
 }) {
   const homeChannels = channels.slice(0, 12);
+  const latestMovies = useMemo(() => sortCatalogItems(movies, "added").slice(0, 10), [movies]);
+  const latestSeries = useMemo(() => sortCatalogItems(series, "added").slice(0, 10), [series]);
   const homeChannelKey = `${sourceId}:${homeChannels.map((channel) => channel.id).join("|")}`;
   const onLoadGuideRef = useRef(onLoadGuideForChannels);
   onLoadGuideRef.current = onLoadGuideForChannels;
@@ -1808,8 +1813,8 @@ function MediaHome({
       </HomeShelf>
 
       {movies.length > 0 && (
-        <HomeShelf title="Movies" eyebrow="MADE FOR MOVIE NIGHT" onMore={() => onNavigate("Movies")}>
-          {movies.slice(0, 12).map((movie) => (
+        <HomeShelf title="Movies" eyebrow="LATEST ADDED" onMore={() => onNavigate("Movies")}>
+          {latestMovies.map((movie) => (
             <HomeTitleCard
               detail={movie.year ? String(movie.year) : movie.category || "Movie"}
               icon="movie"
@@ -1823,8 +1828,8 @@ function MediaHome({
       )}
 
       {series.length > 0 && (
-        <HomeShelf title="Series" eyebrow="YOUR NEXT BINGE" onMore={() => onNavigate("Series")}>
-          {series.slice(0, 12).map((item) => (
+        <HomeShelf title="Series" eyebrow="LATEST ADDED" onMore={() => onNavigate("Series")}>
+          {latestSeries.map((item) => (
             <HomeTitleCard
               detail={`${item.seasons} seasons`}
               icon="tv"
@@ -1886,28 +1891,6 @@ function HomeShelf({
   emptyMessage?: string;
   children: ReactNode;
 }) {
-  const drag = useRef<{
-    pointerId: number;
-    startX: number;
-    startScrollLeft: number;
-    moved: boolean;
-  } | null>(null);
-  const suppressClick = useRef(false);
-  const [dragging, setDragging] = useState(false);
-
-  function finishDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const activeDrag = drag.current;
-    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
-    drag.current = null;
-    setDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    if (activeDrag.moved) {
-      window.setTimeout(() => { suppressClick.current = false; }, 0);
-    }
-  }
-
   return (
     <section className="home-shelf">
       <div className="home-shelf-heading">
@@ -1917,43 +1900,9 @@ function HomeShelf({
       {emptyMessage ? (
         <p className="home-shelf-empty">{emptyMessage}</p>
       ) : (
-        <div
-          className={`home-shelf-track${dragging ? " is-dragging" : ""}`}
-          onClickCapture={(event) => {
-            if (!suppressClick.current) return;
-            event.preventDefault();
-            event.stopPropagation();
-            suppressClick.current = false;
-          }}
-          onPointerCancel={finishDrag}
-          onPointerDown={(event) => {
-            if (event.pointerType !== "mouse" || event.button !== 0) return;
-            drag.current = {
-              pointerId: event.pointerId,
-              startX: event.clientX,
-              startScrollLeft: event.currentTarget.scrollLeft,
-              moved: false,
-            };
-          }}
-          onPointerMove={(event) => {
-            const activeDrag = drag.current;
-            if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
-            const offset = event.clientX - activeDrag.startX;
-            if (!activeDrag.moved && Math.abs(offset) > 5) {
-              activeDrag.moved = true;
-              suppressClick.current = true;
-              setDragging(true);
-              event.currentTarget.setPointerCapture(event.pointerId);
-            }
-            if (activeDrag.moved) {
-              event.preventDefault();
-              event.currentTarget.scrollLeft = activeDrag.startScrollLeft - offset;
-            }
-          }}
-          onPointerUp={finishDrag}
-        >
+        <HorizontalDragTrack className="home-shelf-track">
           {children}
-        </div>
+        </HorizontalDragTrack>
       )}
     </section>
   );

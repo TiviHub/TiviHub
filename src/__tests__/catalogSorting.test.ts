@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Movie } from "../types";
-import { sortCatalogItems } from "../catalogSorting";
+import { sortCatalogItems, topCatalogItems } from "../catalogSorting";
 
 function movie(
   id: string,
@@ -47,5 +47,27 @@ describe("catalog sorting", () => {
 
   it("sorts highest ratings first and puts unrated titles last", () => {
     expect(sortCatalogItems(movies, "rating").map((item) => item.id)).toEqual(["2", "10", "missing"]);
+  });
+
+  it("selects the top five without mutating the catalog and alphabetizes rating ties", () => {
+    expect(topCatalogItems(movies, "added", 3).map((item) => item.id)).toEqual(["2", "10"]);
+
+    const items = [
+      movie("delta", "Delta", { rating: 7.5 }),
+      movie("alpha", "Alpha", { rating: 7.5 }),
+      movie("bravo", "Bravo", { rating: 9.2 }),
+      movie("echo", "Echo", { rating: 8 }),
+      movie("foxtrot", "Foxtrot", { rating: 6 }),
+      movie("charlie", "Charlie", { rating: 7.5 }),
+      movie("missing", "Missing"),
+    ];
+
+    expect(topCatalogItems(items, "rating", 5).map((item) => item.id))
+      .toEqual(["bravo", "echo", "alpha", "charlie", "delta"]);
+    expect(topCatalogItems(items, "rating", 3).map((item) => item.id))
+      .toEqual(["bravo", "echo", "alpha"]);
+    expect(items.map((item) => item.id)).toEqual([
+      "delta", "alpha", "bravo", "echo", "foxtrot", "charlie", "missing",
+    ]);
   });
 });

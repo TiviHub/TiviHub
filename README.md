@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://tivihub.nl">Website</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/TiviHub/TiviHub/releases/download/v1.3.0/TiviHub-setup.exe">Download for Windows</a>
+  <a href="https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe">Download for Windows</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/TiviHub/TiviHub/releases">All releases</a>
   &nbsp;·&nbsp;
@@ -54,7 +54,7 @@ Playback supports compatible HLS and DASH streams. Whether a particular stream w
 
 ## Download
 
-**[Download TiviHub v1.3.0 for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/download/v1.3.0/TiviHub-setup.exe)**
+**[Download the latest TiviHub for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe)**
 
 The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
 

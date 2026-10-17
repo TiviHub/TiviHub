@@ -10,11 +10,14 @@ import type {
   PlayableItem,
   Series,
 } from "../types";
-import { sortCatalogItems, type CatalogSort } from "../catalogSorting";
-import { Icon } from "./common";
+import { sortCatalogItems, topCatalogItems, type CatalogSort } from "../catalogSorting";
+import { HorizontalDragTrack, Icon } from "./common";
 
 type CatalogSection = "Live TV" | "Movies" | "Series";
 type CatalogItem = LiveChannel | Movie | Series;
+type FeaturedCatalogItem = Movie | Series;
+
+const recentItemsCache = new WeakMap<FeaturedCatalogItem[], Map<string, FeaturedCatalogItem[]>>();
 
 function titleOf(item: CatalogItem): string {
   return item.name;
@@ -28,11 +31,33 @@ function artworkOf(item: CatalogItem): string | undefined {
   return "group" in item ? item.logoUrl : item.posterUrl;
 }
 
+function getRecentItemsByCategory(catalog: FeaturedCatalogItem[]): Map<string, FeaturedCatalogItem[]> {
+  const cached = recentItemsCache.get(catalog);
+  if (cached) return cached;
+
+  const catalogsByCategory = new Map<string, FeaturedCatalogItem[]>([["All", catalog]]);
+  for (const item of catalog) {
+    const category = categoryOf(item);
+    if (category === "All" || category === "Uncategorized") continue;
+    const categoryCatalog = catalogsByCategory.get(category);
+    if (categoryCatalog) categoryCatalog.push(item);
+    else catalogsByCategory.set(category, [item]);
+  }
+
+  const recentItemsByCategory = new Map<string, FeaturedCatalogItem[]>();
+  for (const [category, items] of catalogsByCategory) {
+    const recent = topCatalogItems(items, "added", 5);
+    if (recent.length > 0) recentItemsByCategory.set(category, recent);
+  }
+
+  recentItemsCache.set(catalog, recentItemsByCategory);
+  return recentItemsByCategory;
+}
+
 function CatalogCard({
   item,
   section,
   subtitleOverride,
-  rank,
   isFavorite,
   inLibrary,
   currentProgram,
@@ -43,7 +68,6 @@ function CatalogCard({
   item: CatalogItem;
   section: CatalogSection;
   subtitleOverride?: string;
-  rank?: number;
   isFavorite: boolean;
   inLibrary: boolean;
   currentProgram?: EpgProgram;
@@ -64,6 +88,7 @@ function CatalogCard({
           {artwork && (
             <img
               alt=""
+              draggable={false}
               loading="lazy"
               onError={(event) => { event.currentTarget.hidden = true; }}
               src={artwork}
@@ -71,7 +96,6 @@ function CatalogCard({
           )}
           {isLive && <span className="live-badge"><span /> LIVE</span>}
           {!isLive && "seasons" in item && <span className="catalog-meta">{item.seasons} seasons</span>}
-          {rank !== undefined && <span className="catalog-rank-badge">TOP 10 · {rank}</span>}
         </span>
         <span className="catalog-card-copy">
           <strong title={titleOf(item)}>{titleOf(item)}</strong>
@@ -324,28 +348,9 @@ export function CatalogPage({
       )
       .map(({ item }) => item);
   }, [category, deferredQuery, searchableItems]);
-  const featuredRows = useMemo(() => {
-    if (section !== "Movies" && section !== "Series") return [];
-    const catalog = section === "Movies" ? movies : series;
-    const recent = sortCatalogItems(
-      catalog.filter((item) =>
-        typeof item.addedAtMillis === "number" &&
-        Number.isFinite(item.addedAtMillis) &&
-        item.addedAtMillis > 0),
-      "added",
-    ).slice(0, 10);
-    const bestRated = sortCatalogItems(
-      catalog.filter((item) =>
-        typeof item.rating === "number" &&
-        Number.isFinite(item.rating) &&
-        item.rating > 0),
-      "rating",
-    ).slice(0, 10);
-    return [
-      ...(recent.length > 0 ? [{ title: "Top 10 · Recently added", items: recent, kind: "recent" as const }] : []),
-      ...(bestRated.length > 0 ? [{ title: "Top 10 · Best rated", items: bestRated, kind: "rated" as const }] : []),
-    ];
-  }, [movies, section, series]);
+  const recentlyAdded = section === "Movies" || section === "Series"
+    ? getRecentItemsByCategory(section === "Movies" ? movies : series).get(category) ?? []
+    : [];
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const paginatedItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -362,7 +367,7 @@ export function CatalogPage({
   const lastItem = Math.min(currentPage * pageSize, filtered.length);
   const epgForPage = section === "Live TV";
 
-  function renderCatalogCard(item: CatalogItem, rank?: number, subtitleOverride?: string) {
+  function renderCatalogCard(item: CatalogItem, subtitleOverride?: string) {
     const contentType = "group" in item ? "LIVE" : "streamUrl" in item ? "MOVIE" : "SERIES";
     const currentProgram = "group" in item
       ? currentByChannel.get(item.tvgId || item.id)
@@ -398,7 +403,6 @@ export function CatalogPage({
             onOpenSeries(item);
           }
         }}
-        rank={rank}
         section={section}
         subtitleOverride={subtitleOverride}
       />
@@ -502,26 +506,23 @@ export function CatalogPage({
       )}
       {(section === "Movies" || section === "Series") &&
         deferredQuery.trim() === "" &&
-        category === "All" &&
-        featuredRows.length > 0 && (
+        recentlyAdded.length > 0 && (
           <div className="catalog-featured">
-            {featuredRows.map((row) => (
-              <section aria-label={row.title} className="catalog-featured-row" key={row.kind}>
-                <div className="catalog-featured-heading">
-                  <h2>{row.title}</h2>
-                  <span>{row.items.length} titles</span>
-                </div>
-                <div aria-label={row.title} className="catalog-featured-track" role="region" tabIndex={0}>
-                  {row.items.map((item, index) => renderCatalogCard(
-                    item,
-                    index + 1,
-                    row.kind === "rated" && item.rating !== undefined
-                      ? `${item.rating.toFixed(1)} ★ · ${categoryOf(item)}`
-                      : undefined,
-                  ))}
-                </div>
-              </section>
-            ))}
+            <section aria-label="Top 5 · Recently added" className="catalog-featured-row">
+              <div className="catalog-featured-heading">
+                <h2>Top 5 · Recently added</h2>
+                <span>{recentlyAdded.length} titles</span>
+              </div>
+              <HorizontalDragTrack
+                aria-label="Top 5 · Recently added"
+                className="catalog-featured-track"
+                data-count={recentlyAdded.length}
+                role="region"
+                tabIndex={0}
+              >
+                {recentlyAdded.map((item) => renderCatalogCard(item))}
+              </HorizontalDragTrack>
+            </section>
           </div>
         )}
       {items.length === 0 ? (

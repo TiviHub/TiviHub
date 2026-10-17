@@ -29,10 +29,7 @@ function runNpm(args, env = process.env) {
 }
 
 runNpm(["run", "tauri:build"]);
-runNpm(["run", "build"], {
-  ...process.env,
-  VITE_WINDOWS_DOWNLOAD_URL: `https://github.com/TiviHub/TiviHub/releases/download/v${packageInfo.version}/TiviHub-setup.exe`,
-});
+runNpm(["run", "build"]);
 
 const installer = join(
   root,
