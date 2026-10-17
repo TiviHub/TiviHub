@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { decryptBackup, encryptBackup } from "../backup";
+import { formatCatalogChangeSummary } from "../catalogRefresh";
 import { createSnapshot, restoreSnapshot } from "../storage/database";
 import type { Playlist, UserDataSnapshot } from "../types";
 import { Icon } from "./common";
@@ -11,6 +12,15 @@ const themeChoices: { value: ThemePreference; label: string; icon: "brightness_a
   { value: "dark", label: "Dark", icon: "dark_mode" },
   { value: "light", label: "Light", icon: "light_mode" },
 ];
+
+function refreshOutcomeLabel(outcome: NonNullable<Playlist["lastCatalogRefreshOutcome"]>): string {
+  switch (outcome) {
+    case "success": return "Updated successfully";
+    case "review-required": return "Large change paused for review";
+    case "kept-previous": return "Kept the previous catalog";
+    case "failed": return "Failed; saved catalog kept";
+  }
+}
 
 export function SettingsPage({
   theme,
@@ -27,6 +37,7 @@ export function SettingsPage({
   onSaveApiKey,
   onDataRestored,
   onRefreshEpg,
+  onDownloadDiagnostics,
 }: {
   theme: ThemePreference;
   onChooseTheme: (theme: ThemePreference) => void;
@@ -42,6 +53,7 @@ export function SettingsPage({
   onSaveApiKey: (apiKey: string) => Promise<void>;
   onDataRestored: () => Promise<void>;
   onRefreshEpg: () => Promise<void>;
+  onDownloadDiagnostics: () => Promise<boolean>;
 }) {
   const [keyDraft, setKeyDraft] = useState(apiKey);
   const [keyNotice, setKeyNotice] = useState<string | null>(null);
@@ -54,6 +66,23 @@ export function SettingsPage({
   const [backupError, setBackupError] = useState<string | null>(null);
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [epgBusy, setEpgBusy] = useState(false);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  const [diagnosticsNotice, setDiagnosticsNotice] = useState<string | null>(null);
+
+  async function downloadDiagnostics() {
+    setDiagnosticsNotice(null);
+    setDiagnosticsBusy(true);
+    try {
+      const storageAvailable = await onDownloadDiagnostics();
+      setDiagnosticsNotice(storageAvailable
+        ? "Diagnostic log downloaded. Review it before sharing."
+        : "Diagnostic log downloaded, but older errors could not be saved on this device.");
+    } catch {
+      setDiagnosticsNotice("Could not create the diagnostic log. No file was downloaded.");
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  }
 
   async function saveKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -193,12 +222,7 @@ export function SettingsPage({
           <div><h2>Your sources</h2><p>Remote catalogs are cached locally, auto-refresh every 24 hours, and can be refreshed anytime.</p></div>
         </div>
         {sources.length === 0 ? (
-          <>
-            <p className="settings-empty">No sources connected yet. Add a playlist to browse your media.</p>
-            <button className="primary-button settings-action" onClick={onAddSource} type="button">
-              <Icon name="add" /> Add source
-            </button>
-          </>
+          <p className="settings-empty">No sources connected yet. Add a playlist to browse your media.</p>
         ) : (
           <div className="source-list">
             {sources.map((source) => (
@@ -208,12 +232,21 @@ export function SettingsPage({
                   <strong>{source.name}</strong>
                   <small>{source.type}{source.expiresAtMillis ? ` · Expires ${new Date(source.expiresAtMillis).toLocaleDateString()}` : ""}</small>
                   <small title={source.lastCatalogRefreshAt
-                    ? `Last catalog refresh: ${new Date(source.lastCatalogRefreshAt).toLocaleString()}`
+                    ? `Last successful catalog refresh: ${new Date(source.lastCatalogRefreshAt).toLocaleString()}`
                     : "A catalog refresh has not been recorded for this source yet."}>
-                    Last refresh: {source.lastCatalogRefreshAt
+                    Last successful refresh: {source.lastCatalogRefreshAt
                       ? new Date(source.lastCatalogRefreshAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })
                       : "Not recorded"}
                   </small>
+                  {source.lastCatalogRefreshAttemptAt && source.lastCatalogRefreshOutcome && (
+                    <small>
+                      Latest attempt: {refreshOutcomeLabel(source.lastCatalogRefreshOutcome)} ·{" "}
+                      {new Date(source.lastCatalogRefreshAttemptAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                    </small>
+                  )}
+                  {source.lastCatalogRefreshSummary && (
+                    <small>Changes: {formatCatalogChangeSummary(source.lastCatalogRefreshSummary)}</small>
+                  )}
                 </div>
                 {source.id !== activeSourceId && (
                   <button className="secondary-button source-select-button" onClick={() => onActivate(source.id)} type="button">Use</button>
@@ -225,6 +258,9 @@ export function SettingsPage({
             ))}
           </div>
         )}
+        <button className="secondary-button settings-action" onClick={onAddSource} type="button">
+          <Icon name="add" /> {sources.length === 0 ? "Add source" : "Add another source"}
+        </button>
         {activeSourceId && (
           <button
             className="secondary-button settings-action"
@@ -305,6 +341,27 @@ export function SettingsPage({
         {backupError && <p className="form-error" role="alert">{backupError}</p>}
         {backupNotice && <p className="settings-message" role="status">{backupNotice}</p>}
         <p className="form-note">Backups use AES-256-GCM encryption. Choose a strong password of at least 12 characters and keep it safe; TiviHub cannot recover it.</p>
+      </div>
+
+      <div className="settings-card">
+        <div className="settings-card-heading">
+          <div className="settings-heading-icon"><Icon name="download" /></div>
+          <div><h2>Diagnostics</h2><p>Download recent request errors to share when asking for help.</p></div>
+        </div>
+        <p className="diagnostics-description">
+          The log is stored only on this device and keeps up to 100 recent failures. Its export
+          excludes media titles, source names, URLs, credentials, raw error messages, and stack traces.
+          Review the file before sharing it.
+        </p>
+        <button
+          className="secondary-button settings-action"
+          disabled={diagnosticsBusy}
+          onClick={() => void downloadDiagnostics()}
+          type="button"
+        >
+          <Icon name="download" /> {diagnosticsBusy ? "Preparing log…" : "Download diagnostic log"}
+        </button>
+        {diagnosticsNotice && <p aria-live="polite" className="settings-message" role="status">{diagnosticsNotice}</p>}
       </div>
 
       <div className="settings-card privacy-settings">

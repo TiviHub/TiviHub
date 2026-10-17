@@ -1,20 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
 import { checkForUpdate, type AvailableUpdate } from "./updates";
 import { isAdultContent } from "./adultContent";
+import { getDiagnosticLogSnapshot } from "./diagnosticLog";
 import {
   canAutoRefreshCatalog,
   catalogRefreshDueAt,
   isCatalogRefreshDue,
 } from "./catalogCache";
-import { fetchM3u, parseM3uCatalog } from "./providers/m3u";
+import {
+  formatCatalogChangeSummary,
+  isSuspiciousCatalogDrop,
+  summarizeCatalogChanges,
+  validateCatalogForSource,
+  type CatalogCandidate,
+} from "./catalogRefresh";
+import type { GlobalSearchCommand, GlobalSearchMatch, SearchSection } from "./globalSearch";
+import { fetchM3u, parseM3uCatalog, parseM3uCatalogAsync } from "./providers/m3u";
 import { fetchXmltv } from "./providers/xmltv";
 import { loadXtreamCatalog, loadXtreamEpisodes, loadXtreamShortEpg } from "./providers/xtream";
 import {
   deletePlaylistDocument,
   deletePlaylist,
+  getCatalogSnapshot,
   getChannels,
   getEpgPrograms,
   getEpisodes,
@@ -53,11 +63,13 @@ import type {
 import { CatalogPage, LibraryPage, MovieDetail, SeriesDetail } from "./components/ContentPages";
 import { Icon, type IconName } from "./components/common";
 import { DesktopWindowControls } from "./components/DesktopWindowControls";
+import { GlobalSearchDialog } from "./components/GlobalSearchDialog";
 import { PlaybackDialog } from "./components/PlaybackDialog";
 import { PlaylistDialog, type PlaylistDraft } from "./components/PlaylistDialog";
 import { SettingsPage } from "./components/SettingsPage";
+import { StreamHealthCheckDialog } from "./components/StreamHealthCheckDialog";
 
-type Section = "Home" | "Live TV" | "Movies" | "Series" | "Library" | "Settings";
+type Section = SearchSection;
 type ThemePreference = "system" | "light" | "dark";
 const ASSET_BASE_URL = import.meta.env.BASE_URL;
 
@@ -108,12 +120,17 @@ function App() {
   const [subtitleApiKey, setSubtitleApiKey] = useState("");
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
+  const [streamHealthRequest, setStreamHealthRequest] = useState<{
+    channels: LiveChannel[];
+    groupName: string;
+  } | null>(null);
   const [episodeLoading, setEpisodeLoading] = useState(false);
   const [episodeError, setEpisodeError] = useState<string | null>(null);
   const [playableItem, setPlayableItem] = useState<PlayableItem | null>(null);
   const [resumePosition, setResumePosition] = useState(0);
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Playlist | undefined>();
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,13 +138,14 @@ function App() {
   const [notificationKey, setNotificationKey] = useState(0);
   const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
   const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "current" | "available" | "error">("idle");
-  const [updateError, setUpdateError] = useState<string | null>(null);
   const requestedEpgChannels = useRef(new Set<string>());
   const activeSourceIdRef = useRef(activeSourceId);
   activeSourceIdRef.current = activeSourceId;
   const updateCheckController = useRef<AbortController | null>(null);
   const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshButtonRef = useRef<HTMLButtonElement>(null);
+  const globalSearchButtonRef = useRef<HTMLButtonElement>(null);
+  const globalSearchReturnFocusRef = useRef<HTMLElement | null>(null);
   const refreshOverlayRef = useRef<HTMLDivElement>(null);
   const refreshReturnFocusRef = useRef<HTMLElement | null>(null);
   const catalogRefreshInFlight = useRef(new Set<string>());
@@ -139,7 +157,6 @@ function App() {
     const controller = new AbortController();
     updateCheckController.current = controller;
     setUpdateStatus("checking");
-    setUpdateError(null);
     try {
       const update = await checkForUpdate(webPackage.version, controller.signal);
       if (controller.signal.aborted) return;
@@ -148,20 +165,42 @@ function App() {
     } catch (cause) {
       if (controller.signal.aborted) return;
       console.error("Could not check GitHub for TiviHub updates", cause);
-      setUpdateError(cause instanceof Error ? cause.message : String(cause));
       setUpdateStatus("error");
     }
   }, []);
 
   async function openAvailableUpdate() {
     if (!availableUpdate) return;
-    setUpdateError(null);
     try {
       await openUrl(availableUpdate.releaseUrl);
     } catch (cause) {
       console.error("Could not open the TiviHub GitHub release page", cause);
-      setUpdateError(cause instanceof Error ? cause.message : String(cause));
+      setUpdateStatus("error");
     }
+  }
+
+  async function downloadDiagnostics(): Promise<boolean> {
+    const localDiagnostics = getDiagnosticLogSnapshot();
+    const backendErrors = isDesktopApp
+      ? await invoke<Array<{ component: string; code: string }>>("get_backend_diagnostics")
+      : [];
+    const report = {
+      format: "tivihub-diagnostics-v1",
+      generatedAt: new Date().toISOString(),
+      appVersion: webPackage.version,
+      runtime: isDesktopApp ? "TiviHub Windows desktop app" : "TiviHub browser preview",
+      privacy: "This file contains sanitized error categories only. It excludes media titles, source names, URLs, credentials, raw messages, and stack traces.",
+      localLogStorageAvailable: localDiagnostics.storageAvailable,
+      frontendErrors: localDiagnostics.entries,
+      backendErrors,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `tivihub-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return localDiagnostics.storageAvailable;
   }
 
   function clearNotifications() {
@@ -223,6 +262,40 @@ function App() {
       document.body.style.overflow = previousBodyOverflow;
     };
   }, [refreshing]);
+
+  useEffect(() => {
+    if (!globalSearchOpen) return;
+    const root = document.documentElement;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    root.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [globalSearchOpen]);
+
+  useEffect(() => {
+    if (globalSearchOpen) return;
+    const returnFocus = globalSearchReturnFocusRef.current;
+    globalSearchReturnFocusRef.current = null;
+    if (returnFocus?.isConnected) returnFocus.focus();
+  }, [globalSearchOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((!event.ctrlKey && !event.metaKey) || event.key.toLowerCase() !== "k" || event.repeat) return;
+      if (!ready || globalSearchOpen || sourceDialogOpen || refreshing || playableItem) return;
+      event.preventDefault();
+      globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : globalSearchButtonRef.current;
+      setGlobalSearchOpen(true);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [globalSearchOpen, playableItem, ready, refreshing, sourceDialogOpen]);
 
   async function reloadLocalData(preferredSourceId?: string) {
     const savedSources = await getPlaylists();
@@ -322,6 +395,12 @@ function App() {
     return programs.length;
   }
 
+  function tvGuideFailureMessage(source: Playlist) {
+    return !source.epgUrl && source.type !== "XTREAM"
+      ? "Add a TV guide link in source settings to see listings."
+      : "The TV guide couldn't be loaded. Please try again later.";
+  }
+
   async function loadGuideForChannels(
     requestedChannels: LiveChannel[],
     forceRefresh = false,
@@ -356,7 +435,7 @@ function App() {
 
     for (const channel of pending) requestedEpgChannels.current.add(`${source.id}:${channel.id}`);
     setGuideLoadCount((count) => count + 1);
-    notify(`Loading short TV guide data for ${pending.length} channels…`, "notice");
+    notify(`Loading the TV guide for ${pending.length} channels…`, "notice");
     try {
       const result = await loadXtreamShortEpg(source, pending);
       const channelIds = pending.map((channel) => channel.tvgId || channel.id);
@@ -371,14 +450,13 @@ function App() {
       const loadedChannels = result.requestedChannels - result.failedChannels;
       notify(result.failedChannels === 0
         ? `TV guide loaded for ${loadedChannels} channels (${result.programs.length} programmes).`
-        : `TV guide loaded for ${loadedChannels} of ${result.requestedChannels} channels. ${result.failureMessage || `${result.failedChannels} channels did not return guide data.`}`,
+        : loadedChannels === 0
+          ? `No TV guide information is available for these ${result.requestedChannels} channels right now. Try again later or check with your TV provider.`
+          : `TV guide information loaded for ${loadedChannels} of ${result.requestedChannels} channels. Some listings may be missing; try again later or check with your TV provider.`,
       "notice");
-    } catch (cause) {
+    } catch {
       for (const channel of pending) requestedEpgChannels.current.delete(`${source.id}:${channel.id}`);
-      notify(cause instanceof Error
-        ? `Could not load the TV guide: ${cause.message}`
-        : "Could not load the TV guide from this provider.",
-      "error");
+      notify("The TV guide couldn't be loaded. Please try again later.", "error");
     } finally {
       setGuideLoadCount((count) => Math.max(0, count - 1));
     }
@@ -387,36 +465,62 @@ function App() {
   async function connectSource(draft: PlaylistDraft) {
     clearNotifications();
     const playlist = draft.playlist;
-    let catalog: { channels: LiveChannel[]; movies: Movie[]; series: Series[] };
-    let importedEpisodes: Episode[] = [];
+    let catalog: CatalogCandidate;
+    let importedEpisodes: Episode[] | undefined;
     if (playlist.type === "M3U") {
       const content = draft.fileContent ??
         (playlist.fileName
           ? (await getPlaylistDocument(playlist.id))?.content
-          : await fetchM3u(playlist.url));
+          : await fetchM3u(playlist.url, draft.signal));
       if (!content) throw new Error("The local M3U file could not be read.");
-      const importedCatalog = parseM3uCatalog(content, {
+      draft.onStage?.("parsing");
+      const importedCatalog = await parseM3uCatalogAsync(content, {
         id: playlist.id,
         name: playlist.name,
         url: playlist.url || undefined,
         drmLicenseUrl: playlist.drmLicenseUrl,
         drmSystem: playlist.drmSystem,
-      });
+      }, draft.signal);
       catalog = {
         channels: importedCatalog.channels,
         movies: importedCatalog.movies,
         series: importedCatalog.series,
+        episodes: importedCatalog.episodes,
       };
       importedEpisodes = importedCatalog.episodes;
     } else {
-      const result = await loadXtreamCatalog(playlist);
+      const result = await loadXtreamCatalog(playlist, draft.signal);
       playlist.expiresAtMillis = result.expiresAtMillis;
       catalog = result;
     }
 
+    if (draft.signal?.aborted) {
+      throw draft.signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
+    }
+    validateCatalogForSource(playlist.id, catalog);
     const isNewSource = !sources.some((source) => source.id === playlist.id);
+    const previousCatalog = isNewSource
+      ? { channels: [], movies: [], series: [], episodes: [] }
+      : await getCatalogSnapshot(playlist.id);
+    const changeSummary = summarizeCatalogChanges(previousCatalog, catalog);
+    if (!isNewSource && isSuspiciousCatalogDrop(previousCatalog, catalog) &&
+      !window.confirm(
+        `This source update would replace a large part of your saved catalog (${formatCatalogChangeSummary(changeSummary)}). ` +
+        "The provider may be temporarily returning incomplete data. Apply this update anyway?",
+      )) {
+      throw new Error("Source update cancelled. Your saved catalog was kept.");
+    }
+    draft.onStage?.("saving");
     const shouldActivate = isNewSource || activeSourceId === playlist.id || activeSourceId === null;
     playlist.active = shouldActivate;
+    const refreshAt = Date.now();
+    const refreshedPlaylist: Playlist = {
+      ...playlist,
+      lastCatalogRefreshAt: refreshAt,
+      lastCatalogRefreshAttemptAt: refreshAt,
+      lastCatalogRefreshOutcome: "success",
+      lastCatalogRefreshSummary: changeSummary,
+    };
     await savePlaylist(playlist);
     if (draft.fileContent !== undefined) {
       await savePlaylistDocument({ playlistId: playlist.id, content: draft.fileContent });
@@ -424,14 +528,13 @@ function App() {
       await deletePlaylistDocument(playlist.id);
     }
     if (shouldActivate) await setActivePlaylist(playlist.id);
-    await saveCatalog({ playlistId: playlist.id, ...catalog });
-    if (importedEpisodes.length > 0) {
-      await Promise.all(catalog.series.map((item) =>
-        saveEpisodes(playlist.id, item.id, importedEpisodes.filter((episode) => episode.seriesId === item.id)),
-      ));
-    }
-    playlist.lastCatalogRefreshAt = Date.now();
-    await savePlaylist(playlist);
+    await saveCatalog({
+      playlistId: playlist.id,
+      ...catalog,
+      episodes: importedEpisodes,
+      sourceUpdate: refreshedPlaylist,
+      onProgress: draft.onProgress,
+    });
     await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
     if (shouldActivate) {
       if (isNewSource) setSection("Live TV");
@@ -441,11 +544,8 @@ function App() {
           ? `Source ${isNewSource ? "connected" : "updated"}. Open the TV guide to load recent programmes for the channels on each page.`
           : `Source ${isNewSource ? "connected" : "updated"}. Loaded ${count.toLocaleString()} TV guide programmes.`,
         "notice");
-      } catch (cause) {
-        notify(cause instanceof Error
-          ? `Source ${isNewSource ? "connected" : "updated"}. TV guide not loaded: ${cause.message}`
-          : `Source ${isNewSource ? "connected" : "updated"}. Add an XMLTV guide URL to load programme information.`,
-        "error");
+      } catch {
+        notify(`Source ${isNewSource ? "connected" : "updated"}. ${tvGuideFailureMessage(playlist)}`, "error");
       }
     } else {
       notify(`Source “${playlist.name}” updated. Your active source was not changed.`, "notice");
@@ -455,6 +555,62 @@ function App() {
   function openAddSource() {
     setEditingSource(undefined);
     setSourceDialogOpen(true);
+  }
+
+  function openGlobalSearch() {
+    if (!ready || refreshing || sourceDialogOpen || playableItem) return;
+    globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : globalSearchButtonRef.current;
+    setGlobalSearchOpen(true);
+  }
+
+  function closeGlobalSearch(restoreFocus = true) {
+    if (!restoreFocus) globalSearchReturnFocusRef.current = null;
+    setGlobalSearchOpen(false);
+  }
+
+  function runGlobalSearchCommand(command: GlobalSearchCommand) {
+    closeGlobalSearch(false);
+    if (command.kind === "navigate") {
+      setSelectedMovie(null);
+      setSelectedSeries(null);
+      setEpisodes([]);
+      setEpisodeError(null);
+      setSection(command.section);
+    } else if (command.kind === "add-source") {
+      openAddSource();
+    } else {
+      void refreshCurrentSource();
+    }
+  }
+
+  function openGlobalSearchResult(result: GlobalSearchMatch) {
+    closeGlobalSearch(false);
+    if (result.type === "LIVE") {
+      const channel = result.item;
+      setSelectedMovie(null);
+      setSelectedSeries(null);
+      setEpisodes([]);
+      setSection("Live TV");
+      openPlayback({
+        id: channel.id,
+        playlistId: channel.playlistId,
+        contentType: "LIVE",
+        title: channel.name,
+        streamUrl: channel.streamUrl,
+        artworkUrl: channel.logoUrl,
+        drmLicenseUrl: channel.drmLicenseUrl,
+        drmSystem: channel.drmSystem,
+        live: true,
+      });
+    } else if (result.type === "MOVIE") {
+      setSelectedMovie(result.item);
+      setSelectedSeries(null);
+      setSection("Movies");
+    } else {
+      void openSeries(result.item);
+    }
   }
 
   async function loadDemoLibrary() {
@@ -477,10 +633,8 @@ function App() {
         channels: catalog.channels,
         movies: catalog.movies,
         series: catalog.series,
+        episodes: catalog.episodes,
       });
-      await Promise.all(catalog.series.map((item) =>
-        saveEpisodes(playlist.id, item.id, catalog.episodes.filter((episode) => episode.seriesId === item.id)),
-      ));
       await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
       if (shouldActivate) setSection("Live TV");
       notify("Development demo added locally. Its sample streams load only when played.", "notice");
@@ -496,7 +650,8 @@ function App() {
       return;
     }
     catalogRefreshInFlight.current.add(source.id);
-    const updatedSource = { ...source };
+    let catalogCommitted = false;
+    let attemptRecorded = false;
     if (!background) {
       const activeElement = document.activeElement;
       refreshReturnFocusRef.current = activeElement instanceof HTMLElement && activeElement !== document.body
@@ -506,8 +661,9 @@ function App() {
       clearNotifications();
     }
     try {
-      let catalog: { channels: LiveChannel[]; movies: Movie[]; series: Series[] };
-      let importedEpisodes: Episode[] = [];
+      let catalog: CatalogCandidate;
+      let importedEpisodes: Episode[] | undefined;
+      let expiresAtMillis = source.expiresAtMillis;
       if (source.demo) {
         if (import.meta.env.DEV) {
           const { DEMO_PLAYLIST_CONTENT } = await import("./demo");
@@ -519,6 +675,7 @@ function App() {
             channels: importedCatalog.channels,
             movies: importedCatalog.movies,
             series: importedCatalog.series,
+            episodes: importedCatalog.episodes,
           };
           importedEpisodes = importedCatalog.episodes;
           await savePlaylistDocument({ playlistId: source.id, content: DEMO_PLAYLIST_CONTENT });
@@ -530,7 +687,7 @@ function App() {
         const document = source.fileName ? await getPlaylistDocument(source.id) : undefined;
         const content = document?.content ?? (source.fileName ? undefined : await fetchM3u(source.url));
         if (content === undefined) throw new Error("The imported M3U file is missing from local app storage.");
-        const importedCatalog = parseM3uCatalog(content, {
+        const importedCatalog = await parseM3uCatalogAsync(content, {
           id: source.id,
           name: source.name,
           url: source.url || undefined,
@@ -541,40 +698,124 @@ function App() {
           channels: importedCatalog.channels,
           movies: importedCatalog.movies,
           series: importedCatalog.series,
+          episodes: importedCatalog.episodes,
         };
         importedEpisodes = importedCatalog.episodes;
       } else {
-        const result = await loadXtreamCatalog(updatedSource);
-        updatedSource.expiresAtMillis = result.expiresAtMillis;
+        const result = await loadXtreamCatalog(source);
+        expiresAtMillis = result.expiresAtMillis;
         catalog = result;
       }
-      await saveCatalog({ playlistId: source.id, ...catalog });
-      if (importedEpisodes.length > 0) {
-        await Promise.all(catalog.series.map((item) =>
-          saveEpisodes(source.id, item.id, importedEpisodes.filter((episode) => episode.seriesId === item.id)),
-        ));
+
+      validateCatalogForSource(source.id, catalog);
+      const savedSources = await getPlaylists();
+      const currentSource = savedSources.find((entry) => entry.id === source.id);
+      if (!currentSource) {
+        throw new Error("This source was removed while refreshing. Your saved catalog was not changed.");
       }
-      updatedSource.lastCatalogRefreshAt = Date.now();
-      updatedSource.active = activeSourceIdRef.current === source.id;
-      await savePlaylist(updatedSource);
+      if (
+        currentSource.type !== source.type ||
+        currentSource.name !== source.name ||
+        currentSource.url !== source.url ||
+        currentSource.username !== source.username ||
+        currentSource.password !== source.password ||
+        currentSource.drmLicenseUrl !== source.drmLicenseUrl ||
+        currentSource.drmSystem !== source.drmSystem ||
+        currentSource.epgUrl !== source.epgUrl ||
+        currentSource.fileName !== source.fileName
+      ) {
+        throw new Error("This source changed while refreshing. Your saved catalog was not changed; please retry.");
+      }
+
+      const previousCatalog = await getCatalogSnapshot(source.id);
+      const changeSummary = summarizeCatalogChanges(previousCatalog, catalog);
+      const suspicious = isSuspiciousCatalogDrop(previousCatalog, catalog);
+      if (suspicious) {
+        const outcome = background ? "review-required" : "kept-previous";
+        const applyUpdate = !background && window.confirm(
+          `This refresh would replace a large part of your saved catalog (${formatCatalogChangeSummary(changeSummary)}). ` +
+          "The provider may be temporarily returning incomplete data. Apply the new catalog anyway?",
+        );
+        if (!applyUpdate) {
+          const attemptedAt = Date.now();
+          await savePlaylist({
+            ...currentSource,
+            lastCatalogRefreshAttemptAt: attemptedAt,
+            lastCatalogRefreshOutcome: outcome,
+            lastCatalogRefreshSummary: changeSummary,
+          });
+          attemptRecorded = true;
+          await reloadLocalData(background ? undefined : source.id);
+          notify(background
+            ? `Your saved catalog was kept. An update would make a large change (${formatCatalogChangeSummary(changeSummary)}). Use Refresh to review it.`
+            : `Your saved catalog was kept. ${formatCatalogChangeSummary(changeSummary)} You can retry with Refresh.`,
+          "notice");
+          return;
+        }
+      }
+
+      const refreshedAt = Date.now();
+      const updatedSource: Playlist = {
+        ...currentSource,
+        expiresAtMillis,
+        active: activeSourceIdRef.current === source.id,
+        lastCatalogRefreshAt: refreshedAt,
+        lastCatalogRefreshAttemptAt: refreshedAt,
+        lastCatalogRefreshOutcome: "success",
+        lastCatalogRefreshSummary: changeSummary,
+      };
+      await saveCatalog({
+        playlistId: source.id,
+        ...catalog,
+        episodes: importedEpisodes,
+        sourceUpdate: updatedSource,
+      });
+      catalogCommitted = true;
       await reloadLocalData(background ? undefined : source.id);
       if (background || source.demo) {
         if (!background) notify("Demo playlist restored from its bundled M3U fixture.", "notice");
         return;
       }
-      notify("Catalog updated from your provider.", "notice");
+      const summaryText = formatCatalogChangeSummary(changeSummary);
       try {
         const count = await loadGuide(source);
         notify(count === null
-          ? "Catalog updated. Open the TV guide to load recent programmes for the channels on each page."
-          : `Catalog and TV guide updated (${count.toLocaleString()} programmes).`,
+          ? `Catalog updated. ${summaryText} Open the TV guide to load recent programmes for the channels on each page.`
+          : `Catalog updated. ${summaryText} TV guide: ${count.toLocaleString()} programmes.`,
         "notice");
-      } catch (cause) {
-        notify(cause instanceof Error
-          ? `Catalog updated. TV guide not refreshed: ${cause.message}`
-          : "Catalog updated. TV guide not refreshed.",
-        "error");
+      } catch {
+        notify(`Catalog updated. ${summaryText} ${tvGuideFailureMessage(source)}`, "error");
       }
+    } catch (cause) {
+      if (catalogCommitted || attemptRecorded) {
+        throw new Error("The refresh outcome was saved, but the app could not reload the updated local view.", { cause });
+      }
+      try {
+        const savedSources = await getPlaylists();
+        const currentSource = savedSources.find((entry) => entry.id === source.id);
+        if (
+          currentSource &&
+          currentSource.type === source.type &&
+          currentSource.url === source.url &&
+          currentSource.username === source.username &&
+          currentSource.password === source.password
+        ) {
+          await savePlaylist({
+            ...currentSource,
+            lastCatalogRefreshAttemptAt: Date.now(),
+            lastCatalogRefreshOutcome: "failed",
+            lastCatalogRefreshSummary: undefined,
+          });
+          await reloadLocalData(background ? undefined : source.id);
+        }
+      } catch (statusError) {
+        console.error("Could not save the failed catalog refresh status", statusError);
+        throw new AggregateError(
+          [cause, statusError],
+          "The catalog refresh failed, and its status could not be saved locally.",
+        );
+      }
+      throw cause;
     } finally {
       catalogRefreshInFlight.current.delete(source.id);
       if (!background) setRefreshing(false);
@@ -677,8 +918,8 @@ function App() {
       }
       const count = await loadGuide(activeSource);
       notify(`TV guide updated with ${(count ?? 0).toLocaleString()} programmes.`, "notice");
-    } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not refresh the TV guide.", "error");
+    } catch {
+      notify(tvGuideFailureMessage(activeSource), "error");
     }
   }
 
@@ -914,57 +1155,12 @@ function App() {
 
   return (
     <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
-      <aside className="sidebar" aria-label="Primary navigation" inert={refreshing}>
-        <button aria-label="TiviHub home" className="brand" onClick={() => setSection("Home")} type="button">
-          <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
-          <span>TiviHub<span className="brand-period">.</span></span>
-        </button>
-        <p className="nav-caption">YOUR SPACE</p>
-        <nav className="desktop-nav" id="desktop-navigation">
-          {sections.map((item) => (
-            <NavItem key={item.label} icon={item.icon} label={item.label} active={section === item.label} onClick={() => setSection(item.label)} />
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="sidebar-release">
-            <span className="online-indicator" />
-            <span className="sidebar-version">TiviHub v{webPackage.version}</span>
-            {isDesktopApp && availableUpdate ? (
-              <button
-                aria-label={`Open the TiviHub ${availableUpdate.version} release page to update`}
-                className="sidebar-update-button"
-                onClick={() => void openAvailableUpdate()}
-                title={`Download TiviHub v${availableUpdate.version} from GitHub`}
-                type="button"
-              >
-                <Icon name="download" />
-                <span>Update to v{availableUpdate.version}</span>
-              </button>
-            ) : isDesktopApp ? (
-              <button
-                aria-label={updateStatus === "checking" ? "Checking for updates" : "Check for updates"}
-                className="sidebar-update-check"
-                disabled={updateStatus === "checking"}
-                onClick={() => void checkUpdates()}
-                title={updateStatus === "current" ? "TiviHub is up to date. Check again" : "Check GitHub for a newer TiviHub release"}
-                type="button"
-              >
-                <Icon name={updateStatus === "checking" ? "schedule" : "refresh"} />
-                <span>
-                  {updateStatus === "checking"
-                    ? "Checking for updates…"
-                    : updateStatus === "current"
-                      ? "Up to date · Check again"
-                      : updateStatus === "error"
-                        ? "Retry update check"
-                        : "Check for updates"}
-                </span>
-              </button>
-            ) : null}
-            {isDesktopApp && updateError && (
-              <span className="sidebar-update-error" role="alert">{updateError}</span>
-            )}
-          </div>
+      <aside className="sidebar" aria-label="Primary navigation" inert={refreshing || globalSearchOpen}>
+        <div className="sidebar-header">
+          <button aria-label="TiviHub home" className="brand" onClick={() => setSection("Home")} type="button">
+            <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
+            <span>TiviHub<span className="brand-period">.</span></span>
+          </button>
           <button
             aria-controls="desktop-navigation"
             aria-expanded={!sidebarCollapsed}
@@ -977,9 +1173,46 @@ function App() {
             <Icon name={sidebarCollapsed ? "chevron_right" : "chevron_left"} />
           </button>
         </div>
+        <p className="nav-caption">YOUR SPACE</p>
+        <nav className="desktop-nav" id="desktop-navigation">
+          {sections.map((item) => (
+            <NavItem key={item.label} icon={item.icon} label={item.label} active={section === item.label} onClick={() => setSection(item.label)} />
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          <div className="sidebar-release">
+            <span className="sidebar-version">TiviHub v{webPackage.version}</span>
+            {isDesktopApp && (
+              <button
+                aria-label={availableUpdate
+                  ? `Download TiviHub update version ${availableUpdate.version}`
+                  : updateStatus === "checking" ? "Checking for updates" : "Check for updates"}
+                className="sidebar-update-check"
+                disabled={updateStatus === "checking"}
+                onClick={() => availableUpdate ? void openAvailableUpdate() : void checkUpdates()}
+                title={availableUpdate ? `Download TiviHub v${availableUpdate.version}` : "Check for updates"}
+                type="button"
+              >
+                <span className={`sidebar-update-indicator ${updateStatus}`} />
+                <span className="sidebar-update-label">
+                  {updateStatus === "checking"
+                    ? "Checking for updates…"
+                    : updateStatus === "current"
+                      ? "Up to date"
+                      : updateStatus === "available" && availableUpdate
+                        ? `Update available · v${availableUpdate.version}`
+                        : updateStatus === "error"
+                          ? "Update check failed · Retry"
+                          : "Check for updates"}
+                </span>
+                {availableUpdate && <Icon name="download" />}
+              </button>
+            )}
+          </div>
+        </div>
       </aside>
 
-      <main className="main-content" inert={refreshing}>
+      <main className="main-content" inert={refreshing || globalSearchOpen}>
         <header className="topbar">
           <button className="mobile-brand" onClick={() => setSection("Home")} type="button">
             <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
@@ -990,16 +1223,18 @@ function App() {
           </div>
           <div aria-hidden="true" className="titlebar-drag-region" data-tauri-drag-region />
           <div className="topbar-actions">
-            {sources.length > 0 && (
-              <label className="source-switcher">
-                <span className="sr-only">Active playlist</span>
-                <Icon name="playlist_play" />
-                <select aria-label="Active playlist" onChange={(event) => void activateSource(event.target.value)} value={activeSourceId ?? ""}>
-                  {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
-                </select>
-                <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-              </label>
-            )}
+            <button
+              aria-keyshortcuts="Control+K Meta+K"
+              aria-label="Search your library"
+              className="icon-button global-search-button"
+              disabled={!ready || refreshing || sourceDialogOpen || Boolean(playableItem)}
+              onClick={openGlobalSearch}
+              ref={globalSearchButtonRef}
+              title="Search your library (Ctrl+K / ⌘K)"
+              type="button"
+            >
+              <Icon name="search" />
+            </button>
             {sources.length > 0 && (
               <button
                 aria-label="Refresh current source"
@@ -1012,9 +1247,6 @@ function App() {
                 <Icon name="refresh" />
               </button>
             )}
-            <button className="add-source-button" onClick={openAddSource} type="button">
-              <Icon name="add" /><span>Add source</span>
-            </button>
             <button
               aria-label="Open settings"
               aria-current={section === "Settings" ? "page" : undefined}
@@ -1056,6 +1288,7 @@ function App() {
               <SettingsPage
                 activeSourceId={activeSourceId}
                 onAddSource={openAddSource}
+                onDownloadDiagnostics={downloadDiagnostics}
                 apiKey={subtitleApiKey}
                 onActivate={(id) => void activateSource(id)}
                 onChooseTheme={chooseTheme}
@@ -1107,6 +1340,10 @@ function App() {
                 loading={refreshing}
                 movies={visibleMovies}
                 onAddToLibrary={(item, type) => void addToWatchlist(item, type)}
+                onCheckStreamGroup={(groupChannels, groupName) => setStreamHealthRequest({
+                  channels: groupChannels,
+                  groupName,
+                })}
                 onLoadGuideForChannels={(visibleChannels) => void loadGuideForChannels(visibleChannels)}
                 onOpenMovie={(movie) => {
                   setSelectedMovie(movie);
@@ -1187,7 +1424,7 @@ function App() {
       </main>
 
       {(error || notice) && (
-        <div aria-live={error ? "assertive" : "polite"} className="notification-stack" inert={refreshing}>
+        <div aria-live={error ? "assertive" : "polite"} className="notification-stack" inert={refreshing || globalSearchOpen}>
           <div
             className={`app-message notification-toast ${error ? "error-message" : "notice-message"}`}
             key={notificationKey}
@@ -1200,14 +1437,14 @@ function App() {
         </div>
       )}
 
-      <nav className="mobile-nav" aria-label="Primary navigation" inert={refreshing}>
+      <nav className="mobile-nav" aria-label="Primary navigation" inert={refreshing || globalSearchOpen}>
         {sections.filter((item) => item.label !== "Settings").map((item) => (
           <NavItem key={item.label} icon={item.icon} label={item.label} active={section === item.label} onClick={() => setSection(item.label)} compact />
         ))}
       </nav>
 
       {sourceDialogOpen && (
-        <div className="refresh-dialog-host" inert={refreshing}>
+        <div className="refresh-dialog-host" inert={refreshing || globalSearchOpen}>
           <PlaylistDialog
             editing={editingSource}
             onLoadDemo={import.meta.env.DEV ? loadDemoLibrary : undefined}
@@ -1226,6 +1463,14 @@ function App() {
           onProgress={saveProgress}
           resumePositionMillis={resumePosition}
           subtitleApiKey={subtitleApiKey}
+        />
+      )}
+      {streamHealthRequest && (
+        <StreamHealthCheckDialog
+          channels={streamHealthRequest.channels}
+          groupName={streamHealthRequest.groupName}
+          key={`${streamHealthRequest.groupName}:${streamHealthRequest.channels.map((channel) => channel.id).join("|")}`}
+          onClose={() => setStreamHealthRequest(null)}
         />
       )}
       {refreshing && (
@@ -1250,6 +1495,18 @@ function App() {
             </div>
           </section>
         </div>
+      )}
+      {globalSearchOpen && !refreshing && !sourceDialogOpen && !playableItem && (
+        <GlobalSearchDialog
+          canRefresh={Boolean(activeSource)}
+          channels={channels}
+          movies={movies}
+          onClose={closeGlobalSearch}
+          onRunCommand={runGlobalSearchCommand}
+          onSelectResult={openGlobalSearchResult}
+          series={series}
+          showAdultContent={showAdultContent}
+        />
       )}
     </div>
   );

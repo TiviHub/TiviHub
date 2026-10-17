@@ -72,6 +72,7 @@ interface TiviHubDatabase extends DBSchema {
 
 const DATABASE_NAME = "tivihub-web";
 const DATABASE_VERSION = 1;
+const CATALOG_WRITE_BATCH_SIZE = 1000;
 const CREDENTIAL_KEY_ID = "local-encryption-key";
 const OPEN_SUBTITLES_KEY_ID = "open-subtitles-api-key";
 const encoder = new TextEncoder();
@@ -262,31 +263,114 @@ export async function saveCatalog(catalog: {
   channels: LiveChannel[];
   movies: Movie[];
   series: Series[];
+  episodes?: Episode[];
+  sourceUpdate?: Playlist;
+  onProgress?: (completed: number, total: number) => void;
 }): Promise<void> {
   const database = await databasePromise;
-  const transaction = database.transaction(["channels", "movies", "series", "episodes"], "readwrite");
-  const replace = async <K extends "channels" | "movies" | "series">(
-    name: K,
-    records: TiviHubDatabase[K]["value"][],
-  ) => {
-    const store = transaction.objectStore(name);
-    const keys = await store.index("byPlaylist").getAllKeys(IDBKeyRange.only(catalog.playlistId));
-    await Promise.all([
-      ...keys.map((key) => store.delete(key)),
-      ...records.map((record) => store.put(record)),
+  if (catalog.sourceUpdate && catalog.sourceUpdate.id !== catalog.playlistId) {
+    throw new Error("The source metadata does not match the catalog being saved.");
+  }
+  const storedSource = catalog.sourceUpdate
+    ? await toStoredPlaylist(catalog.sourceUpdate)
+    : undefined;
+  const transaction = database.transaction(["channels", "movies", "series", "episodes", "playlists"], "readwrite");
+  try {
+    if (storedSource && !(await transaction.objectStore("playlists").get(catalog.playlistId))) {
+      throw new Error("This source was deleted before its refreshed catalog could be saved.");
+    }
+    const getKeys = async (name: "channels" | "movies" | "series" | "episodes"): Promise<string[]> => {
+      const keys = await transaction.objectStore(name).index("byPlaylist")
+        .getAllKeys(IDBKeyRange.only(catalog.playlistId));
+      if (!keys.every((key): key is string => typeof key === "string")) {
+        throw new Error("The local catalog contains a record with an invalid key.");
+      }
+      return keys;
+    };
+    const [channelKeys, movieKeys, seriesKeys, episodeKeys] = await Promise.all([
+      getKeys("channels"),
+      getKeys("movies"),
+      getKeys("series"),
+      catalog.episodes === undefined ? Promise.resolve([] as string[]) : getKeys("episodes"),
     ]);
-  };
-  await Promise.all([
-    replace("channels", catalog.channels),
-    replace("movies", catalog.movies),
-    replace("series", catalog.series),
-    (async () => {
-      const store = transaction.objectStore("episodes");
-      const keys = await store.index("byPlaylist").getAllKeys(IDBKeyRange.only(catalog.playlistId));
-      await Promise.all(keys.map((key) => store.delete(key)));
-    })(),
+    const keysToDelete = <T extends { id: string }>(keys: string[], records: T[]) => {
+      const retainedIds = new Set(records.map((record) => record.id));
+      return keys.filter((key) => !retainedIds.has(key));
+    };
+    const channelKeysToDelete = keysToDelete(channelKeys, catalog.channels);
+    const movieKeysToDelete = keysToDelete(movieKeys, catalog.movies);
+    const seriesKeysToDelete = keysToDelete(seriesKeys, catalog.series);
+    const episodeKeysToDelete = catalog.episodes === undefined
+      ? []
+      : keysToDelete(episodeKeys, catalog.episodes);
+    const total = channelKeysToDelete.length + movieKeysToDelete.length +
+      seriesKeysToDelete.length + episodeKeysToDelete.length +
+      catalog.channels.length + catalog.movies.length + catalog.series.length + (catalog.episodes?.length ?? 0);
+    let completed = 0;
+    const processBatches = async <T>(
+      values: readonly T[],
+      request: (value: T) => Promise<unknown>,
+    ) => {
+      for (let start = 0; start < values.length; start += CATALOG_WRITE_BATCH_SIZE) {
+        const end = Math.min(start + CATALOG_WRITE_BATCH_SIZE, values.length);
+        const batch: Promise<unknown>[] = [];
+        for (let index = start; index < end; index += 1) batch.push(request(values[index]));
+        await Promise.all(batch);
+        completed += end - start;
+        catalog.onProgress?.(completed, total);
+      }
+    };
+    const replace = async <K extends "channels" | "movies" | "series" | "episodes">(
+      name: K,
+      keys: string[],
+      records: TiviHubDatabase[K]["value"][],
+    ) => {
+      const store = transaction.objectStore(name);
+      await processBatches(keys, (key) => store.delete(key));
+      await processBatches(records, (record) => store.put(record));
+    };
+    const replacements = [
+      replace("channels", channelKeysToDelete, catalog.channels),
+      replace("movies", movieKeysToDelete, catalog.movies),
+      replace("series", seriesKeysToDelete, catalog.series),
+    ];
+    if (catalog.episodes !== undefined) {
+      replacements.push(replace("episodes", episodeKeysToDelete, catalog.episodes));
+    }
+    if (storedSource) {
+      replacements.push((async () => {
+        await transaction.objectStore("playlists").put(storedSource);
+      })());
+    }
+    await Promise.all(replacements);
+    await transaction.done;
+  } catch (cause) {
+    try {
+      transaction.abort();
+    } catch (abortError) {
+      if (!(abortError instanceof DOMException && abortError.name === "InvalidStateError")) {
+        console.error("Could not abort the failed catalog transaction", abortError);
+      }
+    }
+    await transaction.done.catch(() => undefined);
+    throw cause;
+  }
+}
+
+export async function getCatalogSnapshot(playlistId: string): Promise<{
+  channels: LiveChannel[];
+  movies: Movie[];
+  series: Series[];
+  episodes: Episode[];
+}> {
+  const database = await databasePromise;
+  const [channels, movies, series, episodes] = await Promise.all([
+    database.getAllFromIndex("channels", "byPlaylist", playlistId),
+    database.getAllFromIndex("movies", "byPlaylist", playlistId),
+    database.getAllFromIndex("series", "byPlaylist", playlistId),
+    database.getAllFromIndex("episodes", "byPlaylist", playlistId),
   ]);
-  await transaction.done;
+  return { channels, movies, series, episodes };
 }
 
 export async function getChannels(playlistId: string): Promise<LiveChannel[]> {

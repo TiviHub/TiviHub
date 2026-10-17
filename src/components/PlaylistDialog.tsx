@@ -7,6 +7,9 @@ import { Icon } from "./common";
 export interface PlaylistDraft {
   playlist: Playlist;
   fileContent?: string;
+  signal?: AbortSignal;
+  onStage?: (stage: "connecting" | "parsing" | "saving") => void;
+  onProgress?: (completed: number, total: number) => void;
 }
 
 export function PlaylistDialog({
@@ -34,9 +37,17 @@ export function PlaylistDialog({
   const [drmSystem, setDrmSystem] = useState<DrmSystem>(editing?.drmSystem ?? "com.widevine.alpha");
   const [drmCertificateUrl, setDrmCertificateUrl] = useState(editing?.drmCertificateUrl ?? "");
   const [busyAction, setBusyAction] = useState<"connect" | "demo" | null>(null);
+  const [busyStage, setBusyStage] = useState<"connecting" | "parsing" | "saving">("connecting");
+  const [saveProgress, setSaveProgress] = useState<{ completed: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const connectAbortController = useRef<AbortController | null>(null);
+  const onCloseRef = useRef<() => void>(onClose);
+  const closeDialog = () => {
+    if (busyAction === "connect" && busyStage === "saving") return;
+    connectAbortController.current?.abort();
+    onClose();
+  };
+  onCloseRef.current = closeDialog;
 
   useEffect(() => {
     const previousFocus = document.activeElement;
@@ -117,16 +128,31 @@ export function PlaylistDialog({
       createdAt: editing?.createdAt ?? createdAt,
     };
 
+    const controller = new AbortController();
+    connectAbortController.current = controller;
+    setSaveProgress(null);
+    setBusyStage("connecting");
     setBusyAction("connect");
     try {
+      const fileContent = type === "M3U" && sourceMode === "file" && file
+        ? await file.text()
+        : undefined;
+      if (controller.signal.aborted) return;
       await onConnect({
         playlist,
-        fileContent: type === "M3U" && sourceMode === "file" && file ? await file.text() : undefined,
+        fileContent,
+        signal: controller.signal,
+        onStage: setBusyStage,
+        onProgress: (completed, total) => setSaveProgress({ completed, total }),
       });
+      connectAbortController.current = null;
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not connect to this source.");
+      if (!controller.signal.aborted) {
+        setError(cause instanceof Error ? cause.message : "Could not connect to this source.");
+      }
     } finally {
+      if (connectAbortController.current === controller) connectAbortController.current = null;
       setBusyAction(null);
     }
   }
@@ -156,7 +182,13 @@ export function PlaylistDialog({
                 <p className="eyebrow">YOUR SOURCES / 01</p>
                 <h2 id="source-dialog-title">{editing ? "Edit playlist" : "Add a playlist"}</h2>
           </div>
-          <button aria-label="Close" className="icon-button" onClick={onClose} type="button">
+          <button
+            aria-label="Close"
+            className="icon-button"
+            disabled={busyAction === "connect" && busyStage === "saving"}
+            onClick={closeDialog}
+            type="button"
+          >
             <Icon name="close" />
           </button>
         </header>
@@ -364,10 +396,25 @@ export function PlaylistDialog({
           {error && <p className="form-error" role="alert">{error}</p>}
 
           <div className="dialog-actions">
-            <button className="secondary-button" onClick={onClose} type="button">Cancel</button>
+            <button
+              className="secondary-button"
+              disabled={busyAction === "connect" && busyStage === "saving"}
+              onClick={closeDialog}
+              type="button"
+            >
+              {busyAction === "connect" && busyStage === "saving" ? "Saving…" : "Cancel"}
+            </button>
             <button className="primary-button" disabled={busyAction !== null} type="submit">
               {busyAction === "connect" ? <span className="spinner" /> : <Icon name="link" />}
-              {busyAction === "connect" ? (editing ? "Saving…" : "Connecting…") : editing ? "Save changes" : "Connect source"}
+              {busyAction === "connect"
+                ? busyStage === "parsing"
+                  ? "Reading playlist…"
+                  : busyStage === "saving"
+                    ? `Saving playlist…${saveProgress && saveProgress.total > 0
+                      ? ` ${Math.floor(saveProgress.completed / saveProgress.total * 100)}%`
+                      : ""}`
+                    : editing ? "Saving…" : "Connecting…"
+                : editing ? "Save changes" : "Connect source"}
             </button>
           </div>
         </form>

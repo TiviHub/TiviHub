@@ -16,4 +16,4 @@ Please include the affected version or commit, impact, and concise reproduction 
 
 ## Supported versions
 
-The latest published release is supported. During beta, this means the latest published prerelease; security fixes will target the latest supported release.
+The latest published stable release is supported. Security fixes will target the latest supported release.

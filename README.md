@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://tivihub.nl">Website</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/TiviHub/TiviHub/releases/download/v1.2.0-beta.1/TiviHub-setup.exe">Download for Windows</a>
+  <a href="https://github.com/TiviHub/TiviHub/releases/download/v1.3.0/TiviHub-setup.exe">Download for Windows</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/TiviHub/TiviHub/releases">All releases</a>
   &nbsp;·&nbsp;
@@ -54,9 +54,9 @@ Playback supports compatible HLS and DASH streams. Whether a particular stream w
 
 ## Download
 
-**[Download TiviHub v1.2.0-beta.1 for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/download/v1.2.0-beta.1/TiviHub-setup.exe)**
+**[Download TiviHub v1.3.0 for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/download/v1.3.0/TiviHub-setup.exe)**
 
-This is an early beta, so features may change and you may encounter issues. The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
+The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
 
 Windows is currently the only released platform. Linux is not available yet, and macOS is not currently targeted. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) for the current installer and release notes.
 
@@ -74,7 +74,7 @@ Keep backups of important data. Clearing app data or losing access to your devic
 
 Protected playback requires authorization and a DRM license service from your source. DRM and codec support vary by provider and device. TiviHub does not supply licenses or bypass DRM or other access controls.
 
-Google Cast in this beta supports unprotected streams only. The Chromecast must be able to reach the provider and support the stream format; provider CORS or network restrictions may prevent playback. Cast playback progress and external subtitle selections are not synchronized to TiviHub.
+Google Cast supports unprotected streams only. The Chromecast must be able to reach the provider and support the stream format; provider CORS or network restrictions may prevent playback. Cast playback progress and external subtitle selections are not synchronized to TiviHub.
 
 You are responsible for using sources and content you are authorized to access and for following applicable law and provider terms. Third-party media, programme data, artwork, names, and trademarks remain the property of their respective owners.
 

@@ -1,3 +1,5 @@
+import { recordDiagnosticFailure } from "../diagnosticLog";
+
 export interface SubtitleResult {
   fileId: number;
   fileName: string;
@@ -31,11 +33,15 @@ async function request(
         Accept: "application/json",
       },
     });
-    if (!response.ok) throw new Error(`OpenSubtitles request failed with HTTP ${response.status}.`);
+    if (!response.ok) {
+      recordDiagnosticFailure("subtitle-search", "http", response.status);
+      throw new Error(`OpenSubtitles request failed with HTTP ${response.status}.`);
+    }
     return response;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     if (error instanceof Error && error.message.startsWith("OpenSubtitles request failed")) throw error;
+    recordDiagnosticFailure("subtitle-search", "network");
     throw new Error(
       "OpenSubtitles could not be reached from TiviHub. Check your API key and cross-origin access.",
     );
@@ -57,6 +63,7 @@ export async function searchOpenSubtitles(
   try {
     payload = await response.json();
   } catch {
+    recordDiagnosticFailure("subtitle-search", "invalid-response");
     throw new Error("OpenSubtitles returned invalid search results.");
   }
   if (!payload || typeof payload !== "object") return [];
@@ -108,6 +115,7 @@ export async function downloadOpenSubtitle(
   try {
     value = await downloadRequest.json();
   } catch {
+    recordDiagnosticFailure("subtitle-download", "invalid-response");
     throw new Error("OpenSubtitles returned invalid download details.");
   }
   if (!value || typeof value !== "object") throw new Error("OpenSubtitles returned invalid download details.");
@@ -126,9 +134,13 @@ export async function downloadOpenSubtitle(
   }
   const file = await fetch(downloadUrl, { signal }).catch((error: unknown) => {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
+    recordDiagnosticFailure("subtitle-download", "network");
     throw new Error("Subtitle download is blocked by cross-origin access from this app. Import a subtitle file instead.");
   });
-  if (!file.ok) throw new Error(`Subtitle download failed with HTTP ${file.status}.`);
+  if (!file.ok) {
+    recordDiagnosticFailure("subtitle-download", "http", file.status);
+    throw new Error(`Subtitle download failed with HTTP ${file.status}.`);
+  }
   if (!file.body) throw new Error("Subtitle provider returned an empty file.");
   const declaredSize = Number(file.headers.get("content-length"));
   if (Number.isFinite(declaredSize) && declaredSize > MAX_SUBTITLE_BYTES) {

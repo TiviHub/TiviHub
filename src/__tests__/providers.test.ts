@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import demoM3u from "../fixtures/demo.m3u?raw";
-import { fetchM3u, parseM3u, parseM3uCatalog } from "../providers/m3u";
+import { fetchM3u, parseM3u, parseM3uCatalog, parseM3uCatalogAsync } from "../providers/m3u";
 import { downloadOpenSubtitle, searchOpenSubtitles } from "../providers/opensubtitles";
 import { parseXmltvDate } from "../providers/xmltv";
 import {
@@ -49,6 +49,32 @@ describe("M3U provider parsing", () => {
     expect(catalog.episodes.map((episode) => [episode.season, episode.number, episode.name]))
       .toEqual([[1, 1, "Big Buck Bunny"], [1, 2, "Tears of Steel"]]);
     expect(catalog.movies[0]).toMatchObject({ name: "Big Buck Bunny (2008)", year: 2008, rating: 8 });
+  });
+
+  it("parses playlists in chunks while yielding to the UI", async () => {
+    const content = [
+      "#EXTM3U",
+      `#${"x".repeat(256 * 1024)}`,
+      '#EXTINF:-1 group-title="Movies",Movie 🎬 (2024)',
+      "https://provider.example/movie.mp4",
+    ].join("\n");
+    const expected = parseM3uCatalog(content, { id: "chunked", name: "Chunked" });
+    let yielded = false;
+    const timer = setTimeout(() => { yielded = true; }, 0);
+    const actual = await parseM3uCatalogAsync(content, { id: "chunked", name: "Chunked" });
+    clearTimeout(timer);
+
+    expect(actual).toEqual(expected);
+    expect(yielded).toBe(true);
+  });
+
+  it("stops incremental parsing when its signal is aborted", async () => {
+    const controller = new AbortController();
+    const content = `#EXTM3U\n#${"x".repeat(512 * 1024)}\n#EXTINF:-1,Channel\nhttps://provider.example/live.m3u8`;
+    const parsing = parseM3uCatalogAsync(content, { id: "cancelled", name: "Cancelled" }, controller.signal);
+    controller.abort();
+
+    await expect(parsing).rejects.toMatchObject({ name: "AbortError" });
   });
 
   it("parses M3U files larger than 25 MB", () => {
@@ -286,6 +312,35 @@ describe("Xtream URL construction", () => {
       failureMessage: "Xtream short EPG failed with HTTP 503.",
       programs: [{ title: "Test Programme" }],
     });
+  });
+
+  it("limits short-guide request concurrency to four channels", async () => {
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    const fetchMock = vi.fn(async () => {
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return new Response(JSON.stringify({ epg_listings: [] }), { status: 200 });
+      } finally {
+        activeRequests -= 1;
+      }
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const channels = Array.from({ length: 12 }, (_, index) => ({
+      id: `xtream-1:live:${index}`,
+      playlistId: playlist.id,
+      providerId: String(index),
+      name: `Channel ${index}`,
+      group: "News",
+      streamUrl: "https://provider.example/live.m3u8",
+    }));
+
+    await loadXtreamShortEpg(playlist, channels);
+
+    expect(fetchMock).toHaveBeenCalledTimes(12);
+    expect(maxActiveRequests).toBe(4);
   });
 
   it("rejects guide batches above the maximum page size before making requests", async () => {

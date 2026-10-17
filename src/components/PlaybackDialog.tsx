@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import webPackage from "../../package.json";
 import type { PlayableItem } from "../types";
 import { downloadOpenSubtitle, searchOpenSubtitles, type SubtitleResult } from "../providers/opensubtitles";
 import { playbackErrorMessage } from "../playbackErrors";
+import {
+  browserSummary,
+  canUseNativeHlsFallback,
+  createPlaybackDiagnosticReport,
+  inspectPlaybackCapabilities,
+  playbackDiagnosticError,
+  type BackendDiagnosticEvent,
+  type PlaybackDiagnosticFailure,
+  type PlaybackPath,
+} from "../playbackDiagnostics";
 import { Icon } from "./common";
 
 const MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
@@ -109,8 +120,12 @@ export function PlaybackDialog({
   const onCloseRef = useRef(onClose);
   const lastSaveRef = useRef(0);
   const subtitleUrlsRef = useRef<string[]>([]);
+  const playbackFailuresRef = useRef<PlaybackDiagnosticFailure[]>([]);
+  const nativeHlsFallbackAttemptedRef = useRef(false);
+  const nativeHlsFallbackInProgressRef = useRef(false);
   const [status, setStatus] = useState("Connecting to your source…");
   const [error, setError] = useState<string | null>(null);
+  const [diagnosticCopyMessage, setDiagnosticCopyMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [tracks, setTracks] = useState<TextTrackOption[]>([]);
   const [subtitleQuery, setSubtitleQuery] = useState(item.title);
@@ -125,6 +140,56 @@ export function PlaybackDialog({
   const [castingDevice, setCastingDevice] = useState<CastDeviceInfo | null>(null);
   onProgressRef.current = onProgress;
   onCloseRef.current = onClose;
+
+  function recordPlaybackFailure(path: PlaybackPath, cause: unknown) {
+    const failure = { path, ...playbackDiagnosticError(cause) };
+    const previous = playbackFailuresRef.current.at(-1);
+    if (
+      previous?.path === failure.path &&
+      previous.code === failure.code &&
+      previous.category === failure.category &&
+      previous.httpStatus === failure.httpStatus
+    ) return;
+    playbackFailuresRef.current = [...playbackFailuresRef.current, failure].slice(-10);
+  }
+
+  function showPlaybackFailure(message: string, path: PlaybackPath, cause?: unknown) {
+    recordPlaybackFailure(path, cause);
+    setError(message);
+    setDiagnosticCopyMessage(null);
+    setStatus("Playback failed");
+  }
+
+  async function copyDiagnostics() {
+    if (!navigator.clipboard?.writeText) {
+      setDiagnosticCopyMessage("Clipboard isn't available here. Try again in the app window.");
+      return;
+    }
+    let backendErrors: BackendDiagnosticEvent[] = [];
+    if (isTauri()) {
+      try {
+        backendErrors = await invoke<BackendDiagnosticEvent[]>("get_backend_diagnostics");
+      } catch {
+        setDiagnosticCopyMessage("Couldn't collect app diagnostics. Nothing was copied; please try again.");
+        return;
+      }
+    }
+    const report = createPlaybackDiagnosticReport({
+      appVersion: webPackage.version,
+      browser: browserSummary(navigator.userAgent),
+      failures: playbackFailuresRef.current,
+      drmConfigured: Boolean(item.drmLicenseUrl),
+      nativeHlsFallbackAttempted: nativeHlsFallbackAttemptedRef.current,
+      ...inspectPlaybackCapabilities(videoRef.current),
+      backendErrors,
+    });
+    try {
+      await navigator.clipboard.writeText(report);
+      setDiagnosticCopyMessage("Error details copied. You can paste them into your support message.");
+    } catch {
+      setDiagnosticCopyMessage("Couldn't access the clipboard. Please try again.");
+    }
+  }
 
   useEffect(() => {
     const previousFocus = document.activeElement;
@@ -171,23 +236,31 @@ export function PlaybackDialog({
       );
       setSaveError(null);
     } catch (cause) {
-      setSaveError(playbackErrorMessage(cause));
+      setSaveError("Couldn't save playback progress. Your video can keep playing.");
     }
   }
 
   useEffect(() => {
     let disposed = false;
     let player: ShakaPlayer | null = null;
+    let selectedPlaybackPath: PlaybackPath = "Unknown";
+    playbackFailuresRef.current = [];
+    nativeHlsFallbackAttemptedRef.current = false;
+    nativeHlsFallbackInProgressRef.current = false;
+    setError(null);
+    setDiagnosticCopyMessage(null);
     const videoRefValue = videoRef.current;
     if (!videoRefValue) return;
     const video: HTMLVideoElement = videoRefValue;
 
     const onVideoError = () => {
+      if (nativeHlsFallbackInProgressRef.current) return;
       const code = video.error?.code;
-      setError(code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
-        ? "This app's webview cannot decode the selected media format."
-        : "The media source could not be played. Check that it is online and accessible to this app.");
-      setStatus("Playback failed");
+      showPlaybackFailure(
+        playbackErrorMessage(code === undefined ? null : { code }),
+        "Native media element",
+        code === undefined ? undefined : { code },
+      );
     };
     const onTimeUpdate = () => {
       if (item.live || video.currentTime < 1) return;
@@ -205,12 +278,65 @@ export function PlaybackDialog({
     video.textTracks.addEventListener("addtrack", onTrackListChange);
     video.textTracks.addEventListener("change", onTrackListChange);
 
+    async function fallbackToNativeHls() {
+      nativeHlsFallbackAttemptedRef.current = true;
+      nativeHlsFallbackInProgressRef.current = true;
+      try {
+        const failedPlayer = player;
+        if (failedPlayer) {
+          await failedPlayer.destroy();
+          if (player === failedPlayer) player = null;
+          if (playerRef.current === failedPlayer) playerRef.current = null;
+        }
+        if (disposed) return;
+        video.removeAttribute("src");
+        video.load();
+        selectedPlaybackPath = "Native media element";
+        video.src = item.streamUrl;
+        video.load();
+        await video.play();
+        if (disposed) return;
+        setError(null);
+        setDiagnosticCopyMessage(null);
+        setStatus("Ready");
+      } catch (cause) {
+        if (!disposed) {
+          showPlaybackFailure(
+            playbackErrorMessage(cause),
+            "Native media element",
+            cause,
+          );
+        }
+      } finally {
+        nativeHlsFallbackInProgressRef.current = false;
+      }
+    }
+
+    function handleShakaFailure(cause: unknown) {
+      if (nativeHlsFallbackAttemptedRef.current) return;
+      const details = playbackDiagnosticError(cause);
+      if (
+        details.code === 4032 &&
+        !item.drmLicenseUrl &&
+        canUseNativeHlsFallback(
+          item.streamUrl,
+          inspectPlaybackCapabilities(video).nativeHlsSupport,
+        )
+      ) {
+        recordPlaybackFailure("Shaka Player", cause);
+        void fallbackToNativeHls();
+        return;
+      }
+      showPlaybackFailure(playbackErrorMessage(cause), "Shaka Player", cause);
+    }
+
     async function load() {
       try {
         if (
           !item.drmLicenseUrl &&
           (directMediaUrl(item.streamUrl) || nativeHlsUrl(item.streamUrl, video))
         ) {
+          selectedPlaybackPath = "Native media element";
           const seek = () => {
             if (resumePositionMillis > 0 && Number.isFinite(video.duration)) {
               video.currentTime = Math.min(resumePositionMillis / 1000, Math.max(video.duration - 1, 0));
@@ -223,7 +349,8 @@ export function PlaybackDialog({
           setStatus("Ready");
           return;
         }
-
+        selectedPlaybackPath = "Shaka Player";
+        selectedPlaybackPath = "Shaka Player";
         const shakaModule = await import("shaka-player");
         if (disposed) return;
         const shakaRuntime = shakaModule.default as ShakaRuntime;
@@ -236,9 +363,7 @@ export function PlaybackDialog({
         await player.attach(video);
         if (disposed) return;
         player.addEventListener("error", (event: Event) => {
-          const shakaError = (event as CustomEvent<unknown>).detail;
-          setError(playbackErrorMessage(shakaError));
-          setStatus("Playback failed");
+          handleShakaFailure((event as CustomEvent<unknown>).detail);
         });
         if (item.drmLicenseUrl) {
           const licenseUrl = item.drmLicenseUrl;
@@ -269,10 +394,9 @@ export function PlaybackDialog({
         syncTracks(player);
         setStatus("Ready");
       } catch (cause) {
-        if (!disposed) {
-          setError(playbackErrorMessage(cause));
-          setStatus("Playback failed");
-        }
+        if (disposed || nativeHlsFallbackAttemptedRef.current) return;
+        if (selectedPlaybackPath === "Shaka Player") handleShakaFailure(cause);
+        else showPlaybackFailure(playbackErrorMessage(cause), selectedPlaybackPath, cause);
       }
     }
 
@@ -288,7 +412,9 @@ export function PlaybackDialog({
       video.querySelectorAll("track[data-tivihub-subtitle]").forEach((track) => track.remove());
       for (const url of subtitleUrlsRef.current) URL.revokeObjectURL(url);
       subtitleUrlsRef.current = [];
-      if (player) void player.destroy().catch((cause: unknown) => console.error("Could not close media player", cause));
+      if (player && playerRef.current === player) {
+        void player.destroy().catch((cause: unknown) => console.error("Could not close media player", cause));
+      }
       playerRef.current = null;
     };
   }, [item.id, item.streamUrl, item.drmLicenseUrl, item.drmSystem, item.drmCertificateUrl, item.live, resumePositionMillis]);
@@ -299,7 +425,7 @@ export function PlaybackDialog({
     try {
       setSubtitleResults(await searchOpenSubtitles(subtitleApiKey, subtitleQuery));
     } catch (cause) {
-      setSubtitleError(playbackErrorMessage(cause));
+      setSubtitleError("Couldn't search for subtitles. Please try again.");
     } finally {
       setSubtitleBusy(false);
     }
@@ -345,7 +471,7 @@ export function PlaybackDialog({
     try {
       await attachSubtitle(file.name, await file.text());
     } catch (cause) {
-      setSubtitleError(playbackErrorMessage(cause));
+      setSubtitleError("Couldn't add this subtitle file. Check the file and try again.");
     }
   }
 
@@ -357,7 +483,7 @@ export function PlaybackDialog({
       await attachSubtitle(subtitle.name, subtitle.contents);
       setSubtitleOpen(false);
     } catch (cause) {
-      setSubtitleError(playbackErrorMessage(cause));
+      setSubtitleError("Couldn't download this subtitle. Please try again.");
     } finally {
       setSubtitleBusy(false);
     }
@@ -376,7 +502,7 @@ export function PlaybackDialog({
     try {
       setCastDevices(await invoke<CastDeviceInfo[]>("discover_cast_devices"));
     } catch (cause) {
-      setCastError(cause instanceof Error ? cause.message : String(cause));
+      setCastError("Couldn't search for casting devices. Check that they're on the same network and try again.");
     } finally {
       setCastBusy(false);
     }
@@ -395,7 +521,7 @@ export function PlaybackDialog({
       videoRef.current?.pause();
       setCastingDevice(device);
     } catch (cause) {
-      setCastError(cause instanceof Error ? cause.message : String(cause));
+      setCastError("Couldn't start casting. Check that the device and stream are available, then try again.");
     } finally {
       setCastBusy(false);
     }
@@ -409,7 +535,7 @@ export function PlaybackDialog({
       await invoke("stop_cast", { address: castingDevice.address });
       setCastingDevice(null);
     } catch (cause) {
-      setCastError(cause instanceof Error ? cause.message : String(cause));
+      setCastError("Couldn't stop casting on that device. Please try again.");
     } finally {
       setCastBusy(false);
     }
@@ -435,7 +561,18 @@ export function PlaybackDialog({
         </header>
         <video autoPlay controls playsInline ref={videoRef} />
         {error && <p className="player-error" role="alert">{error}</p>}
-        {saveError && <p className="player-error" role="alert">Could not save playback progress: {saveError}</p>}
+        {error && (
+          <div className="playback-error-actions">
+            <button className="text-button" onClick={() => void copyDiagnostics()} type="button">
+              <Icon name="content_copy" />
+              Copy error details
+            </button>
+            {diagnosticCopyMessage && (
+              <p aria-live="polite" className="playback-error-copy-status">{diagnosticCopyMessage}</p>
+            )}
+          </div>
+        )}
+        {saveError && <p className="player-error" role="alert">{saveError}</p>}
         <div className="player-tools">
           <label className="player-track-select">
             <Icon name="subtitles" />
@@ -508,7 +645,18 @@ export function PlaybackDialog({
                 {castBusy ? "Searching…" : "Refresh"}
               </button>
             </div>
-            {castError && <p className="form-error" role="alert">{castError}</p>}
+            {castError && (
+              <div className="playback-error-actions">
+                <p className="form-error" role="alert">{castError}</p>
+                <button className="text-button" onClick={() => void copyDiagnostics()} type="button">
+                  <Icon name="content_copy" />
+                  Copy error details
+                </button>
+                {diagnosticCopyMessage && (
+                  <p aria-live="polite" className="playback-error-copy-status">{diagnosticCopyMessage}</p>
+                )}
+              </div>
+            )}
             {castDevices.length > 0 && (
               <ul className="cast-device-list">
                 {castDevices.map((device) => (

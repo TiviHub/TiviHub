@@ -31,6 +31,8 @@ function artworkOf(item: CatalogItem): string | undefined {
 function CatalogCard({
   item,
   section,
+  subtitleOverride,
+  rank,
   isFavorite,
   inLibrary,
   currentProgram,
@@ -40,6 +42,8 @@ function CatalogCard({
 }: {
   item: CatalogItem;
   section: CatalogSection;
+  subtitleOverride?: string;
+  rank?: number;
   isFavorite: boolean;
   inLibrary: boolean;
   currentProgram?: EpgProgram;
@@ -49,9 +53,9 @@ function CatalogCard({
 }) {
   const artwork = artworkOf(item);
   const isLive = section === "Live TV";
-  const subtitle = isLive
+  const subtitle = subtitleOverride ?? (isLive
     ? currentProgram?.title || categoryOf(item)
-    : categoryOf(item);
+    : categoryOf(item));
   return (
     <article className={`catalog-card${isLive ? " live-card" : ""}`}>
       <button className="catalog-card-main" onClick={onOpen} type="button">
@@ -67,6 +71,7 @@ function CatalogCard({
           )}
           {isLive && <span className="live-badge"><span /> LIVE</span>}
           {!isLive && "seasons" in item && <span className="catalog-meta">{item.seasons} seasons</span>}
+          {rank !== undefined && <span className="catalog-rank-badge">TOP 10 · {rank}</span>}
         </span>
         <span className="catalog-card-copy">
           <strong title={titleOf(item)}>{titleOf(item)}</strong>
@@ -232,6 +237,7 @@ export function CatalogPage({
   onOpenSeries,
   onToggleFavorite,
   onAddToLibrary,
+  onCheckStreamGroup,
 }: {
   section: CatalogSection;
   channels: LiveChannel[];
@@ -248,6 +254,7 @@ export function CatalogPage({
   onOpenSeries: (series: Series) => void;
   onToggleFavorite: (item: CatalogItem, contentType: "LIVE" | "MOVIE" | "SERIES") => void;
   onAddToLibrary: (item: CatalogItem, contentType: "MOVIE" | "SERIES") => void;
+  onCheckStreamGroup?: (channels: LiveChannel[], groupName: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
@@ -259,6 +266,9 @@ export function CatalogPage({
   const deferredQuery = useDeferredValue(query);
   useEffect(() => setPage(1), [section]);
   const items = section === "Live TV" ? channels : section === "Movies" ? movies : series;
+  const selectedGroupChannels = section === "Live TV" && category !== "All"
+    ? channels.filter((channel) => channel.group === category)
+    : [];
   const favoriteIds = useMemo(() => new Set(favorites.map((favorite) => favorite.contentId)), [favorites]);
   const libraryIds = useMemo(
     () => new Set(library.map((entry) => `${entry.contentType}:${entry.contentId}`)),
@@ -314,6 +324,28 @@ export function CatalogPage({
       )
       .map(({ item }) => item);
   }, [category, deferredQuery, searchableItems]);
+  const featuredRows = useMemo(() => {
+    if (section !== "Movies" && section !== "Series") return [];
+    const catalog = section === "Movies" ? movies : series;
+    const recent = sortCatalogItems(
+      catalog.filter((item) =>
+        typeof item.addedAtMillis === "number" &&
+        Number.isFinite(item.addedAtMillis) &&
+        item.addedAtMillis > 0),
+      "added",
+    ).slice(0, 10);
+    const bestRated = sortCatalogItems(
+      catalog.filter((item) =>
+        typeof item.rating === "number" &&
+        Number.isFinite(item.rating) &&
+        item.rating > 0),
+      "rating",
+    ).slice(0, 10);
+    return [
+      ...(recent.length > 0 ? [{ title: "Top 10 · Recently added", items: recent, kind: "recent" as const }] : []),
+      ...(bestRated.length > 0 ? [{ title: "Top 10 · Best rated", items: bestRated, kind: "rated" as const }] : []),
+    ];
+  }, [movies, section, series]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const paginatedItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -329,6 +361,49 @@ export function CatalogPage({
   const firstItem = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const lastItem = Math.min(currentPage * pageSize, filtered.length);
   const epgForPage = section === "Live TV";
+
+  function renderCatalogCard(item: CatalogItem, rank?: number, subtitleOverride?: string) {
+    const contentType = "group" in item ? "LIVE" : "streamUrl" in item ? "MOVIE" : "SERIES";
+    const currentProgram = "group" in item
+      ? currentByChannel.get(item.tvgId || item.id)
+      : undefined;
+    return (
+      <CatalogCard
+        currentProgram={currentProgram}
+        inLibrary={contentType !== "LIVE" && libraryIds.has(`${contentType}:${item.id}`)}
+        isFavorite={favoriteIds.has(item.id)}
+        item={item}
+        key={item.id}
+        onAddToLibrary={() => {
+          if ("group" in item) return;
+          onAddToLibrary(item, "streamUrl" in item ? "MOVIE" : "SERIES");
+        }}
+        onFavorite={() => onToggleFavorite(item, contentType)}
+        onOpen={() => {
+          if ("group" in item) {
+            onPlay({
+              id: item.id,
+              playlistId: item.playlistId,
+              contentType: "LIVE",
+              title: item.name,
+              streamUrl: item.streamUrl,
+              artworkUrl: item.logoUrl,
+              drmLicenseUrl: item.drmLicenseUrl,
+              drmSystem: item.drmSystem,
+              live: true,
+            });
+          } else if ("streamUrl" in item) {
+            onOpenMovie(item);
+          } else {
+            onOpenSeries(item);
+          }
+        }}
+        rank={rank}
+        section={section}
+        subtitleOverride={subtitleOverride}
+      />
+    );
+  }
 
   return (
     <section className="catalog-page">
@@ -383,6 +458,18 @@ export function CatalogPage({
             </select>
             <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
           </label>
+          {selectedGroupChannels.length > 0 && onCheckStreamGroup && (
+            <button
+              aria-label={`Check all ${selectedGroupChannels.length} channels in ${category}`}
+              className="secondary-button catalog-group-check"
+              onClick={() => onCheckStreamGroup(selectedGroupChannels, category)}
+              title={`Check all ${selectedGroupChannels.length} channels in this group`}
+              type="button"
+            >
+              <Icon name="check_circle" />
+              Check group
+            </button>
+          )}
           {(section === "Movies" || section === "Series") && (
             <label className="category-select sort-select">
               <Icon name="sort" />
@@ -413,6 +500,30 @@ export function CatalogPage({
           {isSorting ? "Sorting your catalog…" : "Updating your catalog…"}
         </div>
       )}
+      {(section === "Movies" || section === "Series") &&
+        deferredQuery.trim() === "" &&
+        category === "All" &&
+        featuredRows.length > 0 && (
+          <div className="catalog-featured">
+            {featuredRows.map((row) => (
+              <section aria-label={row.title} className="catalog-featured-row" key={row.kind}>
+                <div className="catalog-featured-heading">
+                  <h2>{row.title}</h2>
+                  <span>{row.items.length} titles</span>
+                </div>
+                <div aria-label={row.title} className="catalog-featured-track" role="region" tabIndex={0}>
+                  {row.items.map((item, index) => renderCatalogCard(
+                    item,
+                    index + 1,
+                    row.kind === "rated" && item.rating !== undefined
+                      ? `${item.rating.toFixed(1)} ★ · ${categoryOf(item)}`
+                      : undefined,
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
       {items.length === 0 ? (
         <div className="catalog-empty">
           <div className="empty-icon"><Icon name={section === "Live TV" ? "live_tv" : section === "Movies" ? "movie" : "tv"} /></div>
@@ -466,48 +577,7 @@ export function CatalogPage({
         )
       ) : (
         <div className={`catalog-grid${epgForPage ? " channel-grid" : ""}`}>
-          {paginatedItems.map((item) => {
-            const contentType = section === "Live TV" ? "LIVE" : section === "Movies" ? "MOVIE" : "SERIES";
-            const currentProgram = "group" in item
-              ? currentByChannel.get(item.tvgId || item.id)
-              : undefined;
-            return (
-              <CatalogCard
-                currentProgram={currentProgram}
-                isFavorite={favoriteIds.has(item.id)}
-                inLibrary={libraryIds.has(`${contentType}:${item.id}`)}
-                item={item}
-                key={item.id}
-                onFavorite={() => onToggleFavorite(item, contentType)}
-                onAddToLibrary={() => {
-                  if ("group" in item) return;
-                  if ("streamUrl" in item) onAddToLibrary(item, "MOVIE");
-                  else onAddToLibrary(item, "SERIES");
-                }}
-                onOpen={() => {
-                  if (section === "Live TV" && "group" in item) {
-                    const channel = item;
-                    onPlay({
-                      id: channel.id,
-                      playlistId: channel.playlistId,
-                      contentType: "LIVE",
-                      title: channel.name,
-                      streamUrl: channel.streamUrl,
-                      artworkUrl: channel.logoUrl,
-                      drmLicenseUrl: channel.drmLicenseUrl,
-                      drmSystem: channel.drmSystem,
-                      live: true,
-                    });
-                  } else if (section === "Movies" && "streamUrl" in item && !("group" in item)) {
-                    onOpenMovie(item);
-                  } else if (!("group" in item) && !("streamUrl" in item)) {
-                    onOpenSeries(item);
-                  }
-                }}
-                section={section}
-              />
-            );
-          })}
+          {paginatedItems.map((item) => renderCatalogCard(item))}
         </div>
       )}
       {filtered.length > 0 && !(section === "Live TV" && liveView === "Guide" && epg.length === 0) && (

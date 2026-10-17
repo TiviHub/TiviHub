@@ -15,7 +15,7 @@ import {
   restoreSnapshot,
   toggleFavorite,
 } from "../storage/database";
-import type { Episode, EpgProgram, Favorite, Playlist } from "../types";
+import type { Episode, EpgProgram, Favorite, LiveChannel, Playlist, Series } from "../types";
 
 function playlist(id: string): Playlist {
   return {
@@ -78,6 +78,178 @@ describe("local IndexedDB storage", () => {
     await expect(getEpisodes(two.id, second.seriesId)).resolves.toEqual([second]);
   });
 
+  it("replaces catalog and episode records together without removing another source's episodes", async () => {
+    const firstSeries: Series = {
+      id: "storage-test-catalog-series-one",
+      playlistId: "storage-test-catalog-one",
+      name: "Series One",
+      seasons: 1,
+    };
+    const firstEpisode: Episode = {
+      id: "storage-test-catalog-episode-one",
+      playlistId: firstSeries.playlistId,
+      seriesId: "shared-series-id",
+      season: 1,
+      number: 1,
+      name: "Original",
+      streamUrl: "https://provider.example/one.m3u8",
+    };
+    const otherEpisode: Episode = {
+      ...firstEpisode,
+      id: "storage-test-catalog-episode-two",
+      playlistId: "storage-test-catalog-two",
+      name: "Other source",
+    };
+    const updatedEpisode: Episode = {
+      ...firstEpisode,
+      id: "storage-test-catalog-episode-updated",
+      name: "Updated",
+    };
+    const emptyCatalog = {
+      channels: [],
+      movies: [],
+      series: [],
+      episodes: [],
+    };
+
+    await saveCatalog({
+      playlistId: firstSeries.playlistId,
+      ...emptyCatalog,
+      series: [firstSeries],
+      episodes: [firstEpisode],
+    });
+    await saveCatalog({
+      playlistId: otherEpisode.playlistId,
+      ...emptyCatalog,
+      episodes: [otherEpisode],
+    });
+    await saveCatalog({
+      playlistId: firstSeries.playlistId,
+      ...emptyCatalog,
+      series: [firstSeries],
+      episodes: [updatedEpisode],
+    });
+
+    await expect(getEpisodes(firstSeries.playlistId, firstEpisode.seriesId)).resolves.toEqual([updatedEpisode]);
+    await expect(getEpisodes(otherEpisode.playlistId, otherEpisode.seriesId)).resolves.toEqual([otherEpisode]);
+  });
+
+  it("preserves cached episodes and saves refresh metadata with an Xtream catalog", async () => {
+    const source = playlist("storage-test-xtream-refresh");
+    const series: Series = {
+      id: `${source.id}:series:1`,
+      playlistId: source.id,
+      providerId: "1",
+      name: "Series",
+      seasons: 1,
+    };
+    const episode: Episode = {
+      id: `${series.id}:episode:1`,
+      playlistId: source.id,
+      seriesId: series.id,
+      season: 1,
+      number: 1,
+      name: "Episode",
+      streamUrl: "https://provider.example/episode.m3u8",
+    };
+    await savePlaylist(source);
+    await saveCatalog({
+      playlistId: source.id,
+      channels: [],
+      movies: [],
+      series: [series],
+      episodes: [episode],
+    });
+
+    const refreshedSource: Playlist = {
+      ...source,
+      lastCatalogRefreshAt: 10_000,
+      lastCatalogRefreshAttemptAt: 10_000,
+      lastCatalogRefreshOutcome: "success",
+      lastCatalogRefreshSummary: {
+        channels: { added: 0, removed: 0 },
+        movies: { added: 0, removed: 0 },
+        series: { added: 1, removed: 0 },
+      },
+    };
+    await saveCatalog({
+      playlistId: source.id,
+      channels: [],
+      movies: [],
+      series: [series],
+      sourceUpdate: refreshedSource,
+    });
+
+    await expect(getEpisodes(source.id, series.id)).resolves.toEqual([episode]);
+    const savedSource = (await getPlaylists()).find((entry) => entry.id === source.id);
+    expect(savedSource).toMatchObject(refreshedSource);
+  });
+
+  it("keeps the last good catalog and metadata when a replacement transaction fails", async () => {
+    const source = playlist("storage-test-failed-refresh");
+    const previousChannel: LiveChannel = {
+      id: `${source.id}:channel:old`,
+      playlistId: source.id,
+      name: "Saved channel",
+      group: "News",
+      streamUrl: "https://provider.example/old.m3u8",
+    };
+    await savePlaylist(source);
+    await saveCatalog({
+      playlistId: source.id,
+      channels: [previousChannel],
+      movies: [],
+      series: [],
+      episodes: [],
+    });
+
+    const invalidChannel = {
+      ...previousChannel,
+      id: `${source.id}:channel:invalid`,
+      name: () => "Not cloneable",
+    } as unknown as LiveChannel;
+    await expect(saveCatalog({
+      playlistId: source.id,
+      channels: [invalidChannel],
+      movies: [],
+      series: [],
+      episodes: [],
+      sourceUpdate: {
+        ...source,
+        lastCatalogRefreshAt: 20_000,
+        lastCatalogRefreshOutcome: "success",
+      },
+    })).rejects.toThrow();
+
+    await expect(getChannels(source.id)).resolves.toEqual([previousChannel]);
+    const savedSource = (await getPlaylists()).find((entry) => entry.id === source.id);
+    expect(savedSource?.lastCatalogRefreshAt).toBeUndefined();
+  });
+
+  it("reports bounded progress as catalog records are written", async () => {
+    const playlistId = "storage-test-batched-catalog";
+    const channels = Array.from({ length: 1005 }, (_, index) => ({
+      id: `${playlistId}:channel:${index}`,
+      playlistId,
+      name: `Channel ${index}`,
+      group: "News",
+      streamUrl: `https://provider.example/${index}.m3u8`,
+    }));
+    const progress: Array<[number, number]> = [];
+
+    await saveCatalog({
+      playlistId,
+      channels,
+      movies: [],
+      series: [],
+      episodes: [],
+      onProgress: (completed, total) => progress.push([completed, total]),
+    });
+
+    expect(progress).toEqual([[1000, 1005], [1005, 1005]]);
+    await expect(getChannels(playlistId)).resolves.toHaveLength(1005);
+  });
+
   it("replaces guide data only for the selected source and channels", async () => {
     const one = playlist("storage-test-epg-one");
     const two = playlist("storage-test-epg-two");
@@ -123,6 +295,7 @@ describe("local IndexedDB storage", () => {
       channels: [channel],
       movies: [],
       series: [],
+      episodes: [],
     });
     const favorite: Favorite = {
       id: `${source.id}:favorite`,

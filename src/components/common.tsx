@@ -48,6 +48,7 @@ export type IconName =
   | "check_circle"
   | "error_outline"
   | "info"
+  | "content_copy"
   | "logout";
 
 export function Icon({ name }: { name: IconName }) {

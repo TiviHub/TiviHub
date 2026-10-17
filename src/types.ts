@@ -2,6 +2,19 @@ export type PlaylistType = "M3U" | "XTREAM";
 export type ContentType = "LIVE" | "MOVIE" | "SERIES" | "EPISODE";
 export type LibraryStatus = "WATCHLIST" | "WATCHING" | "WATCHED";
 export type DrmSystem = "com.widevine.alpha" | "com.apple.fps" | "com.apple.fps.1_0";
+export type CatalogRefreshOutcome = "success" | "review-required" | "kept-previous" | "failed";
+
+export interface CatalogChangeCount {
+  added: number;
+  removed: number;
+}
+
+export interface CatalogChangeSummary {
+  channels: CatalogChangeCount;
+  movies: CatalogChangeCount;
+  series: CatalogChangeCount;
+  episodes?: CatalogChangeCount;
+}
 
 export interface Playlist {
   id: string;
@@ -19,6 +32,9 @@ export interface Playlist {
   demo?: boolean;
   expiresAtMillis?: number;
   lastCatalogRefreshAt?: number;
+  lastCatalogRefreshAttemptAt?: number;
+  lastCatalogRefreshOutcome?: CatalogRefreshOutcome;
+  lastCatalogRefreshSummary?: CatalogChangeSummary;
   createdAt: number;
 }
 

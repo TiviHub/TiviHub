@@ -1,6 +1,5 @@
 interface PlaybackErrorDetails {
   code?: unknown;
-  data?: unknown;
   message?: unknown;
 }
 
@@ -10,23 +9,22 @@ function isPlaybackErrorDetails(value: unknown): value is PlaybackErrorDetails {
 
 export function playbackErrorMessage(error: unknown): string {
   if (isPlaybackErrorDetails(error) && typeof error.code === "number") {
+    if (error.code === 4032) {
+      return "This stream isn't compatible with this device. Try another stream or device.";
+    }
     if (error.code === 1003) {
-      return "A request to the media source timed out before it responded. Check your connection and try again. If it keeps happening, the stream may be slow or unavailable from the provider.";
+      return "The stream is taking too long to respond. Check your connection and try again.";
     }
     if (error.code === 1001) {
-      return "The media server returned an unsuccessful response. The stream may be unavailable, expired, or require authorization.";
+      return "The provider couldn't open this stream. It may be unavailable or require you to sign in again.";
     }
     if (error.code === 1002) {
-      return "The media request failed before a response was received. Check network access and whether the provider allows playback from this app.";
+      return "Couldn't connect to this stream. Check your connection and try again.";
     }
-    if (typeof error.message === "string" && error.message.trim()) return error.message;
+    if (error.code === 1) return "Playback was interrupted. Try again.";
+    if (error.code === 2) return "The stream was interrupted. Check your connection and try again.";
+    if (error.code === 3) return "This video couldn't be decoded. Try another stream or device.";
+    if (error.code === 4) return "This stream isn't supported by this device. Try another stream.";
   }
-  if (error instanceof Error) return error.message;
-  if (isPlaybackErrorDetails(error) && typeof error.message === "string" && error.message.trim()) {
-    return error.message;
-  }
-  if (isPlaybackErrorDetails(error) && typeof error.code === "number") {
-    return `Playback failed (error code ${error.code}).`;
-  }
-  return "Playback could not be started.";
+  return "Couldn't play this stream. Try again or choose another stream.";
 }

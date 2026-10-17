@@ -4,8 +4,10 @@ export type CatalogSort = "name" | "added" | "year" | "rating";
 
 type SortableCatalogItem = Movie | Series;
 
+const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 function compareNames(left: SortableCatalogItem, right: SortableCatalogItem): number {
-  return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+  return nameCollator.compare(left.name, right.name);
 }
 
 function compareDescending(
@@ -27,20 +29,18 @@ export function sortCatalogItems<T extends SortableCatalogItem>(
   items: T[],
   sort: CatalogSort,
 ): T[] {
-  return [...items].sort((left, right) => {
-    if (sort === "name") return compareNames(left, right);
+  if (sort === "name") return [...items].sort(compareNames);
 
-    const leftValue = sort === "added"
-      ? left.addedAtMillis
-      : sort === "year"
-        ? yearOf(left)
-        : left.rating;
-    const rightValue = sort === "added"
-      ? right.addedAtMillis
-      : sort === "year"
-        ? yearOf(right)
-        : right.rating;
-    const comparison = compareDescending(leftValue, rightValue);
-    return comparison || compareNames(left, right);
-  });
+  return items
+    .map((item) => ({
+      item,
+      value: sort === "added"
+        ? item.addedAtMillis
+        : sort === "year"
+          ? yearOf(item)
+          : item.rating,
+    }))
+    .sort((left, right) =>
+      compareDescending(left.value, right.value) || compareNames(left.item, right.item))
+    .map(({ item }) => item);
 }

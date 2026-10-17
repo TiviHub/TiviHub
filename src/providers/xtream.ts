@@ -6,6 +6,7 @@ import type {
   Playlist,
   Series,
 } from "../types";
+import { recordDiagnosticFailure } from "../diagnosticLog";
 import { readResponseText, validateHttpsUrl } from "./http";
 
 interface XtreamPayload {
@@ -114,15 +115,27 @@ async function requestJson(
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
+    recordDiagnosticFailure("xtream-catalog", "network");
     throw new Error(
       `${operation} could not be reached. The provider may block cross-origin access (CORS), or be offline. The request went directly from this app to the provider.`,
     );
   }
-  if (!response.ok) throw new Error(`${operation} failed with HTTP ${response.status}.`);
-  const text = await readResponseText(response, maxBytes, operation);
+  if (!response.ok) {
+    recordDiagnosticFailure("xtream-catalog", "http", response.status);
+    throw new Error(`${operation} failed with HTTP ${response.status}.`);
+  }
+  let text: string;
+  try {
+    text = await readResponseText(response, maxBytes, operation);
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+    recordDiagnosticFailure("xtream-catalog", "invalid-response");
+    throw cause;
+  }
   try {
     return JSON.parse(text) as unknown;
   } catch {
+    recordDiagnosticFailure("xtream-catalog", "invalid-response");
     throw new Error(`${operation} returned invalid JSON.`);
   }
 }
