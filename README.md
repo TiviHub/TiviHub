@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://tivihub.nl">Website</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/TiviHub/TiviHub/releases/download/v1.0.0-beta.1/TiviHub-setup.exe">Download for Windows</a>
+  <a href="https://github.com/TiviHub/TiviHub/releases/download/v1.1.0-beta.1/TiviHub-setup.exe">Download for Windows</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/TiviHub/TiviHub/releases">All releases</a>
   &nbsp;·&nbsp;
@@ -22,6 +22,23 @@
 TiviHub brings the media sources you configure into one desktop library. Browse live channels and guide data, movies, series, and episodes, then keep favorites and playback progress together on your device.
 
 TiviHub is a player and organizer, not a content service. It does not provide playlists, channels, streams, or media. You bring sources you are authorized to use.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="33%" align="center"><a href="./docs/readme-screenshots/home.png"><img src="./docs/readme-screenshots/home.png" alt="TiviHub Home screen with the prompt to add a source" width="100%"></a></td>
+    <td width="33%" align="center"><a href="./docs/readme-screenshots/live-tv.png"><img src="./docs/readme-screenshots/live-tv.png" alt="TiviHub Live TV screen showing the empty state when no source is connected" width="100%"></a></td>
+    <td width="33%" align="center"><a href="./docs/readme-screenshots/settings.png"><img src="./docs/readme-screenshots/settings.png" alt="TiviHub Settings screen showing appearance and source options" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Home</strong></td>
+    <td align="center"><strong>Live TV</strong></td>
+    <td align="center"><strong>Settings</strong></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Real app screenshots captured with no source connected; no playlist or provider data is shown.</sub></p>
 
 ## What you can do
 
@@ -36,7 +53,7 @@ Playback supports compatible HLS and DASH streams. Whether a particular stream w
 
 ## Download
 
-**[Download TiviHub v1.0.0-beta.1 for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/download/v1.0.0-beta.1/TiviHub-setup.exe)**
+**[Download TiviHub v1.1.0-beta.1 for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/download/v1.1.0-beta.1/TiviHub-setup.exe)**
 
 This is an early beta, so features may change and you may encounter issues. The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
 
