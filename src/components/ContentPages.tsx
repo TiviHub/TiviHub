@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type {
   EpgProgram,
   Episode,
@@ -116,8 +116,26 @@ function GuideRow({
   onPlay: () => void;
   onFavorite: () => void;
 }) {
+  const drag = useRef<{
+    pointerId: number;
+    startX: number;
+    startScrollLeft: number;
+    moved: boolean;
+  } | null>(null);
+  const [dragging, setDragging] = useState(false);
   const now = Date.now();
-  const upcoming = programs.filter((program) => program.endMillis > now).slice(0, 3);
+  const upcoming = programs.filter((program) => program.endMillis > now);
+
+  function finishDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const activeDrag = drag.current;
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+    drag.current = null;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
   return (
     <article className="guide-row">
       <div className="guide-channel">
@@ -137,7 +155,37 @@ function GuideRow({
           <Icon name={favorite ? "favorite" : "favorite_border"} />
         </button>
       </div>
-      <div className="guide-programs">
+      <div
+        aria-label={`Upcoming programs for ${channel.name}`}
+        className={`guide-programs${dragging ? " is-dragging" : ""}`}
+        onPointerCancel={finishDrag}
+        onPointerDown={(event) => {
+          if (event.pointerType !== "mouse" || event.button !== 0) return;
+          drag.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startScrollLeft: event.currentTarget.scrollLeft,
+            moved: false,
+          };
+        }}
+        onPointerMove={(event) => {
+          const activeDrag = drag.current;
+          if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+          const offset = event.clientX - activeDrag.startX;
+          if (!activeDrag.moved && Math.abs(offset) > 5) {
+            activeDrag.moved = true;
+            setDragging(true);
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }
+          if (activeDrag.moved) {
+            event.preventDefault();
+            event.currentTarget.scrollLeft = activeDrag.startScrollLeft - offset;
+          }
+        }}
+        onPointerUp={finishDrag}
+        role="region"
+        tabIndex={0}
+      >
         {upcoming.length === 0 ? (
           <p className="guide-no-programs">No upcoming programme data.</p>
         ) : upcoming.map((program) => {
@@ -228,10 +276,14 @@ export function CatalogPage({
     }
     return current;
   }, [guideByChannel]);
-  const categories = useMemo(
-    () => ["All", ...new Set(items.map(categoryOf).filter((value) => value !== "Uncategorized"))],
-    [items],
-  );
+  const categories = useMemo(() => {
+    const names = new Set(items.map(categoryOf).filter((value) => value !== "Uncategorized"));
+    return [
+      "All",
+      ...[...names].sort((left, right) =>
+        left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })),
+    ];
+  }, [items]);
   const filtered = items.filter((item) => {
     const matchesQuery = `${item.name} ${categoryOf(item)}`.toLowerCase().includes(query.trim().toLowerCase());
     return matchesQuery && (category === "All" || categoryOf(item) === category);

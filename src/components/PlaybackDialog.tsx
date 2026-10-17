@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { PlayableItem } from "../types";
 import { downloadOpenSubtitle, searchOpenSubtitles, type SubtitleResult } from "../providers/opensubtitles";
+import { playbackErrorMessage } from "../playbackErrors";
 import { Icon } from "./common";
 
 const MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
@@ -46,6 +48,11 @@ interface ShakaRuntime {
   };
 }
 
+interface CastDeviceInfo {
+  address: string;
+  name: string;
+}
+
 function mediaDuration(video: HTMLVideoElement): number {
   return Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : 0;
 }
@@ -76,14 +83,6 @@ function asWebVtt(contents: string): string {
     "$1.$2$3.$4",
   );
   return `WEBVTT\n\n${cues}`;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "code" in error && typeof error.code === "number") {
-    return `TiviHub or the provider rejected playback (media error ${error.code}). Check the stream format, CORS access, and DRM configuration.`;
-  }
-  return "Playback could not be started.";
 }
 
 export function PlaybackDialog({
@@ -119,7 +118,11 @@ export function PlaybackDialog({
   const [subtitleBusy, setSubtitleBusy] = useState(false);
   const [subtitleError, setSubtitleError] = useState<string | null>(null);
   const [subtitleOpen, setSubtitleOpen] = useState(false);
-
+  const [castOpen, setCastOpen] = useState(false);
+  const [castDevices, setCastDevices] = useState<CastDeviceInfo[]>([]);
+  const [castBusy, setCastBusy] = useState(false);
+  const [castError, setCastError] = useState<string | null>(null);
+  const [castingDevice, setCastingDevice] = useState<CastDeviceInfo | null>(null);
   onProgressRef.current = onProgress;
   onCloseRef.current = onClose;
 
@@ -168,7 +171,7 @@ export function PlaybackDialog({
       );
       setSaveError(null);
     } catch (cause) {
-      setSaveError(errorMessage(cause));
+      setSaveError(playbackErrorMessage(cause));
     }
   }
 
@@ -233,8 +236,8 @@ export function PlaybackDialog({
         await player.attach(video);
         if (disposed) return;
         player.addEventListener("error", (event: Event) => {
-          const shakaError = (event as CustomEvent<{ message?: string; code?: number }>).detail;
-          setError(shakaError?.message || "The stream failed. The provider may block cross-origin access, or this DRM/codec may not be supported.");
+          const shakaError = (event as CustomEvent<unknown>).detail;
+          setError(playbackErrorMessage(shakaError));
           setStatus("Playback failed");
         });
         if (item.drmLicenseUrl) {
@@ -267,7 +270,7 @@ export function PlaybackDialog({
         setStatus("Ready");
       } catch (cause) {
         if (!disposed) {
-          setError(errorMessage(cause));
+          setError(playbackErrorMessage(cause));
           setStatus("Playback failed");
         }
       }
@@ -296,7 +299,7 @@ export function PlaybackDialog({
     try {
       setSubtitleResults(await searchOpenSubtitles(subtitleApiKey, subtitleQuery));
     } catch (cause) {
-      setSubtitleError(errorMessage(cause));
+      setSubtitleError(playbackErrorMessage(cause));
     } finally {
       setSubtitleBusy(false);
     }
@@ -342,7 +345,7 @@ export function PlaybackDialog({
     try {
       await attachSubtitle(file.name, await file.text());
     } catch (cause) {
-      setSubtitleError(errorMessage(cause));
+      setSubtitleError(playbackErrorMessage(cause));
     }
   }
 
@@ -354,9 +357,61 @@ export function PlaybackDialog({
       await attachSubtitle(subtitle.name, subtitle.contents);
       setSubtitleOpen(false);
     } catch (cause) {
-      setSubtitleError(errorMessage(cause));
+      setSubtitleError(playbackErrorMessage(cause));
     } finally {
       setSubtitleBusy(false);
+    }
+  }
+
+  async function openCastPanel() {
+    setCastOpen(true);
+    setCastError(null);
+    if (item.drmLicenseUrl) {
+      setCastError("Casting DRM-protected streams is not supported yet.");
+      return;
+    }
+
+    setCastBusy(true);
+    setCastDevices([]);
+    try {
+      setCastDevices(await invoke<CastDeviceInfo[]>("discover_cast_devices"));
+    } catch (cause) {
+      setCastError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCastBusy(false);
+    }
+  }
+
+  async function castToDevice(device: CastDeviceInfo) {
+    setCastBusy(true);
+    setCastError(null);
+    try {
+      await invoke("cast_media", {
+        address: device.address,
+        streamUrl: item.streamUrl,
+        title: item.title,
+        live: item.live,
+      });
+      videoRef.current?.pause();
+      setCastingDevice(device);
+    } catch (cause) {
+      setCastError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCastBusy(false);
+    }
+  }
+
+  async function stopCasting() {
+    if (!castingDevice) return;
+    setCastBusy(true);
+    setCastError(null);
+    try {
+      await invoke("stop_cast", { address: castingDevice.address });
+      setCastingDevice(null);
+    } catch (cause) {
+      setCastError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCastBusy(false);
     }
   }
 
@@ -420,7 +475,69 @@ export function PlaybackDialog({
             <Icon name="search" />
             OpenSubtitles
           </button>
+          {isTauri() && (
+            <button
+              aria-expanded={castOpen}
+              className="secondary-button"
+              onClick={() => {
+                if (castOpen) setCastOpen(false);
+                else void openCastPanel();
+              }}
+              type="button"
+            >
+              <Icon name="cast" />
+              {castingDevice ? `Casting to ${castingDevice.name}` : "Cast"}
+            </button>
+          )}
         </div>
+
+        {castOpen && (
+          <section aria-label="Cast to a device" className="cast-panel">
+            <div className="cast-panel-heading">
+              <strong>Google Cast devices</strong>
+              <button
+                className="text-button"
+                disabled={castBusy}
+                onClick={() => void openCastPanel()}
+                type="button"
+              >
+                {castBusy ? "Searching…" : "Refresh"}
+              </button>
+            </div>
+            {castError && <p className="form-error" role="alert">{castError}</p>}
+            {castDevices.length > 0 && (
+              <ul className="cast-device-list">
+                {castDevices.map((device) => (
+                  <li key={device.address}>
+                    <button
+                      className="secondary-button"
+                      disabled={castBusy || Boolean(item.drmLicenseUrl)}
+                      onClick={() => void castToDevice(device)}
+                      type="button"
+                    >
+                      <Icon name={castingDevice?.address === device.address ? "cast_connected" : "cast"} />
+                      {device.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!castBusy && castDevices.length === 0 && !castError && (
+              <p className="form-note">No Chromecast devices found on your local network.</p>
+            )}
+            {castingDevice && (
+              <div className="cast-panel-status">
+                <p role="status">Casting directly from your provider to {castingDevice.name}.</p>
+                <button className="secondary-button" disabled={castBusy} onClick={() => void stopCasting()} type="button">
+                  Stop casting
+                </button>
+              </div>
+            )}
+            <p className="form-note">
+              The Chromecast fetches the stream directly from your provider. TiviHub does not relay media.
+            </p>
+          </section>
+        )}
 
         {subtitleOpen && (
           <section className="subtitle-panel" aria-label="Search OpenSubtitles">

@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
+import { checkForUpdate, type AvailableUpdate } from "./updates";
 import { fetchM3u, parseM3uCatalog } from "./providers/m3u";
 import { fetchXmltv } from "./providers/xmltv";
 import { loadXtreamCatalog, loadXtreamEpisodes, loadXtreamShortEpg } from "./providers/xtream";
@@ -71,6 +74,7 @@ function readThemePreference(): ThemePreference {
 }
 
 function App() {
+  const isDesktopApp = isTauri();
   const [section, setSection] = useState<Section>("Home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(readThemePreference);
@@ -98,13 +102,47 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [notificationKey, setNotificationKey] = useState(0);
+  const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "current" | "available" | "error">("idle");
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const requestedEpgChannels = useRef(new Set<string>());
+  const updateCheckController = useRef<AbortController | null>(null);
   const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshButtonRef = useRef<HTMLButtonElement>(null);
   const refreshOverlayRef = useRef<HTMLDivElement>(null);
   const refreshReturnFocusRef = useRef<HTMLElement | null>(null);
 
   const activeSource = sources.find((source) => source.id === activeSourceId) ?? null;
+
+  const checkUpdates = useCallback(async () => {
+    updateCheckController.current?.abort();
+    const controller = new AbortController();
+    updateCheckController.current = controller;
+    setUpdateStatus("checking");
+    setUpdateError(null);
+    try {
+      const update = await checkForUpdate(webPackage.version, controller.signal);
+      if (controller.signal.aborted) return;
+      setAvailableUpdate(update);
+      setUpdateStatus(update ? "available" : "current");
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      console.error("Could not check GitHub for TiviHub updates", cause);
+      setUpdateError(cause instanceof Error ? cause.message : String(cause));
+      setUpdateStatus("error");
+    }
+  }, []);
+
+  async function openAvailableUpdate() {
+    if (!availableUpdate) return;
+    setUpdateError(null);
+    try {
+      await openUrl(availableUpdate.releaseUrl);
+    } catch (cause) {
+      console.error("Could not open the TiviHub GitHub release page", cause);
+      setUpdateError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
 
   function clearNotifications() {
     if (notificationTimer.current !== null) {
@@ -130,6 +168,16 @@ function App() {
   useEffect(() => () => {
     if (notificationTimer.current !== null) clearTimeout(notificationTimer.current);
   }, []);
+
+  useEffect(() => {
+    if (!isDesktopApp) return;
+    void checkUpdates();
+    const timer = window.setInterval(() => void checkUpdates(), 6 * 60 * 60 * 1000);
+    return () => {
+      window.clearInterval(timer);
+      updateCheckController.current?.abort();
+    };
+  }, [checkUpdates, isDesktopApp]);
 
   useEffect(() => {
     if (refreshing) {
@@ -756,8 +804,45 @@ function App() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <span className="online-indicator" />
-          <span className="sidebar-version">TiviHub v{webPackage.version}</span>
+          <div className="sidebar-release">
+            <span className="online-indicator" />
+            <span className="sidebar-version">TiviHub v{webPackage.version}</span>
+            {isDesktopApp && availableUpdate ? (
+              <button
+                aria-label={`Open the TiviHub ${availableUpdate.version} release page to update`}
+                className="sidebar-update-button"
+                onClick={() => void openAvailableUpdate()}
+                title={`Download TiviHub v${availableUpdate.version} from GitHub`}
+                type="button"
+              >
+                <Icon name="download" />
+                <span>Update to v{availableUpdate.version}</span>
+              </button>
+            ) : isDesktopApp ? (
+              <button
+                aria-label={updateStatus === "checking" ? "Checking for updates" : "Check for updates"}
+                className="sidebar-update-check"
+                disabled={updateStatus === "checking"}
+                onClick={() => void checkUpdates()}
+                title={updateStatus === "current" ? "TiviHub is up to date. Check again" : "Check GitHub for a newer TiviHub release"}
+                type="button"
+              >
+                <Icon name={updateStatus === "checking" ? "schedule" : "refresh"} />
+                <span>
+                  {updateStatus === "checking"
+                    ? "Checking for updates…"
+                    : updateStatus === "current"
+                      ? "Up to date · Check again"
+                      : updateStatus === "error"
+                        ? "Retry update check"
+                        : "Check for updates"}
+                </span>
+              </button>
+            ) : null}
+            {isDesktopApp && updateError && (
+              <span className="sidebar-update-error" role="alert">{updateError}</span>
+            )}
+          </div>
           <button
             aria-controls="desktop-navigation"
             aria-expanded={!sidebarCollapsed}
@@ -1115,6 +1200,39 @@ function Home({
         series={series}
         sourceId={source.id}
       />
+    );
+  }
+
+  if (sourceCount === 0) {
+    return (
+      <section aria-labelledby="home-empty-title" className="home-empty">
+        <div className="home-empty-content">
+          <div aria-hidden="true" className="home-empty-art">
+            <div className="home-empty-orbit home-empty-orbit-outer" />
+            <div className="home-empty-orbit home-empty-orbit-inner" />
+            <div className="home-empty-logo-core">
+              <img alt="" src={`${ASSET_BASE_URL}icons/tivihub-512.png`} />
+            </div>
+            <span className="home-empty-star home-empty-star-one">✦</span>
+            <span className="home-empty-star home-empty-star-two">✧</span>
+            <span className="home-empty-caption">TIVIHUB / DESKTOP</span>
+            <div className="home-empty-art-card home-empty-art-card-top">
+              <Icon name="movie" /><span>YOUR LIBRARY</span>
+            </div>
+            <div className="home-empty-art-card home-empty-art-card-bottom">
+              <span className="home-empty-art-pulse" /><span>READY WHEN YOU ARE</span>
+            </div>
+          </div>
+          <div className="home-empty-prompt">
+            <h1 id="home-empty-title">Add a source to get started.</h1>
+            <button className="primary-button home-empty-action" onClick={onAddSource} type="button">
+              <Icon name="add" />
+              Add source
+              <Icon name="arrow_forward" />
+            </button>
+          </div>
+        </div>
+      </section>
     );
   }
 
