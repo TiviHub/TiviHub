@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { IconName } from "../components/common";
+import webPackage from "../../package.json";
 
 function LandingIcon({ name }: { name: IconName }) {
   return <span aria-hidden="true" className="material-icons">{name}</span>;
@@ -71,7 +72,7 @@ const faqItems: { question: string; answer: string; category: Exclude<FaqCategor
 
 export default function LandingPage() {
   const windowsDownloadUrl = import.meta.env.VITE_WINDOWS_DOWNLOAD_URL
-    || "https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe";
+    || `https://github.com/TiviHub/TiviHub/releases/download/v${webPackage.version}/TiviHub-setup.exe`;
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<FaqCategory>("All");
   const filteredFaq = useMemo(() => {
