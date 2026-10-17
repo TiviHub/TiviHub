@@ -10,6 +10,8 @@ export type IconName =
   | "play_arrow"
   | "arrow_forward"
   | "devices"
+  | "cast"
+  | "cast_connected"
   | "shield"
   | "light_mode"
   | "dark_mode"

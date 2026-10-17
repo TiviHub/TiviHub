@@ -103,6 +103,29 @@ a {
   color: #fff;
 }
 
+.landing-nav .landing-nav-github {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+
+.landing-nav-github:hover,
+.landing-nav-github:focus-visible {
+  border-color: rgb(173 121 255 / 25%);
+  background: rgb(140 75 237 / 10%);
+}
+
+.landing-nav-github svg {
+  display: block;
+  width: 21px;
+  height: 21px;
+  fill: currentColor;
+}
+
 .landing-nav .landing-nav-download {
   display: inline-flex;
   min-height: 42px;
@@ -668,6 +691,11 @@ a {
   .landing-nav .landing-nav-download {
     min-height: 38px;
     padding: 0 11px;
+  }
+
+  .landing-nav .landing-nav-github {
+    width: 38px;
+    height: 38px;
   }
 
   .landing-hero {
