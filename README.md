@@ -58,7 +58,7 @@ Playback supports compatible HLS and DASH streams. Whether a particular stream w
 
 The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
 
-Windows is currently the only released platform. Linux is not available yet, and macOS is not currently targeted. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) for the current installer and release notes.
+Release builds are also published for Linux (x64 AppImage and .deb) and macOS (arm64 and x64 .dmg); these builds are unsigned and untested by the maintainers. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) for the current installer and release notes.
 
 ## Privacy and local data
 

@@ -14,7 +14,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "package:windows": "node scripts/package-windows.mjs"
+    "package:windows": "node scripts/package-windows.mjs",
+    "package:unix": "node scripts/package-unix.mjs"
   },
   "dependencies": {
     "@fontsource/material-icons": "^5.3.0",
