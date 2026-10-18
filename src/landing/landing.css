@@ -199,6 +199,13 @@ a {
   gap: 10px;
 }
 
+.landing-download-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
 .landing-download-button {
   display: inline-flex;
   min-height: 54px;
@@ -237,12 +244,43 @@ a {
   margin-left: 5px;
 }
 
+.landing-all-platforms {
+  display: inline-flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 2%);
+  color: #e2ddea;
+  font-size: 0.92rem;
+  font-weight: 500;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.landing-all-platforms:hover {
+  border-color: rgb(173 121 255 / 34%);
+  background: rgb(140 75 237 / 9%);
+  color: #fff;
+}
+
 .landing-download > p {
   max-width: 390px;
   margin: 0;
   color: #898294;
   font-size: 0.74rem;
   line-height: 1.5;
+}
+
+.landing-download > p a {
+  color: #bc99ef;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.landing-download > p a:hover {
+  color: #e2ceff;
 }
 
 .landing-trust {

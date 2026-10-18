@@ -19,26 +19,15 @@
   <a href="./LICENSE">MIT License</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/TiviHub/TiviHub/actions/workflows/ci.yml"><img alt="Build status" src="https://github.com/TiviHub/TiviHub/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/TiviHub/TiviHub/actions/workflows/release.yml"><img alt="Release workflow status" src="https://github.com/TiviHub/TiviHub/actions/workflows/release.yml/badge.svg?event=push"></a>
+  <a href="https://github.com/TiviHub/TiviHub/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/TiviHub/TiviHub?display_name=tag"></a>
+</p>
+
 TiviHub brings the media sources you configure into one desktop library. Browse live channels and guide data, movies, series, and episodes, then keep favorites and playback progress together on your device.
 
 TiviHub is a player and organizer, not a content service. It does not provide playlists, channels, streams, or media. You bring sources you are authorized to use.
-
-## Screenshots
-
-<table>
-  <tr>
-    <td width="33%" align="center"><a href="./docs/readme-screenshots/home.png"><img src="./docs/readme-screenshots/home.png" alt="TiviHub Home screen with the prompt to add a source" width="100%"></a></td>
-    <td width="33%" align="center"><a href="./docs/readme-screenshots/live-tv.png"><img src="./docs/readme-screenshots/live-tv.png" alt="TiviHub Live TV screen showing the empty state when no source is connected" width="100%"></a></td>
-    <td width="33%" align="center"><a href="./docs/readme-screenshots/settings.png"><img src="./docs/readme-screenshots/settings.png" alt="TiviHub Settings screen showing appearance and source options" width="100%"></a></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Home</strong></td>
-    <td align="center"><strong>Live TV</strong></td>
-    <td align="center"><strong>Settings</strong></td>
-  </tr>
-</table>
-
-<p align="center"><sub>Real app screenshots captured with no source connected; no playlist or provider data is shown.</sub></p>
 
 ## What you can do
 
@@ -50,15 +39,13 @@ TiviHub is a player and organizer, not a content service. It does not provide pl
 - **Make it yours:** Choose a light, dark, or system theme.
 - **Back up your data:** Export and restore an encrypted backup when moving to another device.
 
-Playback supports compatible HLS and DASH streams. Whether a particular stream works depends on your provider, authorization, network, CORS policy, codecs, and Windows WebView2.
+Playback supports compatible HLS and DASH streams. Whether a particular stream works depends on your provider, authorization, network, CORS policy, and the platform's media runtime and codecs (WebView2 on Windows).
 
 ## Download
 
 **[Download the latest TiviHub for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe)**
 
-The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
-
-The release pipeline publishes Linux (x64 AppImage and .deb) and macOS (arm64 and x64 .dmg) packages alongside the Windows installer. The additional builds are unsigned and have not been runtime-tested by the maintainers. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) for available installers and release notes.
+v1.4.0 includes the Windows 10/11 x64 installer, Linux x64 AppImage and `.deb` packages, and macOS arm64 and x64 `.dmg` packages. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) to choose a package and read the release notes.
 
 ## Privacy and local data
 
@@ -80,7 +67,7 @@ You are responsible for using sources and content you are authorized to access a
 
 ## Open source and contributions
 
-The source code is public so you can inspect how TiviHub works. **You do not need to build it yourself to use the app**—download the Windows installer above.
+The source code is public so you can inspect how TiviHub works. **You do not need to build it yourself to use the app**—download the package for your platform from [GitHub Releases](https://github.com/TiviHub/TiviHub/releases).
 
 Suggestions, bug reports, and code contributions are welcome. Open an issue to discuss a change or submit a pull request. See [CONTRIBUTING.md](./CONTRIBUTING.md) for contributor guidance and [SECURITY.md](./SECURITY.md) for reporting security issues privately.
 

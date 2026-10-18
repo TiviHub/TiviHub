@@ -39,7 +39,7 @@ const faqItems: { question: string; answer: string; category: Exclude<FaqCategor
   },
   {
     question: "Which sources and media formats can I use?",
-    answer: "TiviHub supports M3U files and URLs, plus Xtream-compatible sources. Playback includes supported HLS and DASH streams. Whether a particular stream works depends on your provider, authorization, network, codecs, and Windows WebView2.",
+    answer: "TiviHub supports M3U files and URLs, plus Xtream-compatible sources. Playback includes supported HLS and DASH streams. Whether a particular stream works depends on your provider, authorization, network, and the platform's media runtime and codecs (WebView2 on Windows).",
     category: "Getting started",
   },
   {
@@ -54,7 +54,7 @@ const faqItems: { question: string; answer: string; category: Exclude<FaqCategor
   },
   {
     question: "Which devices can run TiviHub?",
-    answer: "The current installer is for 64-bit Windows 10 and Windows 11. It uses the system WebView2 runtime. Linux is not released yet, and macOS is not currently targeted.",
+    answer: "Release packages are available for Windows 10/11 (x64), Linux (x64 AppImage and .deb), and macOS (arm64 and x64 .dmg). The Windows app uses the system WebView2 runtime.",
     category: "Compatibility",
   },
   {
@@ -64,13 +64,14 @@ const faqItems: { question: string; answer: string; category: Exclude<FaqCategor
   },
   {
     question: "How do I install an update?",
-    answer: "When a newer release is available, choose the update button at the bottom of the app's sidebar to open its GitHub release page. Download the Windows installer and run it over your existing installation. You do not need to uninstall first; keep a backup of important local data.",
+    answer: "When a newer release is available, choose the update button at the bottom of the app's sidebar or visit GitHub Releases. Download the package for your platform and follow your operating system's installation prompts. Keep a backup of important local data.",
     category: "Updates",
   },
 ];
 
 export default function LandingPage() {
   const windowsDownloadUrl = "https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe";
+  const releasesUrl = "https://github.com/TiviHub/TiviHub/releases/latest";
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<FaqCategory>("All");
   const filteredFaq = useMemo(() => {
@@ -118,21 +119,24 @@ export default function LandingPage() {
               Bring your own authorized sources. Keep your library on your device.
             </p>
             <div className="landing-download" id="download">
-              {windowsDownloadUrl ? (
-                <a className="landing-download-button" href={windowsDownloadUrl}>
-                  <LandingIcon name="download" />
-                  <span>Download for Windows</span>
-                  <LandingIcon name="arrow_forward" />
-                </a>
-              ) : (
-                <button className="landing-download-button" disabled type="button">
-                  <LandingIcon name="download" />
-                  <span>Windows installer coming soon</span>
-                </button>
-              )}
+              <div className="landing-download-actions">
+                {windowsDownloadUrl ? (
+                  <a className="landing-download-button" href={windowsDownloadUrl}>
+                    <LandingIcon name="download" />
+                    <span>Download for Windows</span>
+                    <LandingIcon name="arrow_forward" />
+                  </a>
+                ) : (
+                  <button className="landing-download-button" disabled type="button">
+                    <LandingIcon name="download" />
+                    <span>Windows installer coming soon</span>
+                  </button>
+                )}
+                <a className="landing-all-platforms" href={releasesUrl}>All platforms</a>
+              </div>
               <p>
                 {windowsDownloadUrl
-                  ? "For Windows 10 and 11 · Installer"
+                  ? "Windows 10/11 · Linux x64 · macOS arm64/x64."
                   : "Windows installer is being prepared. Linux may follow after playback testing."}
               </p>
             </div>
