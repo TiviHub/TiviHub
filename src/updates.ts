@@ -20,7 +20,7 @@ interface ReleaseInfo {
 
 export interface AvailableUpdate {
   version: string;
-  releaseUrl: string;
+  installerUrl: string;
 }
 
 const semanticVersionPattern =
@@ -130,7 +130,12 @@ export function latestAvailableUpdate(
       compareVersions(parseVersion(right.version)!, parseVersion(left.version)!));
 
   const latest = candidates[0];
-  return latest ? { version: latest.version, releaseUrl: latest.url } : null;
+  return latest
+    ? {
+      version: latest.version,
+      installerUrl: `https://github.com/TiviHub/TiviHub/releases/download/${latest.tag}/${INSTALLER_ASSET_NAME}`,
+    }
+    : null;
 }
 
 export async function checkForUpdate(

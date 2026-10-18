@@ -21,7 +21,7 @@ describe("GitHub release updates", () => {
       release("v1.0.1"),
     ], "1.0.0")).toEqual({
       version: "1.0.2",
-      releaseUrl: "https://github.com/TiviHub/TiviHub/releases/tag/v1.0.2",
+      installerUrl: "https://github.com/TiviHub/TiviHub/releases/download/v1.0.2/TiviHub-setup.exe",
     });
   });
 

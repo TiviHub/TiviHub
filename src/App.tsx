@@ -173,9 +173,9 @@ function App() {
   async function openAvailableUpdate() {
     if (!availableUpdate) return;
     try {
-      await openUrl(availableUpdate.releaseUrl);
+      await openUrl(availableUpdate.installerUrl);
     } catch (cause) {
-      console.error("Could not open the TiviHub GitHub release page", cause);
+      console.error("Could not open the TiviHub installer download", cause);
       setUpdateStatus("error");
     }
   }
@@ -231,6 +231,20 @@ function App() {
 
   useEffect(() => {
     if (!isDesktopApp) return;
+    if (import.meta.env.DEV) {
+      try {
+        if (window.localStorage.getItem("tivihub.debug.simulate-update") === "true") {
+          setAvailableUpdate({
+            version: `${webPackage.version}-simulated`,
+            installerUrl: "https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe",
+          });
+          setUpdateStatus("available");
+          return;
+        }
+      } catch (cause) {
+        console.error("Could not read the TiviHub update simulation setting", cause);
+      }
+    }
     void checkUpdates();
     const timer = window.setInterval(() => void checkUpdates(), 6 * 60 * 60 * 1000);
     return () => {
@@ -1205,7 +1219,7 @@ function App() {
                       : updateStatus === "available" && availableUpdate
                         ? `Update available · v${availableUpdate.version}`
                         : updateStatus === "error"
-                          ? "Update check failed · Retry"
+                          ? `${availableUpdate ? "Could not open installer" : "Update check failed"} · Retry`
                           : "Check for updates"}
                 </span>
                 {availableUpdate && <Icon name="download" />}
