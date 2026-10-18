@@ -33,9 +33,13 @@ jobs:
             echo "Release notes file is missing: $notes" >&2
             exit 1
           fi
-          flags=""
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags="--prerelease"; fi
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "TiviHub $GITHUB_REF_NAME" --notes-file "$notes" $flags
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release already exists; refreshing its assets."
+          else
+            flags=""
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags="--prerelease"; fi
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "TiviHub $GITHUB_REF_NAME" --notes-file "$notes" $flags
+          fi
 
   windows:
     name: Build Windows installer
@@ -134,8 +138,20 @@ jobs:
     needs: [windows, unix]
     runs-on: ubuntu-latest
     steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: |
+          tag="$GITHUB_REF_NAME"
+          notes="docs/releases/$tag.md"
+          gh release edit "$tag" --title "TiviHub $tag" --notes-file "$notes"
+          is_draft=$(gh release view "$tag" --json isDraft --jq .isDraft)
+          if [ "$is_draft" = "true" ]; then
+            gh release edit "$tag" --draft=false
+          else
+            echo "Release is already published."
+          fi

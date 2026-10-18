@@ -58,7 +58,7 @@ Playback supports compatible HLS and DASH streams. Whether a particular stream w
 
 The installer is unsigned; Windows may show an unknown-publisher or SmartScreen warning.
 
-Release builds are also published for Linux (x64 AppImage and .deb) and macOS (arm64 and x64 .dmg); these builds are unsigned and untested by the maintainers. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) for the current installer and release notes.
+The release pipeline publishes Linux (x64 AppImage and .deb) and macOS (arm64 and x64 .dmg) packages alongside the Windows installer. The additional builds are unsigned and have not been runtime-tested by the maintainers. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) for available installers and release notes.
 
 ## Privacy and local data
 
