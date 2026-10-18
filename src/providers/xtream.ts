@@ -15,7 +15,7 @@ interface XtreamPayload {
 
 const MAX_XTREAM_RESPONSE_BYTES = 200 * 1024 * 1024;
 const MAX_SHORT_EPG_RESPONSE_BYTES = 512 * 1024;
-const MAX_SHORT_EPG_CHANNELS = 96;
+export const XTREAM_SHORT_EPG_CHANNEL_BATCH_SIZE = 96;
 const SHORT_EPG_PROGRAMS_PER_CHANNEL = 3;
 const SHORT_EPG_CONCURRENCY = 4;
 
@@ -433,8 +433,8 @@ export async function loadXtreamShortEpg(
   channels: LiveChannel[],
   signal?: AbortSignal,
 ): Promise<XtreamShortEpgResult> {
-  if (channels.length > MAX_SHORT_EPG_CHANNELS) {
-    throw new Error(`Request guide data for no more than ${MAX_SHORT_EPG_CHANNELS} channels at a time.`);
+  if (channels.length > XTREAM_SHORT_EPG_CHANNEL_BATCH_SIZE) {
+    throw new Error(`Request guide data for no more than ${XTREAM_SHORT_EPG_CHANNEL_BATCH_SIZE} channels at a time.`);
   }
 
   const withProviderIds = channels.flatMap((channel) =>

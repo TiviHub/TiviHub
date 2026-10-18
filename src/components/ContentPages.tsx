@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { isAdultContent } from "../adultContent";
 import type {
   EpgProgram,
@@ -11,13 +11,12 @@ import type {
   Series,
 } from "../types";
 import { sortCatalogItems, topCatalogItems, type CatalogSort } from "../catalogSorting";
+import { LiveGuide } from "./LiveGuide";
 import { HorizontalDragTrack, Icon } from "./common";
 
 type CatalogSection = "Live TV" | "Movies" | "Series";
 type CatalogItem = LiveChannel | Movie | Series;
 type FeaturedCatalogItem = Movie | Series;
-
-const recentItemsCache = new WeakMap<FeaturedCatalogItem[], Map<string, FeaturedCatalogItem[]>>();
 
 function titleOf(item: CatalogItem): string {
   return item.name;
@@ -31,27 +30,18 @@ function artworkOf(item: CatalogItem): string | undefined {
   return "group" in item ? item.logoUrl : item.posterUrl;
 }
 
-function getRecentItemsByCategory(catalog: FeaturedCatalogItem[]): Map<string, FeaturedCatalogItem[]> {
-  const cached = recentItemsCache.get(catalog);
-  if (cached) return cached;
-
-  const catalogsByCategory = new Map<string, FeaturedCatalogItem[]>([["All", catalog]]);
-  for (const item of catalog) {
-    const category = categoryOf(item);
-    if (category === "All" || category === "Uncategorized") continue;
-    const categoryCatalog = catalogsByCategory.get(category);
-    if (categoryCatalog) categoryCatalog.push(item);
-    else catalogsByCategory.set(category, [item]);
-  }
-
-  const recentItemsByCategory = new Map<string, FeaturedCatalogItem[]>();
-  for (const [category, items] of catalogsByCategory) {
-    const recent = topCatalogItems(items, "added", 5);
-    if (recent.length > 0) recentItemsByCategory.set(category, recent);
-  }
-
-  recentItemsCache.set(catalog, recentItemsByCategory);
-  return recentItemsByCategory;
+function playableChannel(channel: LiveChannel): PlayableItem {
+  return {
+    id: channel.id,
+    playlistId: channel.playlistId,
+    contentType: "LIVE",
+    title: channel.name,
+    streamUrl: channel.streamUrl,
+    artworkUrl: channel.logoUrl,
+    drmLicenseUrl: channel.drmLicenseUrl,
+    drmSystem: channel.drmSystem,
+    live: true,
+  };
 }
 
 function CatalogCard({
@@ -132,119 +122,6 @@ function CatalogCard({
   );
 }
 
-function GuideRow({
-  channel,
-  programs,
-  currentProgram,
-  favorite,
-  onPlay,
-  onFavorite,
-}: {
-  channel: LiveChannel;
-  programs: EpgProgram[];
-  currentProgram?: EpgProgram;
-  favorite: boolean;
-  onPlay: () => void;
-  onFavorite: () => void;
-}) {
-  const drag = useRef<{
-    pointerId: number;
-    startX: number;
-    startScrollLeft: number;
-    moved: boolean;
-  } | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const now = Date.now();
-  const upcoming = programs.filter((program) => program.endMillis > now);
-
-  function finishDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const activeDrag = drag.current;
-    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
-    drag.current = null;
-    setDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  }
-
-  return (
-    <article className="guide-row">
-      <div className="guide-channel">
-        <span className="guide-channel-art">
-          {channel.logoUrl ? (
-            <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={channel.logoUrl} />
-          ) : <Icon name="live_tv" />}
-        </span>
-        <span><strong>{channel.name}</strong><small>{channel.group}</small></span>
-        <button
-          aria-label={favorite ? `Remove ${channel.name} from favorites` : `Add ${channel.name} to favorites`}
-          aria-pressed={favorite}
-          className={`favorite-button guide-favorite${favorite ? " selected" : ""}`}
-          onClick={onFavorite}
-          type="button"
-        >
-          <Icon name={favorite ? "favorite" : "favorite_border"} />
-        </button>
-      </div>
-      <div
-        aria-label={`Upcoming programs for ${channel.name}`}
-        className={`guide-programs${dragging ? " is-dragging" : ""}`}
-        onPointerCancel={finishDrag}
-        onPointerDown={(event) => {
-          if (event.pointerType !== "mouse" || event.button !== 0) return;
-          drag.current = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startScrollLeft: event.currentTarget.scrollLeft,
-            moved: false,
-          };
-        }}
-        onPointerMove={(event) => {
-          const activeDrag = drag.current;
-          if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
-          const offset = event.clientX - activeDrag.startX;
-          if (!activeDrag.moved && Math.abs(offset) > 5) {
-            activeDrag.moved = true;
-            setDragging(true);
-            event.currentTarget.setPointerCapture(event.pointerId);
-          }
-          if (activeDrag.moved) {
-            event.preventDefault();
-            event.currentTarget.scrollLeft = activeDrag.startScrollLeft - offset;
-          }
-        }}
-        onPointerUp={finishDrag}
-        role="region"
-        tabIndex={0}
-      >
-        {upcoming.length === 0 ? (
-          <p className="guide-no-programs">No upcoming programme data.</p>
-        ) : upcoming.map((program) => {
-          const isCurrent = program.id === currentProgram?.id;
-          const progress = isCurrent
-            ? Math.max(0, Math.min(100, (now - program.startMillis) / (program.endMillis - program.startMillis) * 100))
-            : 0;
-          return (
-            <div className={`guide-program${isCurrent ? " current" : ""}`} key={program.id}>
-              <time dateTime={new Date(program.startMillis).toISOString()}>
-                {new Date(program.startMillis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </time>
-              <span>
-                <strong title={program.title}>{program.title}</strong>
-                {program.synopsis && <small title={program.synopsis}>{program.synopsis}</small>}
-                {isCurrent && <span className="guide-progress"><span style={{ width: `${progress}%` }} /></span>}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <button className="guide-play-button" onClick={onPlay} type="button">
-        <Icon name="play_arrow" /><span>Watch</span>
-      </button>
-    </article>
-  );
-}
-
 export function CatalogPage({
   section,
   channels,
@@ -262,6 +139,9 @@ export function CatalogPage({
   onToggleFavorite,
   onAddToLibrary,
   onCheckStreamGroup,
+  livePlayer,
+  livePlaybackItemId,
+  livePlayerMini = false,
 }: {
   section: CatalogSection;
   channels: LiveChannel[];
@@ -279,16 +159,24 @@ export function CatalogPage({
   onToggleFavorite: (item: CatalogItem, contentType: "LIVE" | "MOVIE" | "SERIES") => void;
   onAddToLibrary: (item: CatalogItem, contentType: "MOVIE" | "SERIES") => void;
   onCheckStreamGroup?: (channels: LiveChannel[], groupName: string) => void;
+  livePlayer?: ReactNode;
+  livePlaybackItemId?: string;
+  livePlayerMini?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [sort, setSort] = useState<CatalogSort>("added");
   const [isSorting, startSortTransition] = useTransition();
-  const [liveView, setLiveView] = useState<"Channels" | "Guide">("Channels");
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [showFullGuide, setShowFullGuide] = useState(false);
+  const [guidePlayerCollapsed, setGuidePlayerCollapsed] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(24);
   const deferredQuery = useDeferredValue(query);
   useEffect(() => setPage(1), [section]);
+  useEffect(() => {
+    if (livePlayerMini) setShowFullGuide(false);
+  }, [livePlayerMini]);
   const items = section === "Live TV" ? channels : section === "Movies" ? movies : series;
   const selectedGroupChannels = section === "Live TV" && category !== "All"
     ? channels.filter((channel) => channel.group === category)
@@ -349,7 +237,11 @@ export function CatalogPage({
       .map(({ item }) => item);
   }, [category, deferredQuery, searchableItems]);
   const recentlyAdded = section === "Movies" || section === "Series"
-    ? getRecentItemsByCategory(section === "Movies" ? movies : series).get(category) ?? []
+    ? topCatalogItems(
+      filtered.filter((item): item is FeaturedCatalogItem => !("group" in item)),
+      "added",
+      5,
+    )
     : [];
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -357,15 +249,23 @@ export function CatalogPage({
   const guideChannels = section === "Live TV"
     ? paginatedItems.filter((item): item is LiveChannel => "group" in item)
     : [];
-  const guideChannelKey = guideChannels.map((channel) => channel.id).join("|");
+  const selectedChannel = guideChannels.find((channel) => channel.id === selectedChannelId)
+    ?? channels.find((channel) => channel.id === livePlaybackItemId)
+    ?? guideChannels[0];
+  const selectedChannelPrograms = selectedChannel
+    ? guideByChannel.get(selectedChannel.tvgId || selectedChannel.id) ?? []
+    : [];
+  const guideChannelsToLoad = selectedChannel && !guideChannels.some((channel) => channel.id === selectedChannel.id)
+    ? [...guideChannels, selectedChannel]
+    : guideChannels;
+  const guideChannelKey = guideChannelsToLoad.map((channel) => channel.id).join("|");
   const onLoadGuideRef = useRef(onLoadGuideForChannels);
   onLoadGuideRef.current = onLoadGuideForChannels;
   useEffect(() => {
-    if (guideChannels.length > 0) onLoadGuideRef.current(guideChannels);
+    if (guideChannelsToLoad.length > 0) onLoadGuideRef.current(guideChannelsToLoad);
   }, [guideChannelKey]);
   const firstItem = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const lastItem = Math.min(currentPage * pageSize, filtered.length);
-  const epgForPage = section === "Live TV";
 
   function renderCatalogCard(item: CatalogItem, subtitleOverride?: string) {
     const contentType = "group" in item ? "LIVE" : "streamUrl" in item ? "MOVIE" : "SERIES";
@@ -386,17 +286,8 @@ export function CatalogPage({
         onFavorite={() => onToggleFavorite(item, contentType)}
         onOpen={() => {
           if ("group" in item) {
-            onPlay({
-              id: item.id,
-              playlistId: item.playlistId,
-              contentType: "LIVE",
-              title: item.name,
-              streamUrl: item.streamUrl,
-              artworkUrl: item.logoUrl,
-              drmLicenseUrl: item.drmLicenseUrl,
-              drmSystem: item.drmSystem,
-              live: true,
-            });
+            setSelectedChannelId(item.id);
+            onPlay(playableChannel(item));
           } else if ("streamUrl" in item) {
             onOpenMovie(item);
           } else {
@@ -410,7 +301,7 @@ export function CatalogPage({
   }
 
   return (
-    <section className="catalog-page">
+    <section className={`catalog-page${livePlayerMini ? " live-tv-mini-page" : ""}`}>
       <header className="page-intro catalog-intro">
         <div>
           <p className="eyebrow">{section === "Live TV" ? "ON AIR / CHANNELS" : section === "Movies" ? "YOUR CINEMA" : "THE NEXT EPISODE"}</p>
@@ -418,24 +309,6 @@ export function CatalogPage({
           <p>{items.length.toLocaleString()} {section === "Live TV" ? "channels" : section.toLowerCase()} in this source</p>
         </div>
         <div className="catalog-controls">
-          {section === "Live TV" && (
-            <div className="catalog-view-switch" role="group" aria-label="Live TV view">
-              {(["Channels", "Guide"] as const).map((value) => (
-                <button
-                  aria-pressed={liveView === value}
-                  className={liveView === value ? "active" : ""}
-                  key={value}
-                  onClick={() => {
-                    setLiveView(value);
-                    setPage(1);
-                  }}
-                  type="button"
-                >
-                  <Icon name={value === "Guide" ? "schedule" : "live_tv"} /><span>{value}</span>
-                </button>
-              ))}
-            </div>
-          )}
           <label className="search-field">
             <Icon name="search" />
             <span className="sr-only">Search {section}</span>
@@ -495,6 +368,17 @@ export function CatalogPage({
               <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
             </label>
           )}
+          {section === "Live TV" && channels.length > 0 && (
+            <button
+              aria-expanded={showFullGuide}
+              className="secondary-button live-guide-open-button"
+              onClick={() => setShowFullGuide((open) => !open)}
+              type="button"
+            >
+              <Icon name="schedule" />
+              {showFullGuide ? "Close guide" : "Full TV guide"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -537,51 +421,183 @@ export function CatalogPage({
           <h2>No matches</h2>
           <p>Try another title or category.</p>
         </div>
-      ) : section === "Live TV" && liveView === "Guide" ? (
-        epg.length === 0 ? (
-          <div className="catalog-empty compact-empty">
-            <div className="empty-icon"><Icon name="schedule" /></div>
-            <h2>{guideLoading ? "Loading TV guide…" : "TV guide not loaded"}</h2>
-            <p>{guideLoading
-              ? "Fetching recent programmes for the channels on this page."
-              : "Xtream guide data loads a page at a time when supported. You can also add a smaller XMLTV guide URL in Settings."}</p>
+      ) : section === "Live TV" ? (
+        <div className={`live-tv-layout${showFullGuide ? ` is-full-guide${guidePlayerCollapsed ? " player-collapsed" : ""}` : ""}`}>
+          <aside aria-label="Live TV channels" className="live-channel-sidebar">
+            <div className="live-channel-sidebar-heading">
+              <h2>Channels</h2>
+              <span>{filtered.length.toLocaleString()}</span>
+            </div>
+            <div className="live-channel-list" role="list">
+              {guideChannels.map((channel) => {
+                const current = currentByChannel.get(channel.tvgId || channel.id);
+                const isSelected = selectedChannel?.id === channel.id;
+                const isFavorite = favoriteIds.has(channel.id);
+                return (
+                  <article className={`live-channel-list-item${isSelected ? " selected" : ""}`} key={channel.id} role="listitem">
+                    <button
+                      aria-pressed={isSelected}
+                      className="live-channel-select"
+                      onClick={() => {
+                        setSelectedChannelId(channel.id);
+                        onPlay(playableChannel(channel));
+                      }}
+                      type="button"
+                    >
+                      <span className="live-channel-list-art">
+                        {channel.logoUrl ? (
+                          <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={channel.logoUrl} />
+                        ) : <Icon name="live_tv" />}
+                      </span>
+                      <span className="live-channel-list-copy">
+                        <strong title={channel.name}>{channel.name}</strong>
+                        <small title={channel.group}>{channel.group}</small>
+                        {current && <small className="live-channel-current-program" title={current.title}>{current.title}</small>}
+                      </span>
+                      {livePlaybackItemId === channel.id && <span aria-label="Playing" className="live-channel-playing"><Icon name="play_arrow" /></span>}
+                    </button>
+                    <button
+                      aria-label={isFavorite ? `Remove ${channel.name} from favorites` : `Add ${channel.name} to favorites`}
+                      aria-pressed={isFavorite}
+                      className={`live-channel-favorite${isFavorite ? " selected" : ""}`}
+                      onClick={() => onToggleFavorite(channel, "LIVE")}
+                      type="button"
+                    >
+                      <Icon name={isFavorite ? "favorite" : "favorite_border"} />
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+            {pageCount > 1 && (
+              <nav aria-label="Channel pages" className="live-channel-pagination">
+                <label className="live-channel-page-size">
+                  <span className="sr-only">Channels per page</span>
+                  <select
+                    onChange={(event) => {
+                      setPageSize(Number(event.target.value));
+                      setPage(1);
+                    }}
+                    value={pageSize}
+                  >
+                    {[12, 24, 48, 96].map((size) => <option key={size} value={size}>{size}</option>)}
+                  </select>
+                </label>
+                <span>Page <strong>{currentPage}</strong> / <strong>{pageCount}</strong></span>
+                <div>
+                  <button
+                    aria-label="Previous channel page"
+                    disabled={currentPage === 1}
+                    onClick={() => setPage(currentPage - 1)}
+                    type="button"
+                  >
+                    <Icon name="chevron_left" />
+                  </button>
+                  <button
+                    aria-label="Next channel page"
+                    disabled={currentPage === pageCount}
+                    onClick={() => setPage(currentPage + 1)}
+                    type="button"
+                  >
+                    <Icon name="chevron_right" />
+                  </button>
+                </div>
+              </nav>
+            )}
+          </aside>
+          <div className="live-tv-main">
+            <section aria-label="Live player" className={`live-tv-player${livePlayer ? " has-live-player" : ""}`}>
+              {livePlayer ?? (
+                <div className="live-player-empty">
+                  <div className="live-player-empty-art">
+                    {selectedChannel?.logoUrl ? (
+                      <img alt="" src={selectedChannel.logoUrl} />
+                    ) : <Icon name="live_tv" />}
+                  </div>
+                  <p className="eyebrow">READY TO WATCH</p>
+                  <h2>{selectedChannel?.name ?? "Choose a channel"}</h2>
+                  <p>Select a channel to start its live stream.</p>
+                  {selectedChannel && (
+                    <button className="primary-button" onClick={() => onPlay(playableChannel(selectedChannel))} type="button">
+                      <Icon name="play_arrow" /> Watch live
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+            {!showFullGuide && (
+              <section
+                aria-label={`TV guide${selectedChannel ? ` for ${selectedChannel.name}` : ""}`}
+                className="live-tv-guide"
+              >
+                <header className="live-tv-guide-heading">
+                  <div>
+                    <p className="eyebrow">WHAT'S ON</p>
+                    <h2>TV Guide</h2>
+                  </div>
+                  {selectedChannel && <span title={selectedChannel.name}>{selectedChannel.name}</span>}
+                </header>
+                {!selectedChannel ? (
+                  <div className="live-guide-empty">Select a channel to see its listings.</div>
+                ) : selectedChannelPrograms.length === 0 ? (
+                  <div aria-live="polite" className="live-guide-empty">
+                    {guideLoading ? "Loading guide for this channel…" : "No TV guide listings are available for this channel."}
+                  </div>
+                ) : (
+                  <div className="live-tv-program-list">
+                    {selectedChannelPrograms.slice(0, 8).map((program) => {
+                      const isCurrent = currentByChannel.get(selectedChannel.tvgId || selectedChannel.id)?.id === program.id;
+                      const progress = isCurrent
+                        ? Math.max(0, Math.min(100, ((Date.now() - program.startMillis) / (program.endMillis - program.startMillis)) * 100))
+                        : 0;
+                      return (
+                        <article className={`live-tv-program${isCurrent ? " current" : ""}`} key={program.id}>
+                          <time dateTime={new Date(program.startMillis).toISOString()}>
+                            {new Date(program.startMillis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </time>
+                          <div>
+                            <strong title={program.title}>{program.title}</strong>
+                            {program.synopsis && <small title={program.synopsis}>{program.synopsis}</small>}
+                            {isCurrent && (
+                              <span aria-label={`${Math.round(progress)}% complete`} className="live-tv-program-progress">
+                                <span style={{ width: `${progress}%` }} />
+                              </span>
+                            )}
+                          </div>
+                          {isCurrent && <span className="live-tv-program-on-air">ON AIR</span>}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
           </div>
-        ) : (
-          <div className="guide-list">
-            {paginatedItems.map((item) => {
-              if (!("group" in item)) return null;
-              const programs = guideByChannel.get(item.tvgId || item.id) ?? [];
-              const current = currentByChannel.get(item.tvgId || item.id);
-              return (
-                <GuideRow
-                  channel={item}
-                  currentProgram={current}
-                  favorite={favoriteIds.has(item.id)}
-                  key={item.id}
-                  onFavorite={() => onToggleFavorite(item, "LIVE")}
-                  onPlay={() => onPlay({
-                    id: item.id,
-                    playlistId: item.playlistId,
-                    contentType: "LIVE",
-                    title: item.name,
-                    streamUrl: item.streamUrl,
-                    artworkUrl: item.logoUrl,
-                    drmLicenseUrl: item.drmLicenseUrl,
-                    drmSystem: item.drmSystem,
-                    live: true,
-                  })}
-                  programs={programs}
-                />
-              );
-            })}
-          </div>
-        )
+          {showFullGuide && (
+            <LiveGuide
+              activeChannelId={livePlaybackItemId}
+              channels={channels}
+              epg={epg}
+              favoriteIds={favoriteIds}
+              loading={guideLoading}
+              onClose={() => setShowFullGuide(false)}
+              onLoadGuideForChannels={onLoadGuideForChannels}
+              onPlay={(channel) => {
+                setSelectedChannelId(channel.id);
+                onPlay(playableChannel(channel));
+              }}
+              onTogglePlayer={() => setGuidePlayerCollapsed((collapsed) => !collapsed)}
+              playerCollapsed={guidePlayerCollapsed}
+              selectedChannelId={selectedChannel?.id}
+            />
+          )}
+        </div>
       ) : (
-        <div className={`catalog-grid${epgForPage ? " channel-grid" : ""}`}>
+        <div className="catalog-grid">
           {paginatedItems.map((item) => renderCatalogCard(item))}
         </div>
       )}
-      {filtered.length > 0 && !(section === "Live TV" && liveView === "Guide" && epg.length === 0) && (
+      {filtered.length > 0 && section !== "Live TV" && (
         <nav aria-label={`${section} pagination`} className="catalog-pagination">
           <p className="pagination-range">
             Showing <strong>{firstItem.toLocaleString()}–{lastItem.toLocaleString()}</strong> of {filtered.length.toLocaleString()}
@@ -860,6 +876,23 @@ export function LibraryPage({
   const watched = library.filter((item) => item.status === "WATCHED").sort((a, b) => b.updatedAt - a.updatedAt);
   const content = tab === "Continue watching" ? watching : tab === "Watchlist" ? watchlist : tab === "Watched" ? watched : [];
 
+  function playLibraryItem(item: LibraryItem) {
+    if (!item.streamUrl) return;
+    onPlay({
+      id: item.contentId,
+      playlistId: item.playlistId,
+      contentType: item.contentType,
+      title: item.title,
+      streamUrl: item.streamUrl,
+      artworkUrl: item.artworkUrl,
+      live: item.contentType === "LIVE",
+      drmLicenseUrl: item.drmLicenseUrl,
+      drmSystem: item.drmSystem,
+      parentId: item.parentId,
+      parentTitle: item.parentTitle,
+    }, item.positionMillis);
+  }
+
   return (
     <section className="library-page">
       <header className="page-intro">
@@ -918,23 +951,23 @@ export function LibraryPage({
       ) : (
         <div className="library-items">
           {content.map((item) => (
-            <article className="library-item" key={item.id}>
-              {item.artworkUrl
-                ? <img alt="" loading="lazy" src={item.artworkUrl} />
-                : <span className="favorite-art-placeholder"><Icon name="movie" /></span>}
-              <button className="library-item-main" onClick={() => item.streamUrl && onPlay({
-                id: item.contentId,
-                playlistId: item.playlistId,
-                contentType: item.contentType,
-                title: item.title,
-                streamUrl: item.streamUrl,
-                artworkUrl: item.artworkUrl,
-                live: item.contentType === "LIVE",
-                drmLicenseUrl: item.drmLicenseUrl,
-                drmSystem: item.drmSystem,
-                parentId: item.parentId,
-                parentTitle: item.parentTitle,
-              }, item.positionMillis)} type="button">
+            <article className={`library-item${item.contentType === "LIVE" ? " live-library-item" : ""}`} key={item.id}>
+              <button
+                aria-label={`Resume ${item.title}`}
+                className="library-item-art"
+                disabled={!item.streamUrl}
+                onClick={() => playLibraryItem(item)}
+                type="button"
+              >
+                <span className="library-item-art-fallback">
+                  <Icon name={item.contentType === "LIVE" ? "live_tv" : "movie"} />
+                </span>
+                {item.artworkUrl && (
+                  <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={item.artworkUrl} />
+                )}
+                <span aria-hidden="true" className="library-item-art-play"><Icon name="play_arrow" /></span>
+              </button>
+              <button className="library-item-main" disabled={!item.streamUrl} onClick={() => playLibraryItem(item)} type="button">
                 <strong>{item.title}</strong>
                 {item.parentTitle && <small>{item.parentTitle}</small>}
                 {item.durationMillis > 0 && (

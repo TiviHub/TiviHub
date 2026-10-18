@@ -6,10 +6,10 @@ import { downloadOpenSubtitle, searchOpenSubtitles, type SubtitleResult } from "
 import { playbackErrorMessage } from "../playbackErrors";
 import {
   browserSummary,
-  canUseNativeHlsFallback,
   createPlaybackDiagnosticReport,
   inspectPlaybackCapabilities,
   playbackDiagnosticError,
+  shouldAttemptNativeHlsFallback,
   type BackendDiagnosticEvent,
   type PlaybackDiagnosticFailure,
   type PlaybackPath,
@@ -17,6 +17,7 @@ import {
 import { Icon } from "./common";
 
 const MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
+const NATIVE_TRACK_EVENTS = ["addtrack", "removetrack", "change", "labelchange"] as const;
 
 interface TextTrackOption {
   id: number;
@@ -32,13 +33,25 @@ interface ShakaTextTrack {
   active: boolean;
 }
 
+interface ShakaVariantTrack {
+  id: number;
+  active: boolean;
+  language: string;
+  label?: string;
+  audioId?: number;
+  height?: number;
+  bandwidth?: number;
+}
+
 interface ShakaPlayer {
   attach(video: HTMLVideoElement): Promise<unknown>;
   addEventListener(type: string, listener: EventListener): void;
   configure(configuration: object): boolean;
   load(uri: string): Promise<unknown>;
   getTextTracks(): ShakaTextTrack[];
+  getVariantTracks(): ShakaVariantTrack[];
   selectTextTrack(track?: ShakaTextTrack | null): void;
+  selectVariantTrack(track: ShakaVariantTrack, clearBuffer?: boolean, safeMargin?: number): void;
   addTextTrackAsync(
     uri: string,
     language: string,
@@ -98,15 +111,23 @@ function asWebVtt(contents: string): string {
 
 export function PlaybackDialog({
   item,
+  inline = false,
+  mini = false,
   subtitleApiKey,
   resumePositionMillis,
+  onExpand,
   onClose,
+  onStarted,
   onProgress,
 }: {
   item: PlayableItem;
+  inline?: boolean;
+  mini?: boolean;
   subtitleApiKey: string;
   resumePositionMillis: number;
+  onExpand?: () => void;
   onClose: () => void;
+  onStarted?: (item: PlayableItem) => void;
   onProgress: (
     item: PlayableItem,
     positionMillis: number,
@@ -118,6 +139,7 @@ export function PlaybackDialog({
   const playerRef = useRef<ShakaPlayer | null>(null);
   const onProgressRef = useRef(onProgress);
   const onCloseRef = useRef(onClose);
+  const onStartedRef = useRef(onStarted);
   const lastSaveRef = useRef(0);
   const subtitleUrlsRef = useRef<string[]>([]);
   const playbackFailuresRef = useRef<PlaybackDiagnosticFailure[]>([]);
@@ -128,6 +150,14 @@ export function PlaybackDialog({
   const [diagnosticCopyMessage, setDiagnosticCopyMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [tracks, setTracks] = useState<TextTrackOption[]>([]);
+  const [variantTracks, setVariantTracks] = useState<ShakaVariantTrack[]>([]);
+  const [audioLanguages, setAudioLanguages] = useState<{ language: string; label: string }[]>([]);
+  const [selectedAudioLanguage, setSelectedAudioLanguage] = useState("");
+  const [qualityHeights, setQualityHeights] = useState<number[]>([]);
+  const [qualityChoice, setQualityChoice] = useState("auto");
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const nativeTrackIdsRef = useRef(new WeakMap<TextTrack, number>());
+  const nextNativeTrackIdRef = useRef(0);
   const [subtitleQuery, setSubtitleQuery] = useState(item.title);
   const [subtitleResults, setSubtitleResults] = useState<SubtitleResult[]>([]);
   const [subtitleBusy, setSubtitleBusy] = useState(false);
@@ -140,6 +170,7 @@ export function PlaybackDialog({
   const [castingDevice, setCastingDevice] = useState<CastDeviceInfo | null>(null);
   onProgressRef.current = onProgress;
   onCloseRef.current = onClose;
+  onStartedRef.current = onStarted;
 
   function recordPlaybackFailure(path: PlaybackPath, cause: unknown) {
     const failure = { path, ...playbackDiagnosticError(cause) };
@@ -192,6 +223,7 @@ export function PlaybackDialog({
   }
 
   useEffect(() => {
+    if (inline) return;
     const previousFocus = document.activeElement;
     document.querySelector<HTMLButtonElement>(".playback-dialog .icon-button")?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
@@ -202,7 +234,7 @@ export function PlaybackDialog({
       document.removeEventListener("keydown", onKeyDown);
       if (previousFocus instanceof HTMLElement) previousFocus.focus();
     };
-  }, []);
+  }, [inline]);
 
   function syncTracks(player: ShakaPlayer) {
     setTracks(player.getTextTracks().map((track) => ({
@@ -213,15 +245,52 @@ export function PlaybackDialog({
     })));
   }
 
+  function syncVariantTracks(player: ShakaPlayer) {
+    const variants = player.getVariantTracks();
+    setVariantTracks(variants);
+    const languages = new Map<string, { language: string; label: string }>();
+    for (const track of variants) {
+      if (!track.language) continue;
+      const key = track.language;
+      if (!languages.has(key)) {
+        languages.set(key, {
+          language: key,
+          label: track.label || key.toUpperCase(),
+        });
+      }
+    }
+    const availableLanguages = [...languages.values()];
+    setAudioLanguages(availableLanguages);
+    const activeLanguage = variants.find((track) => track.active)?.language;
+    setSelectedAudioLanguage((current) =>
+      availableLanguages.some((track) => track.language === current)
+        ? current
+        : activeLanguage ?? availableLanguages[0]?.language ?? "",
+    );
+    setQualityHeights([...new Set(
+      variants.map((track) => track.height).filter((height): height is number => Boolean(height)),
+    )].sort((left, right) => right - left));
+  }
+
   function syncNativeTracks() {
     const video = videoRef.current;
     if (!video) return;
-    setTracks(Array.from(video.textTracks).map((track, id) => ({
-      id,
-      label: track.label || track.language || "Subtitle",
-      language: track.language,
-      active: track.mode === "showing",
-    })));
+    setTracks(Array.from(video.textTracks)
+      .filter((track) => track.kind === "captions" || track.kind === "subtitles")
+      .map((track) => {
+        let id = nativeTrackIdsRef.current.get(track);
+        if (id === undefined) {
+          id = nextNativeTrackIdRef.current;
+          nextNativeTrackIdRef.current += 1;
+          nativeTrackIdsRef.current.set(track, id);
+        }
+        return {
+          id,
+          label: track.label || track.language || `Subtitle ${id + 1}`,
+          language: track.language,
+          active: track.mode === "showing",
+        };
+      }));
   }
 
   async function persistProgress(watched = false) {
@@ -247,12 +316,29 @@ export function PlaybackDialog({
     playbackFailuresRef.current = [];
     nativeHlsFallbackAttemptedRef.current = false;
     nativeHlsFallbackInProgressRef.current = false;
+    nativeTrackIdsRef.current = new WeakMap();
+    nextNativeTrackIdRef.current = 0;
+    setTracks([]);
+    setVariantTracks([]);
+    setAudioLanguages([]);
+    setSelectedAudioLanguage("");
+    setQualityHeights([]);
+    setQualityChoice("auto");
+    setPlaybackSpeed(1);
     setError(null);
     setDiagnosticCopyMessage(null);
     const videoRefValue = videoRef.current;
     if (!videoRefValue) return;
     const video: HTMLVideoElement = videoRefValue;
+    if (castingDevice) return;
 
+    let liveStartRecorded = false;
+    const onPlaying = () => {
+      if (item.live && !liveStartRecorded) {
+        liveStartRecorded = true;
+        onStartedRef.current?.(item);
+      }
+    };
     const onVideoError = () => {
       if (nativeHlsFallbackInProgressRef.current) return;
       const code = video.error?.code;
@@ -271,12 +357,20 @@ export function PlaybackDialog({
     };
     const onEnded = () => void persistProgress(true);
     const onTrackListChange = () => syncNativeTracks();
+    const onShakaTracksChanged = () => {
+      if (player) {
+        syncTracks(player);
+        syncVariantTracks(player);
+      }
+    };
     video.addEventListener("error", onVideoError);
+    video.addEventListener("playing", onPlaying);
     video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("ended", onEnded);
     video.addEventListener("loadedmetadata", onTrackListChange);
-    video.textTracks.addEventListener("addtrack", onTrackListChange);
-    video.textTracks.addEventListener("change", onTrackListChange);
+    for (const event of NATIVE_TRACK_EVENTS) {
+      video.textTracks.addEventListener(event, onTrackListChange);
+    }
 
     async function fallbackToNativeHls() {
       nativeHlsFallbackAttemptedRef.current = true;
@@ -314,13 +408,12 @@ export function PlaybackDialog({
 
     function handleShakaFailure(cause: unknown) {
       if (nativeHlsFallbackAttemptedRef.current) return;
-      const details = playbackDiagnosticError(cause);
       if (
-        details.code === 4032 &&
-        !item.drmLicenseUrl &&
-        canUseNativeHlsFallback(
+        shouldAttemptNativeHlsFallback(
+          cause,
           item.streamUrl,
           inspectPlaybackCapabilities(video).nativeHlsSupport,
+          Boolean(item.drmLicenseUrl),
         )
       ) {
         recordPlaybackFailure("Shaka Player", cause);
@@ -365,6 +458,7 @@ export function PlaybackDialog({
         player.addEventListener("error", (event: Event) => {
           handleShakaFailure((event as CustomEvent<unknown>).detail);
         });
+        player.addEventListener("trackschanged", onShakaTracksChanged);
         if (item.drmLicenseUrl) {
           const licenseUrl = item.drmLicenseUrl;
           const drmSystem = item.drmSystem;
@@ -392,6 +486,7 @@ export function PlaybackDialog({
           video.currentTime = Math.min(resumePositionMillis / 1000, Math.max(video.duration - 1, 0));
         }
         syncTracks(player);
+        syncVariantTracks(player);
         setStatus("Ready");
       } catch (cause) {
         if (disposed || nativeHlsFallbackAttemptedRef.current) return;
@@ -404,11 +499,13 @@ export function PlaybackDialog({
     return () => {
       disposed = true;
       video.removeEventListener("error", onVideoError);
+      video.removeEventListener("playing", onPlaying);
       video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("ended", onEnded);
       video.removeEventListener("loadedmetadata", onTrackListChange);
-      video.textTracks.removeEventListener("addtrack", onTrackListChange);
-      video.textTracks.removeEventListener("change", onTrackListChange);
+      for (const event of NATIVE_TRACK_EVENTS) {
+        video.textTracks.removeEventListener(event, onTrackListChange);
+      }
       video.querySelectorAll("track[data-tivihub-subtitle]").forEach((track) => track.remove());
       for (const url of subtitleUrlsRef.current) URL.revokeObjectURL(url);
       subtitleUrlsRef.current = [];
@@ -417,7 +514,49 @@ export function PlaybackDialog({
       }
       playerRef.current = null;
     };
-  }, [item.id, item.streamUrl, item.drmLicenseUrl, item.drmSystem, item.drmCertificateUrl, item.live, resumePositionMillis]);
+  }, [item.id, item.streamUrl, item.drmLicenseUrl, item.drmSystem, item.drmCertificateUrl, item.live, resumePositionMillis, castingDevice]);
+
+  function selectQuality(value: string) {
+    const player = playerRef.current;
+    if (!player) return;
+    try {
+      if (value === "auto") {
+        if (!player.configure({ abr: { enabled: true } })) {
+          throw new Error("The streaming player rejected automatic quality selection.");
+        }
+      } else {
+        const height = Number(value);
+        const choices = variantTracks.filter((track) =>
+          track.height === height && (!selectedAudioLanguage || track.language === selectedAudioLanguage),
+        );
+        const track = choices[0] ?? variantTracks.find((candidate) => candidate.height === height);
+        if (!track) throw new Error("That video quality is no longer available.");
+        if (!player.configure({ abr: { enabled: false } })) {
+          throw new Error("The streaming player rejected manual quality selection.");
+        }
+        player.selectVariantTrack(track, true, 0);
+      }
+      setQualityChoice(value);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not change video quality.");
+    }
+  }
+
+  function selectAudioLanguage(language: string) {
+    const player = playerRef.current;
+    if (!player) return;
+    try {
+      const activeTrack = variantTracks.find((track) => track.active);
+      const selectedTrack = variantTracks.find((track) =>
+        track.language === language && track.height === activeTrack?.height,
+      ) ?? variantTracks.find((track) => track.language === language);
+      if (!selectedTrack) throw new Error("That audio track is no longer available.");
+      player.selectVariantTrack(selectedTrack, true, 0);
+      setSelectedAudioLanguage(language);
+    } catch (cause) {
+      setError(cause instanceof Error ? `Could not change audio track: ${cause.message}` : "Could not change audio track.");
+    }
+  }
 
   async function searchSubtitles() {
     setSubtitleBusy(true);
@@ -511,6 +650,10 @@ export function PlaybackDialog({
   async function castToDevice(device: CastDeviceInfo) {
     setCastBusy(true);
     setCastError(null);
+    const video = videoRef.current;
+    const wasPlaying = Boolean(video && !video.paused);
+    video?.pause();
+    let castStarted = false;
     try {
       await invoke("cast_media", {
         address: device.address,
@@ -518,48 +661,119 @@ export function PlaybackDialog({
         title: item.title,
         live: item.live,
       });
-      videoRef.current?.pause();
+      castStarted = true;
+      let localStopFailed = false;
+      const player = playerRef.current;
+      if (player) {
+        try {
+          await player.destroy();
+          if (playerRef.current === player) playerRef.current = null;
+        } catch (cause) {
+          console.error("Could not stop local playback after casting", cause);
+          localStopFailed = true;
+        }
+      }
+      if (video) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      }
       setCastingDevice(device);
+      setStatus(`Casting to ${device.name}`);
+      if (localStopFailed) {
+        setCastError("Casting started, but playback on this device may still be active.");
+      }
     } catch (cause) {
+      if (!castStarted && wasPlaying && video) {
+        try {
+          await video.play();
+        } catch {
+          setCastError("Casting didn't start, and playback couldn't resume on this device.");
+          return;
+        }
+      }
       setCastError("Couldn't start casting. Check that the device and stream are available, then try again.");
     } finally {
       setCastBusy(false);
     }
   }
 
-  async function stopCasting() {
-    if (!castingDevice) return;
+  async function stopCasting(): Promise<boolean> {
+    if (!castingDevice) return false;
     setCastBusy(true);
     setCastError(null);
     try {
       await invoke("stop_cast", { address: castingDevice.address });
       setCastingDevice(null);
+      setStatus("Connecting to your source…");
+      return true;
     } catch (cause) {
       setCastError("Couldn't stop casting on that device. Please try again.");
+      setCastOpen(true);
+      return false;
     } finally {
       setCastBusy(false);
     }
   }
 
   async function close() {
-    await persistProgress();
+    if (!castingDevice) await persistProgress();
+    if (castingDevice && !(await stopCasting())) return;
     onCloseRef.current();
   }
 
-  return (
-    <div className="modal-backdrop playback-backdrop" role="presentation">
-      <section className="playback-dialog" role="dialog" aria-modal="true" aria-labelledby="playback-title">
+  const playerContent = (
+      <section
+        aria-labelledby="playback-title"
+        aria-modal={inline ? undefined : true}
+        className={`playback-dialog${inline ? " playback-inline" : ""}${mini ? " playback-mini" : ""}`}
+        role={inline ? "region" : "dialog"}
+      >
         <header className="playback-header">
           <div>
             <p className="eyebrow">{item.live ? "LIVE SIGNAL" : "NOW PLAYING"}</p>
             <h2 id="playback-title">{item.title}</h2>
             <p className="playback-status">{status}</p>
           </div>
-          <button aria-label="Close player" className="icon-button" onClick={() => void close()} type="button">
-            <Icon name="close" />
-          </button>
+          <div className="playback-header-actions">
+            {castingDevice && (
+              <button
+                className="secondary-button"
+                disabled={castBusy}
+                onClick={() => void stopCasting()}
+                type="button"
+              >
+                <Icon name="cast_connected" />
+                Stop casting
+              </button>
+            )}
+            {mini && onExpand && (
+              <button aria-label="Return to live channel" className="icon-button" onClick={onExpand} type="button">
+                <Icon name="fullscreen" />
+              </button>
+            )}
+            <button aria-label="Close player" className="icon-button" onClick={() => void close()} type="button">
+              <Icon name="close" />
+            </button>
+          </div>
         </header>
-        <video autoPlay controls playsInline ref={videoRef} />
+        <video
+          autoPlay
+          controls
+          playsInline
+          ref={videoRef}
+          style={castingDevice ? { visibility: "hidden" } : undefined}
+        />
+        {castingDevice && (
+          <div className="player-casting-status" role="status">
+            <Icon name="cast_connected" />
+            <div>
+              <strong>Playing on your TV</strong>
+              <span>{castingDevice.name}</span>
+              {castError && <span className="player-casting-warning">{castError}</span>}
+            </div>
+          </div>
+        )}
         {error && <p className="player-error" role="alert">{error}</p>}
         {error && (
           <div className="playback-error-actions">
@@ -588,9 +802,11 @@ export function PlaybackDialog({
                   syncTracks(playerRef.current);
                 } else {
                   const video = videoRef.current;
-                  if (video) Array.from(video.textTracks).forEach((track, index) => {
-                    track.mode = index === selectedId ? "showing" : "disabled";
-                  });
+                  if (video) Array.from(video.textTracks)
+                    .filter((track) => track.kind === "captions" || track.kind === "subtitles")
+                    .forEach((track) => {
+                      track.mode = nativeTrackIdsRef.current.get(track) === selectedId ? "showing" : "disabled";
+                    });
                   syncNativeTracks();
                 }
               }}
@@ -603,6 +819,65 @@ export function PlaybackDialog({
             </select>
             <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
           </label>
+          {audioLanguages.length > 1 && (
+            <label className="player-track-select">
+              <Icon name="graphic_eq" />
+              <span className="sr-only">Audio track</span>
+              <select
+                aria-label="Audio track"
+                onChange={(event) => selectAudioLanguage(event.target.value)}
+                value={selectedAudioLanguage}
+              >
+                {audioLanguages.map((track) => (
+                  <option key={track.language} value={track.language}>{track.label}</option>
+                ))}
+              </select>
+              <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
+            </label>
+          )}
+          {qualityHeights.length > 1 && (
+            <label className="player-track-select">
+              <Icon name="high_quality" />
+              <span className="sr-only">Video quality</span>
+              <select
+                aria-label="Video quality"
+                onChange={(event) => selectQuality(event.target.value)}
+                value={qualityChoice}
+              >
+                <option value="auto">Auto quality</option>
+                {qualityHeights.map((height) => (
+                  <option key={height} value={height}>{height}p</option>
+                ))}
+              </select>
+              <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
+            </label>
+          )}
+          {!item.live && (
+            <label className="player-track-select">
+              <Icon name="speed" />
+              <span className="sr-only">Playback speed</span>
+              <select
+                aria-label="Playback speed"
+                onChange={(event) => {
+                  const speed = Number(event.target.value);
+                  const video = videoRef.current;
+                  if (!video || !Number.isFinite(speed)) return;
+                  try {
+                    video.playbackRate = speed;
+                    setPlaybackSpeed(speed);
+                  } catch (cause) {
+                    setError(cause instanceof Error ? `Could not change playback speed: ${cause.message}` : "Could not change playback speed.");
+                  }
+                }}
+                value={playbackSpeed}
+              >
+                {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => (
+                  <option key={speed} value={speed}>{speed === 1 ? "Normal speed" : `${speed}×`}</option>
+                ))}
+              </select>
+              <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
+            </label>
+          )}
           {!item.live && (
             <>
               <label className="secondary-button subtitle-file-button">
@@ -663,7 +938,7 @@ export function PlaybackDialog({
                   <li key={device.address}>
                     <button
                       className="secondary-button"
-                      disabled={castBusy || Boolean(item.drmLicenseUrl)}
+                      disabled={castBusy || Boolean(item.drmLicenseUrl) || Boolean(castingDevice)}
                       onClick={() => void castToDevice(device)}
                       type="button"
                     >
@@ -676,14 +951,6 @@ export function PlaybackDialog({
             )}
             {!castBusy && castDevices.length === 0 && !castError && (
               <p className="form-note">No Chromecast devices found on your local network.</p>
-            )}
-            {castingDevice && (
-              <div className="cast-panel-status">
-                <p role="status">Casting directly from your provider to {castingDevice.name}.</p>
-                <button className="secondary-button" disabled={castBusy} onClick={() => void stopCasting()} type="button">
-                  Stop casting
-                </button>
-              </div>
             )}
             <p className="form-note">
               The Chromecast fetches the stream directly from your provider. TiviHub does not relay media.
@@ -741,6 +1008,10 @@ export function PlaybackDialog({
           Playback and subtitle requests connect directly to their configured hosts. Availability depends on the webview codecs, CORS, and source permissions.
         </p>
       </section>
+  );
+  return inline ? playerContent : (
+    <div className="modal-backdrop playback-backdrop" role="presentation">
+      {playerContent}
     </div>
   );
 }

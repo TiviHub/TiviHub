@@ -4,6 +4,7 @@ import {
   canUseNativeHlsFallback,
   createPlaybackDiagnosticReport,
   playbackDiagnosticError,
+  shouldAttemptNativeHlsFallback,
 } from "../playbackDiagnostics";
 
 describe("playback diagnostics", () => {
@@ -12,6 +13,27 @@ describe("playback diagnostics", () => {
     expect(canUseNativeHlsFallback("https://provider.example/live.mp4", "probably")).toBe(false);
     expect(canUseNativeHlsFallback("https://provider.example/live.m3u8", "no")).toBe(false);
     expect(canUseNativeHlsFallback("not a URL", "probably")).toBe(false);
+  });
+
+  it("retries compatible non-DRM HLS after unsupported variants or an HTTP 509 limit", () => {
+    const stream = "https://provider.example/live.m3u8";
+    expect(shouldAttemptNativeHlsFallback({ code: 4032 }, stream, "maybe", false)).toBe(true);
+    expect(shouldAttemptNativeHlsFallback({
+      code: 1001,
+      data: [stream, 509],
+    }, stream, "maybe", false)).toBe(true);
+    expect(shouldAttemptNativeHlsFallback({
+      code: 1001,
+      data: [stream, 503],
+    }, stream, "maybe", false)).toBe(false);
+    expect(shouldAttemptNativeHlsFallback({
+      code: 1001,
+      data: [stream, 509],
+    }, stream, "maybe", true)).toBe(false);
+    expect(shouldAttemptNativeHlsFallback({
+      code: 1001,
+      data: [stream, 509],
+    }, "https://provider.example/live.mp4", "maybe", false)).toBe(false);
   });
 
   it("keeps only numeric error details and excludes private data from the report", () => {

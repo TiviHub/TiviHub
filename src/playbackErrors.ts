@@ -1,5 +1,6 @@
 interface PlaybackErrorDetails {
   code?: unknown;
+  data?: unknown;
   message?: unknown;
 }
 
@@ -16,6 +17,9 @@ export function playbackErrorMessage(error: unknown): string {
       return "The stream is taking too long to respond. Check your connection and try again.";
     }
     if (error.code === 1001) {
+      if (Array.isArray(error.data) && error.data[1] === 509) {
+        return "The stream server is temporarily limiting requests. Wait a moment and try again.";
+      }
       return "The provider couldn't open this stream. It may be unavailable or require you to sign in again.";
     }
     if (error.code === 1002) {

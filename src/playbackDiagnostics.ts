@@ -38,6 +38,17 @@ export function canUseNativeHlsFallback(value: string, support: NativeHlsSupport
   }
 }
 
+export function shouldAttemptNativeHlsFallback(
+  error: unknown,
+  streamUrl: string,
+  support: NativeHlsSupport,
+  drmConfigured: boolean,
+): boolean {
+  if (drmConfigured || !canUseNativeHlsFallback(streamUrl, support)) return false;
+  const details = playbackDiagnosticError(error);
+  return details.code === 4032 || (details.code === 1001 && details.httpStatus === 509);
+}
+
 export function playbackDiagnosticError(error: unknown): PlaybackDiagnosticError {
   if (typeof error !== "object" || error === null) return {};
   const value = error as { code?: unknown; category?: unknown; data?: unknown };

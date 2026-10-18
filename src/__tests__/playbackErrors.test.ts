@@ -18,6 +18,8 @@ describe("playback error messages", () => {
   it("explains unsuccessful HTTP responses separately from timeouts", () => {
     expect(playbackErrorMessage({ code: 1001, data: ["", 403] }))
       .toContain("provider couldn't open");
+    expect(playbackErrorMessage({ code: 1001, data: ["", 509] }))
+      .toContain("temporarily limiting requests");
   });
 
   it("explains unsupported media in plain language without exposing the Shaka code", () => {
