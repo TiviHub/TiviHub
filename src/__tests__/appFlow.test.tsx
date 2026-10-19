@@ -76,6 +76,17 @@ describe("application source lifecycle", () => {
     await user.click(screen.getByRole("button", { name: "Start watching" }));
     expect(await screen.findByRole("heading", { name: "Movies" })).toBeTruthy();
 
+    document.documentElement.scrollTop = 500;
+    document.body.scrollTop = 500;
+    await user.click(screen.getByRole("button", { name: "View details for Big Buck Bunny (2008)" }));
+    await waitFor(() => expect(document.documentElement.scrollTop).toBe(0));
+    expect(await screen.findByRole("heading", { name: "Big Buck Bunny (2008)" })).toBeTruthy();
+
+    window.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 3 }));
+    expect(await screen.findByRole("button", { name: "View details for Big Buck Bunny (2008)" })).toBeTruthy();
+    window.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 4 }));
+    expect(await screen.findByRole("heading", { name: "Big Buck Bunny (2008)" })).toBeTruthy();
+
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
     expect(await screen.findByText(/and its local data were deleted/)).toBeTruthy();

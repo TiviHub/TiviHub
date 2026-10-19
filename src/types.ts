@@ -61,6 +61,8 @@ export interface Movie {
   overview?: string;
   year?: number;
   rating?: number;
+  imdbId?: string;
+  tmdbId?: string;
   categoryId?: string;
   category?: string;
   addedAtMillis?: number;
@@ -80,6 +82,8 @@ export interface Series {
   category?: string;
   year?: number;
   rating?: number;
+  imdbId?: string;
+  tmdbId?: string;
   addedAtMillis?: number;
 }
 
@@ -176,4 +180,79 @@ export interface PlayableItem {
   live: boolean;
   parentId?: string;
   parentTitle?: string;
+}
+
+export type RatingsMediaType = "MOVIE" | "SERIES";
+
+export interface ExternalRating {
+  source: string;
+  /** Original value from the source, on the source's own scale. */
+  value?: number;
+  /** Source score normalised by MDBList to 0-100. */
+  score?: number;
+  votes?: number;
+}
+
+export interface ExternalRatings {
+  ratings: ExternalRating[];
+  overview?: string;
+  ids?: { imdb?: string; tmdb?: string };
+}
+
+export interface RatingsCacheEntry {
+  key: string;
+  mediaType: RatingsMediaType;
+  externalIds?: { imdb?: string; tmdb?: string };
+  title: string;
+  year?: number;
+  ratings?: ExternalRatings;
+  fetchedAt: number;
+  expiresAt: number;
+  notFound?: boolean;
+}
+
+export interface MdblistPopularItem {
+  title: string;
+  year?: number;
+  imdbId?: string;
+  tmdbId?: string;
+}
+
+export interface MdblistPopularCacheEntry {
+  key: string;
+  mediaType: RatingsMediaType;
+  items: MdblistPopularItem[];
+  fetchedAt: number;
+  expiresAt: number;
+}
+
+export interface MdblistRateLimitState {
+  key: string;
+  limit?: number;
+  remaining?: number;
+  resetAt?: number;
+  retryAfterUntil?: number;
+}
+
+export interface OpenSubtitleSearchResult {
+  fileId: number;
+  fileName: string;
+  language: string;
+  release?: string;
+  downloadCount: number;
+}
+
+export interface OpenSubtitleSearchCacheEntry {
+  key: string;
+  results: OpenSubtitleSearchResult[];
+  fetchedAt: number;
+  expiresAt: number;
+}
+
+export interface OpenSubtitleFileCacheEntry {
+  fileId: number;
+  name: string;
+  contents: string;
+  fetchedAt: number;
+  expiresAt: number;
 }

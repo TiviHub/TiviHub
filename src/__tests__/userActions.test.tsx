@@ -77,6 +77,35 @@ afterEach(() => {
 });
 
 describe("settings user actions", () => {
+  it("links to both API key pages and opens them through the desktop handler", async () => {
+    const user = userEvent.setup();
+    const onOpenExternalUrl = vi.fn(async () => undefined);
+    render(
+      <SettingsPage
+        {...settingsProps}
+        onOpenExternalUrl={onOpenExternalUrl}
+        onSaveMdblistApiKey={vi.fn(async () => undefined)}
+      />,
+    );
+
+    const opensubtitlesLink = screen.getByRole("link", { name: "Get an OpenSubtitles API key" });
+    const mdblistLink = screen.getByRole("link", { name: "Get an MDBList API key" });
+    expect(opensubtitlesLink.getAttribute("href")).toBe("https://www.opensubtitles.com/en/consumers");
+    expect(mdblistLink.getAttribute("href")).toBe("https://mdblist.com/preferences/#api");
+    await user.click(opensubtitlesLink);
+    await user.click(mdblistLink);
+    expect(onOpenExternalUrl).toHaveBeenNthCalledWith(1, "https://www.opensubtitles.com/en/consumers");
+    expect(onOpenExternalUrl).toHaveBeenNthCalledWith(2, "https://mdblist.com/preferences/#api");
+  });
+
+  it("includes an external ratings menu link when MDBList settings are available", () => {
+    render(<SettingsPage {...settingsProps} onSaveMdblistApiKey={vi.fn(async () => undefined)} />);
+
+    const link = screen.getByRole("link", { name: "External ratings" });
+    expect(link.getAttribute("href")).toBe("#settings-ratings");
+    expect(document.getElementById("settings-ratings")).toBeTruthy();
+  });
+
   it("routes source, appearance, and guide controls to their actions", async () => {
     const user = userEvent.setup();
     const props = {
@@ -232,11 +261,13 @@ describe("library user actions", () => {
     const onChangeStatus = vi.fn();
     const onRemove = vi.fn();
     const onRemoveFavorite = vi.fn();
+    const onOpenFavorite = vi.fn();
     render(
       <LibraryPage
         favorites={favorites}
         library={items}
         onChangeStatus={onChangeStatus}
+        onOpenFavorite={onOpenFavorite}
         onPlay={onPlay}
         onRemove={onRemove}
         onRemoveFavorite={onRemoveFavorite}
@@ -258,6 +289,10 @@ describe("library user actions", () => {
     contentFilters = screen.getByRole("group", { name: "Filter Favorites by content type" });
     await user.click(within(contentFilters).getByRole("button", { name: /Series/ }));
     expect(screen.getByText("Favorite series")).toBeTruthy();
+    const favoriteThumb = screen.getByRole("button", { name: "View details for Favorite series" });
+    expect(favoriteThumb.querySelector(".library-item-art-play")?.textContent).toContain("See details");
+    await user.click(favoriteThumb);
+    expect(onOpenFavorite).toHaveBeenCalledWith(favorites[0]);
 
     await user.click(screen.getByRole("button", { name: /Continue watching/ }));
     await user.click(screen.getByRole("button", { name: "Resume News" }));

@@ -38,7 +38,15 @@ import {
   getFavorites,
   getLibraryItems,
   getMovies,
+  getMdblistApiKey,
+  getMdblistPopularCacheEntry,
+  getMdblistRateLimitState,
   getOpenSubtitlesApiKey,
+  getRatingsCacheEntry,
+  saveMdblistApiKey,
+  saveMdblistPopularCacheEntry,
+  saveMdblistRateLimitState,
+  saveRatingsCacheEntry,
   getPlaylistDocument,
   getPlaylists,
   getSeries,
@@ -67,6 +75,9 @@ import type {
   Playlist,
   Series,
 } from "./types";
+import { createRatingsService } from "./ratingsService";
+import { createPopularCatalogService } from "./popularCatalogService";
+import { configureMdblistRateLimiter } from "./mdblistRateLimit";
 import { CatalogPage, LibraryPage, MovieDetail, SeriesDetail } from "./components/ContentPages";
 import { CustomSelect, Icon, type IconName } from "./components/common";
 import { DesktopWindowControls } from "./components/DesktopWindowControls";
@@ -81,6 +92,24 @@ import { StreamHealthCheckDialog } from "./components/StreamHealthCheckDialog";
 
 type Section = SearchSection;
 type ThemePreference = "system" | "light" | "dark";
+type NavigationEntry = {
+  section: Section;
+  movieId: string | null;
+  moviePlaylistId: string | null;
+  seriesId: string | null;
+  seriesPlaylistId: string | null;
+};
+const ratingsService = createRatingsService({
+  cache: { get: getRatingsCacheEntry, put: saveRatingsCacheEntry },
+  getApiKey: getMdblistApiKey,
+});
+const popularCatalogService = createPopularCatalogService({
+  cache: { get: getMdblistPopularCacheEntry, put: saveMdblistPopularCacheEntry },
+});
+configureMdblistRateLimiter({
+  get: () => getMdblistRateLimitState("account"),
+  put: saveMdblistRateLimitState,
+});
 const ASSET_BASE_URL = import.meta.env.BASE_URL;
 
 const sections: { label: Section; icon: IconName }[] = [
@@ -133,6 +162,7 @@ function App() {
   const [epg, setEpg] = useState<EpgProgram[]>([]);
   const [guideLoadCount, setGuideLoadCount] = useState(0);
   const [subtitleApiKey, setSubtitleApiKey] = useState("");
+  const [mdblistApiKey, setMdblistApiKey] = useState("");
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
   const [streamHealthRequest, setStreamHealthRequest] = useState<{
@@ -173,6 +203,46 @@ function App() {
   const refreshOverlayRef = useRef<HTMLDivElement>(null);
   const refreshReturnFocusRef = useRef<HTMLElement | null>(null);
   const catalogRefreshInFlight = useRef(new Set<string>());
+  const navigationHistoryRef = useRef<NavigationEntry[]>([]);
+  const navigationHistoryIndexRef = useRef(-1);
+  const navigationKeyRef = useRef<string | null>(null);
+  const navigationActionRef = useRef<(direction: -1 | 1) => void>(() => undefined);
+
+  useLayoutEffect(() => {
+    if (!selectedMovie && !selectedSeries) return;
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [selectedMovie, selectedSeries]);
+
+  useLayoutEffect(() => {
+    if (!ready) return;
+    const entry: NavigationEntry = {
+      section,
+      movieId: section === "Movies" ? selectedMovie?.id ?? null : null,
+      moviePlaylistId: section === "Movies" ? selectedMovie?.playlistId ?? null : null,
+      seriesId: section === "Series" ? selectedSeries?.id ?? null : null,
+      seriesPlaylistId: section === "Series" ? selectedSeries?.playlistId ?? null : null,
+    };
+    const key = JSON.stringify(entry);
+    if (navigationKeyRef.current === key) return;
+
+    const history = navigationHistoryRef.current;
+    history.splice(navigationHistoryIndexRef.current + 1);
+    history.push(entry);
+    if (history.length > 50) history.shift();
+    navigationHistoryIndexRef.current = history.length - 1;
+    navigationKeyRef.current = key;
+  }, [ready, section, selectedMovie?.id, selectedMovie?.playlistId, selectedSeries?.id, selectedSeries?.playlistId]);
+
+  useEffect(() => {
+    const handleAuxClick = (event: MouseEvent) => {
+      if (event.button !== 3 && event.button !== 4) return;
+      event.preventDefault();
+      navigationActionRef.current(event.button === 3 ? -1 : 1);
+    };
+    window.addEventListener("auxclick", handleAuxClick, true);
+    return () => window.removeEventListener("auxclick", handleAuxClick, true);
+  }, []);
 
   const activeSource = sources.find((source) => source.id === activeSourceId) ?? null;
   const blockingDialogOpen = sourceDialogOpen ||
@@ -213,6 +283,15 @@ function App() {
     } catch (cause) {
       console.error("Could not open the TiviHub installer download", cause);
       setUpdateStatus("error");
+    }
+  }
+
+  async function openExternalUrl(url: string) {
+    try {
+      await openUrl(url);
+    } catch (cause) {
+      console.error("Could not open the external website", cause);
+      notify("Could not open the external website.", "error");
     }
   }
 
@@ -360,11 +439,12 @@ function App() {
     const activeSources = chosen
       ? savedSources.map((source) => ({ ...source, active: source.id === chosen.id }))
       : savedSources;
-    const [savedFavorites, savedLibrary, allEpg, key] = await Promise.all([
+    const [savedFavorites, savedLibrary, allEpg, key, savedMdblistKey] = await Promise.all([
       getFavorites(),
       getLibraryItems(),
       getEpgPrograms(),
       getOpenSubtitlesApiKey(),
+      getMdblistApiKey(),
     ]);
     setSources(activeSources);
     setActiveSourceId(chosen?.id ?? null);
@@ -372,6 +452,7 @@ function App() {
     setLibrary(savedLibrary);
     setEpg(chosen ? allEpg.filter((program) => program.source === chosen.id) : []);
     setSubtitleApiKey(key);
+    setMdblistApiKey(savedMdblistKey);
     if (chosen) {
       const [savedChannels, savedMovies, savedSeries] = await Promise.all([
         getChannels(chosen.id),
@@ -1021,6 +1102,11 @@ function App() {
     setSubtitleApiKey(value.trim());
   }
 
+  async function saveMdblistKey(value: string) {
+    await saveMdblistApiKey(value);
+    setMdblistApiKey(value.trim());
+  }
+
   async function onDataRestored() {
     await reloadLocalData();
     setSelectedSeries(null);
@@ -1183,6 +1269,37 @@ function App() {
   function navigateToSection(next: Section) {
     setSection(next);
   }
+
+  function navigateAppHistory(direction: -1 | 1) {
+    const nextIndex = navigationHistoryIndexRef.current + direction;
+    const history = navigationHistoryRef.current;
+    if (nextIndex < 0 || nextIndex >= history.length) return;
+
+    const entry = history[nextIndex];
+    navigationHistoryIndexRef.current = nextIndex;
+    navigationKeyRef.current = JSON.stringify(entry);
+
+    if (entry.seriesId) {
+      const targetSeries = series.find((item) =>
+        item.id === entry.seriesId && item.playlistId === entry.seriesPlaylistId,
+      );
+      if (targetSeries) {
+        void openSeries(targetSeries);
+        return;
+      }
+    }
+
+    setSection(entry.section);
+    setSelectedSeries(null);
+    setSelectedMovie(entry.movieId
+      ? movies.find((item) => item.id === entry.movieId && item.playlistId === entry.moviePlaylistId) ?? null
+      : null);
+    setEpisodes([]);
+    setEpisodeError(null);
+    setEpisodeLoading(false);
+  }
+
+  navigationActionRef.current = navigateAppHistory;
 
   function closePlayback() {
     setPlayableItem(null);
@@ -1490,6 +1607,9 @@ function App() {
                 }}
                 onRefreshEpg={refreshGuide}
                 onSaveApiKey={saveApiKey}
+                onOpenExternalUrl={isDesktopApp ? openExternalUrl : undefined}
+                mdblistApiKey={mdblistApiKey}
+                onSaveMdblistApiKey={saveMdblistKey}
                 sources={sources}
                 theme={theme}
                 showAdultContent={showAdultContent}
@@ -1500,8 +1620,11 @@ function App() {
                 inLibrary={visibleLibrary.some((entry) => entry.contentId === selectedMovie.id && entry.contentType === "MOVIE")}
                 continueWatching={Boolean(movieProgress)}
                 movie={selectedMovie}
+                playlistMovies={visibleMovies}
+                ratingsService={ratingsService}
+                onOpenMovie={(item) => setSelectedMovie(item)}
                 onAddToLibrary={() => void addToWatchlist(selectedMovie, "MOVIE")}
-                onBack={() => setSelectedMovie(null)}
+                onBack={() => navigateAppHistory(-1)}
                 onFavorite={() => void toggleFavorite(selectedMovie, "MOVIE")}
                 onRemoveFromLibrary={() => void removeFromLibrary(selectedMovie, "MOVIE")}
                 onPlay={() => {
@@ -1544,6 +1667,8 @@ function App() {
                 onToggleFavorite={(item, type) => void toggleFavorite(item, type)}
                 section="Movies"
                 series={visibleSeries}
+                mdblistApiKey={mdblistApiKey}
+                popularCatalogService={popularCatalogService}
               />
             ) : section === "Series" ? (
               selectedSeries && (showAdultContent || !isAdultContent(selectedSeries.name, selectedSeries.category)) ? (
@@ -1554,7 +1679,7 @@ function App() {
                   inLibrary={visibleLibrary.some((entry) => entry.contentId === selectedSeries.id && entry.contentType === "SERIES")}
                   continueWatching={Boolean(seriesEpisodeProgress)}
                   loading={episodeLoading}
-                  onBack={() => setSelectedSeries(null)}
+                  onBack={() => navigateAppHistory(-1)}
                   showAdultContent={showAdultContent}
                   onAddToLibrary={() => void addToWatchlist(selectedSeries, "SERIES")}
                   onRemoveFromLibrary={() => void removeFromLibrary(selectedSeries, "SERIES")}
@@ -1577,6 +1702,9 @@ function App() {
                   onFavorite={() => void toggleFavorite(selectedSeries, "SERIES")}
                   onPlay={(item) => openPlayback(item)}
                   series={selectedSeries}
+                  playlistSeries={visibleSeries}
+                  ratingsService={ratingsService}
+                  onOpenSeries={(item) => void openSeries(item)}
                 />
               ) : (
                 <CatalogPage
@@ -1596,6 +1724,8 @@ function App() {
                   onToggleFavorite={(item, type) => void toggleFavorite(item, type)}
                   section="Series"
                   series={visibleSeries}
+                  mdblistApiKey={mdblistApiKey}
+                  popularCatalogService={popularCatalogService}
                 />
               )
             ) : (
@@ -1606,6 +1736,26 @@ function App() {
                 onPlay={(item, position) => openPlayback(item, position)}
                 onRemove={(id, title) => void deleteLibraryItem(id, title)}
                 onRemoveFavorite={(favorite) => void removeFavorite(favorite)}
+                onOpenFavorite={(favorite) => {
+                  if (favorite.contentType === "MOVIE") {
+                    const movie = visibleMovies.find((item) =>
+                      item.id === favorite.contentId && item.playlistId === favorite.playlistId,
+                    );
+                    if (movie) {
+                      navigateToSection("Movies");
+                      setSelectedMovie(movie);
+                      setSelectedSeries(null);
+                    } else {
+                      notify("This movie isn't available in the currently loaded catalog.", "error");
+                    }
+                  } else if (favorite.contentType === "SERIES") {
+                    const show = visibleSeries.find((item) =>
+                      item.id === favorite.contentId && item.playlistId === favorite.playlistId,
+                    );
+                    if (show) void openSeries(show);
+                    else notify("This series isn't available in the currently loaded catalog.", "error");
+                  }
+                }}
               />
             )}
           </>

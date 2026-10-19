@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { decryptBackup, encryptBackup } from "../backup";
 import { formatCatalogChangeSummary } from "../catalogRefresh";
 import { createSnapshot, restoreSnapshot } from "../storage/database";
@@ -42,6 +42,9 @@ export function SettingsPage({
   onUpdateAction,
   apiKey,
   onSaveApiKey,
+  mdblistApiKey = "",
+  onSaveMdblistApiKey,
+  onOpenExternalUrl,
   onDataRestored,
   onRefreshEpg,
   onDownloadDiagnostics,
@@ -65,12 +68,18 @@ export function SettingsPage({
   onUpdateAction: () => void;
   apiKey: string;
   onSaveApiKey: (apiKey: string) => Promise<void>;
+  mdblistApiKey?: string;
+  onSaveMdblistApiKey?: (apiKey: string) => Promise<void>;
+  onOpenExternalUrl?: (url: string) => Promise<void> | void;
   onDataRestored: () => Promise<void>;
   onRefreshEpg: () => Promise<void>;
   onDownloadDiagnostics: () => Promise<boolean>;
 }) {
   const [keyDraft, setKeyDraft] = useState(apiKey);
   const [keyNotice, setKeyNotice] = useState<string | null>(null);
+  const [mdblistDraft, setMdblistDraft] = useState(mdblistApiKey);
+  const [mdblistNotice, setMdblistNotice] = useState<string | null>(null);
+  useEffect(() => setMdblistDraft(mdblistApiKey), [mdblistApiKey]);
   const [backupPassword, setBackupPassword] = useState("");
   const [backupConfirm, setBackupConfirm] = useState("");
   const [importPassword, setImportPassword] = useState("");
@@ -106,6 +115,17 @@ export function SettingsPage({
       setKeyNotice(keyDraft.trim() ? "OpenSubtitles API key saved on this device." : "OpenSubtitles API key removed.");
     } catch (cause) {
       setKeyNotice(cause instanceof Error ? cause.message : "Could not save the API key.");
+    }
+  }
+
+  async function saveMdblistKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMdblistNotice(null);
+    try {
+      await onSaveMdblistApiKey?.(mdblistDraft);
+      setMdblistNotice(mdblistDraft.trim() ? "MDBList API key saved on this device." : "MDBList API key removed.");
+    } catch (cause) {
+      setMdblistNotice(cause instanceof Error ? cause.message : "Could not save the API key.");
     }
   }
 
@@ -196,6 +216,9 @@ export function SettingsPage({
           <a href="#settings-appearance"><Icon name="dark_mode" /><span>Appearance</span></a>
           <a href="#settings-content-visibility"><Icon name="shield" /><span>Adult content</span></a>
           <a href="#settings-subtitles"><Icon name="subtitles" /><span>Subtitles</span></a>
+          {onSaveMdblistApiKey && (
+            <a href="#settings-ratings"><Icon name="high_quality" /><span>External ratings</span></a>
+          )}
           <a href="#settings-backup"><Icon name="backup" /><span>Encrypted backup</span></a>
           <a href="#settings-diagnostics"><Icon name="download" /><span>Diagnostics</span></a>
           <a href="#settings-privacy-card"><Icon name="lock" /><span>Privacy by design</span></a>
@@ -340,12 +363,68 @@ export function SettingsPage({
                     value={keyDraft}
                   />
                 </label>
-                <p className="form-note">Encrypted in this app and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.</p>
+                <p className="form-note">
+                  Encrypted in this app and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.{" "}
+                  <a
+                    href="https://www.opensubtitles.com/en/consumers"
+                    onClick={(event) => {
+                      if (!onOpenExternalUrl) return;
+                      event.preventDefault();
+                      void onOpenExternalUrl("https://www.opensubtitles.com/en/consumers");
+                    }}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Get an OpenSubtitles API key
+                  </a>
+                  .
+                </p>
                 <button className="secondary-button" type="submit"><Icon name="lock" /> Save key</button>
                 {keyNotice && <p className="settings-message" role="status">{keyNotice}</p>}
               </form>
             </div>
           </section>
+
+          {onSaveMdblistApiKey && (
+            <section aria-labelledby="settings-ratings-heading" className="settings-group" id="settings-ratings">
+              <div className="settings-card">
+                <div className="settings-card-heading">
+                  <div className="settings-heading-icon"><Icon name="high_quality" /></div>
+                  <div><h2 id="settings-ratings-heading">External ratings</h2><p>Optional MDBList ratings on movie and series details.</p></div>
+                </div>
+                <form className="settings-form" onSubmit={(event) => void saveMdblistKey(event)}>
+                  <label className="form-field">
+                    <span>MDBList API key <em>Optional</em></span>
+                    <input
+                      autoComplete="off"
+                      onChange={(event) => setMdblistDraft(event.target.value)}
+                      placeholder="Paste your personal API key"
+                      type="password"
+                      value={mdblistDraft}
+                    />
+                  </label>
+                  <p className="form-note">
+                    Encrypted in this app, never included in backups, and sent only to MDBList when you open a title. Re-enter it after restoring a backup.{" "}
+                    <a
+                      href="https://mdblist.com/preferences/#api"
+                      onClick={(event) => {
+                        if (!onOpenExternalUrl) return;
+                        event.preventDefault();
+                        void onOpenExternalUrl("https://mdblist.com/preferences/#api");
+                      }}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Get an MDBList API key
+                    </a>
+                    .
+                  </p>
+                  <button className="secondary-button" type="submit"><Icon name="lock" /> Save MDBList key</button>
+                  {mdblistNotice && <p className="settings-message" role="status">{mdblistNotice}</p>}
+                </form>
+              </div>
+            </section>
+          )}
 
           <section aria-labelledby="settings-data-heading" className="settings-group settings-data" id="settings-data">
             <h2 className="sr-only" id="settings-data-heading">Data and diagnostics</h2>

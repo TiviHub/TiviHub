@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import demoM3u from "../fixtures/demo.m3u?raw";
 import { fetchM3u, parseM3u, parseM3uCatalog, parseM3uCatalogAsync } from "../providers/m3u";
-import { downloadOpenSubtitle, searchOpenSubtitles } from "../providers/opensubtitles";
+import {
+  downloadOpenSubtitle,
+  OPENSUBTITLES_REQUEST_TIMEOUT_MILLIS,
+  searchOpenSubtitles,
+} from "../providers/opensubtitles";
 import { parseXmltvDate } from "../providers/xmltv";
 import {
   loadXtreamCatalog,
@@ -11,7 +15,10 @@ import {
 } from "../providers/xtream";
 import type { Playlist } from "../types";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("M3U provider parsing", () => {
   it("parses quoted metadata and resolves relative stream URLs", () => {
@@ -140,18 +147,44 @@ describe("OpenSubtitles provider", () => {
             { file_id: 81, file_name: "episode.srt" },
             { file_id: 82, file_name: "archive.zip" },
             { file_id: "bad", file_name: "invalid.vtt" },
+            { file_id: 83, file_name: "DisclosureDay" },
+            { file_id: 84, file_name: "Disclosure Day (2026).6.eng" },
           ],
         },
       }],
     }), { status: 200 })));
 
-    await expect(searchOpenSubtitles("local-test-key", "Example show")).resolves.toEqual([{
-      fileId: 81,
-      fileName: "episode.srt",
-      language: "en",
-      release: "Web",
-      downloadCount: 12,
-    }]);
+    await expect(searchOpenSubtitles("local-test-key", "Example show")).resolves.toEqual([
+      { fileId: 81, fileName: "episode.srt", language: "en", release: "Web", downloadCount: 12 },
+      { fileId: 83, fileName: "DisclosureDay", language: "en", release: "Web", downloadCount: 12 },
+      { fileId: 84, fileName: "Disclosure Day (2026).6.eng", language: "en", release: "Web", downloadCount: 12 },
+    ]);
+  });
+
+  it("stops waiting when OpenSubtitles does not respond", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      }),
+    ));
+    const result = expect(searchOpenSubtitles("local-test-key", "Slow request"))
+      .rejects.toThrow("OpenSubtitles did not respond within 20 seconds.");
+    await vi.advanceTimersByTimeAsync(OPENSUBTITLES_REQUEST_TIMEOUT_MILLIS);
+    await result;
+    vi.useRealTimers();
+  });
+
+  it("also times out when response headers arrive but the body stalls", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: () => new Promise<unknown>(() => undefined),
+    } as Response)));
+    const result = expect(searchOpenSubtitles("local-test-key", "Stalled response body"))
+      .rejects.toThrow("OpenSubtitles did not respond within 20 seconds.");
+    await vi.advanceTimersByTimeAsync(OPENSUBTITLES_REQUEST_TIMEOUT_MILLIS);
+    await result;
   });
 
   it("downloads subtitle text only from a secure provider link", async () => {

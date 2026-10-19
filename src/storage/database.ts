@@ -5,9 +5,14 @@ import type {
   Favorite,
   LibraryItem,
   LiveChannel,
+  MdblistPopularCacheEntry,
+  MdblistRateLimitState,
   Movie,
+  OpenSubtitleFileCacheEntry,
+  OpenSubtitleSearchCacheEntry,
   Playlist,
   PlaylistDocument,
+  RatingsCacheEntry,
   Series,
   UserDataSnapshot,
 } from "../types";
@@ -66,16 +71,22 @@ interface TiviHubDatabase extends DBSchema {
     value: EpgProgram;
     indexes: { byChannel: string; bySource: string };
   };
+  ratings: { key: string; value: RatingsCacheEntry };
+  popularCatalog: { key: string; value: MdblistPopularCacheEntry };
+  mdblistRateLimits: { key: string; value: MdblistRateLimitState };
+  subtitleSearch: { key: string; value: OpenSubtitleSearchCacheEntry };
+  subtitleFiles: { key: number; value: OpenSubtitleFileCacheEntry };
   secrets: { key: string; value: StoredSecret };
   keys: { key: string; value: CryptoKey };
 }
 
 const DATABASE_NAME = "tivihub-web";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 6;
 const CATALOG_WRITE_BATCH_SIZE = 1000;
 const DELETE_BATCH_SIZE = 10_000;
 const CREDENTIAL_KEY_ID = "local-encryption-key";
 const OPEN_SUBTITLES_KEY_ID = "open-subtitles-api-key";
+const MDBLIST_KEY_ID = "mdblist-api-key";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -99,6 +110,19 @@ const databasePromise = openDB<TiviHubDatabase>(DATABASE_NAME, DATABASE_VERSION,
     }
     if (oldVersion < 2) {
       transaction.objectStore("epg").createIndex("bySource", "source");
+    }
+    if (oldVersion < 3) {
+      database.createObjectStore("ratings", { keyPath: "key" });
+    }
+    if (oldVersion < 4) {
+      database.createObjectStore("popularCatalog", { keyPath: "key" });
+    }
+    if (oldVersion < 5) {
+      database.createObjectStore("mdblistRateLimits", { keyPath: "key" });
+    }
+    if (oldVersion < 6) {
+      database.createObjectStore("subtitleSearch", { keyPath: "key" });
+      database.createObjectStore("subtitleFiles", { keyPath: "fileId" });
     }
   },
 });
@@ -546,6 +570,79 @@ export async function getOpenSubtitlesApiKey(): Promise<string> {
   const database = await databasePromise;
   const secret = await database.get("secrets", OPEN_SUBTITLES_KEY_ID);
   return secret ? decryptText(secret.payload) : "";
+}
+
+export async function saveMdblistApiKey(apiKey: string): Promise<void> {
+  const database = await databasePromise;
+  if (!apiKey.trim()) {
+    await database.delete("secrets", MDBLIST_KEY_ID);
+    return;
+  }
+  await database.put("secrets", {
+    id: MDBLIST_KEY_ID,
+    payload: await encryptText(apiKey.trim()),
+  });
+}
+
+export async function getMdblistApiKey(): Promise<string> {
+  const database = await databasePromise;
+  const secret = await database.get("secrets", MDBLIST_KEY_ID);
+  return secret ? decryptText(secret.payload) : "";
+}
+
+export async function getRatingsCacheEntry(key: string): Promise<RatingsCacheEntry | undefined> {
+  const database = await databasePromise;
+  return database.get("ratings", key);
+}
+
+export async function saveRatingsCacheEntry(entry: RatingsCacheEntry): Promise<void> {
+  const database = await databasePromise;
+  await database.put("ratings", entry);
+}
+
+export async function clearRatingsCache(): Promise<void> {
+  const database = await databasePromise;
+  await database.clear("ratings");
+}
+
+export async function getMdblistPopularCacheEntry(key: string): Promise<MdblistPopularCacheEntry | undefined> {
+  const database = await databasePromise;
+  return database.get("popularCatalog", key);
+}
+
+export async function saveMdblistPopularCacheEntry(entry: MdblistPopularCacheEntry): Promise<void> {
+  const database = await databasePromise;
+  await database.put("popularCatalog", entry);
+}
+
+export async function getMdblistRateLimitState(key: string): Promise<MdblistRateLimitState | undefined> {
+  const database = await databasePromise;
+  return database.get("mdblistRateLimits", key);
+}
+
+export async function saveMdblistRateLimitState(state: MdblistRateLimitState): Promise<void> {
+  const database = await databasePromise;
+  await database.put("mdblistRateLimits", state);
+}
+
+export async function getOpenSubtitleSearchCacheEntry(key: string): Promise<OpenSubtitleSearchCacheEntry | undefined> {
+  const database = await databasePromise;
+  return database.get("subtitleSearch", key);
+}
+
+export async function saveOpenSubtitleSearchCacheEntry(entry: OpenSubtitleSearchCacheEntry): Promise<void> {
+  const database = await databasePromise;
+  await database.put("subtitleSearch", entry);
+}
+
+export async function getOpenSubtitleFileCacheEntry(fileId: number): Promise<OpenSubtitleFileCacheEntry | undefined> {
+  const database = await databasePromise;
+  return database.get("subtitleFiles", fileId);
+}
+
+export async function saveOpenSubtitleFileCacheEntry(entry: OpenSubtitleFileCacheEntry): Promise<void> {
+  const database = await databasePromise;
+  await database.put("subtitleFiles", entry);
 }
 
 export async function createSnapshot(
