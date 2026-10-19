@@ -1,3 +1,4 @@
+import { normalizeImdbId, normalizeTmdbId } from "../ratings";
 import type {
   Episode,
   EpgProgram,
@@ -309,6 +310,8 @@ export async function loadXtreamCatalog(
       overview: stringValue(item.plot),
       year: catalogYear(item.releasedate, item.releaseDate, item.release_date, item.year, name),
       rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
+      imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
+      tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
       categoryId,
       category: categoryId ? movieCategories.get(categoryId) || "Uncategorized" : undefined,
       addedAtMillis: epochMillis(item.added),
@@ -333,6 +336,8 @@ export async function loadXtreamCatalog(
       category: categoryId ? seriesCategories.get(categoryId) || "Uncategorized" : undefined,
       year: catalogYear(item.year, item.releasedate, item.releaseDate, item.release_date, name),
       rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
+      imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
+      tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
       addedAtMillis: epochMillis(item.added) ?? epochMillis(item.last_modified),
     }];
   });

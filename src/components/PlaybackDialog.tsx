@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import webPackage from "../../package.json";
 import type { PlayableItem } from "../types";
-import { downloadOpenSubtitle, searchOpenSubtitles, type SubtitleResult } from "../providers/opensubtitles";
+import type { SubtitleResult } from "../providers/opensubtitles";
+import { subtitleService } from "../subtitleService";
 import { playbackErrorMessage } from "../playbackErrors";
 import {
   browserSummary,
@@ -644,10 +645,11 @@ export function PlaybackDialog({
   async function searchSubtitles() {
     setSubtitleBusy(true);
     setSubtitleError(null);
+    setSubtitleResults([]);
     try {
-      setSubtitleResults(await searchOpenSubtitles(subtitleApiKey, subtitleQuery));
+      setSubtitleResults(await subtitleService.search(subtitleApiKey, subtitleQuery));
     } catch (cause) {
-      setSubtitleError("Couldn't search for subtitles. Please try again.");
+      setSubtitleError(cause instanceof Error ? cause.message : "Couldn't search for subtitles. Please try again.");
     } finally {
       setSubtitleBusy(false);
     }
@@ -701,7 +703,7 @@ export function PlaybackDialog({
     setSubtitleBusy(true);
     setSubtitleError(null);
     try {
-      const subtitle = await downloadOpenSubtitle(subtitleApiKey, result.fileId);
+      const subtitle = await subtitleService.download(subtitleApiKey, result.fileId);
       await attachSubtitle(subtitle.name, subtitle.contents);
       setSubtitleOpen(false);
     } catch (cause) {
