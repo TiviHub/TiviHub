@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { EpgProgram, LiveChannel } from "../types";
 import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../liveGuideLayout";
-import { Icon } from "./common";
+import { CustomSelect, Icon } from "./common";
 
 const CHANNEL_COLUMN_WIDTH = 214;
 const GUIDE_OVERSCAN_ROWS = 8;
@@ -190,16 +190,20 @@ export function LiveGuide({
           </button>
           <button className="secondary-button" onClick={jumpToNow} type="button">Now</button>
         </div>
-        <label className="live-guide-select">
+        <div className="live-guide-select">
           <Icon name="filter_list" />
-          <span className="sr-only">Channel group</span>
-          <select aria-label="Channel group" onChange={(event) => setScope(event.target.value)} value={scope}>
-            <option value="all">All channels</option>
-            <option value="favorites">Favorites</option>
-            {groups.map((group) => <option key={group} value={group}>{group}</option>)}
-          </select>
-          <Icon name="expand_more" />
-        </label>
+          <CustomSelect
+            ariaLabel="Channel group"
+            onValueChange={setScope}
+            options={[
+              { label: "All channels", value: "all" },
+              { label: "Favorites", value: "favorites" },
+              ...groups.map((group) => ({ label: group, value: group })),
+            ]}
+            value={scope}
+            variant="embedded"
+          />
+        </div>
         <label className="live-guide-only-epg">
           <input checked={onlyWithEpg} onChange={(event) => setOnlyWithEpg(event.target.checked)} type="checkbox" />
           <span>Only with EPG</span>

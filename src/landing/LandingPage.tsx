@@ -113,7 +113,7 @@ export default function LandingPage() {
         <section aria-labelledby="landing-title" className="landing-hero">
           <div className="landing-hero-copy">
             <p className="landing-eyebrow"><span>✳</span> DESKTOP PLAYER / YOUR SOURCES</p>
-            <h1 id="landing-title">Your media.<br /><span>Your universe.</span></h1>
+            <h1 id="landing-title">Your media<br /><span>Your universe</span></h1>
             <p className="landing-lede">
               A beautifully simple home for the channels, films, and series you choose.
               Bring your own authorized sources. Keep your library on your device.

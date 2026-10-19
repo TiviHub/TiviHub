@@ -6,6 +6,7 @@ import {
   type StreamHealthStatus,
 } from "../streamHealth";
 import { Icon, type IconName } from "./common";
+import { ProgressIndicator } from "./ProgressIndicator";
 
 export function StreamHealthCheckDialog({
   channels,
@@ -138,16 +139,12 @@ export function StreamHealthCheckDialog({
               <span aria-hidden="true" className="spinner" />
               <span>Checked {completed} of {channels.length} channels…</span>
             </div>
-            <div
-              aria-label="Group check progress"
-              aria-valuemax={channels.length}
-              aria-valuemin={0}
-              aria-valuenow={completed}
+            <ProgressIndicator
               className="stream-health-progress-track"
-              role="progressbar"
-            >
-              <span style={{ width: `${channels.length ? (completed / channels.length) * 100 : 0}%` }} />
-            </div>
+              label="Group check progress"
+              max={channels.length}
+              value={completed}
+            />
           </>
         )}
         {status === "cancelled" && (

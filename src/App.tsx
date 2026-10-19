@@ -5,6 +5,7 @@ import webPackage from "../package.json";
 import { checkForUpdate, type AvailableUpdate } from "./updates";
 import { isAdultContent } from "./adultContent";
 import { sortCatalogItems } from "./catalogSorting";
+import { getCatalogImportLogSnapshot, recordCatalogImportSummary } from "./catalogImportLog";
 import { getDiagnosticLogSnapshot } from "./diagnosticLog";
 import {
   canAutoRefreshCatalog,
@@ -67,12 +68,15 @@ import type {
   Series,
 } from "./types";
 import { CatalogPage, LibraryPage, MovieDetail, SeriesDetail } from "./components/ContentPages";
-import { Icon, type IconName } from "./components/common";
+import { CustomSelect, Icon, type IconName } from "./components/common";
 import { DesktopWindowControls } from "./components/DesktopWindowControls";
 import { GlobalSearchDialog } from "./components/GlobalSearchDialog";
 import { PlaybackDialog } from "./components/PlaybackDialog";
+import { PlaylistDeletionProgress } from "./components/PlaylistDeletionProgress";
+import { ProgressIndicator } from "./components/ProgressIndicator";
 import { PlaylistDialog, type PlaylistDraft } from "./components/PlaylistDialog";
 import { SettingsPage } from "./components/SettingsPage";
+import { StartupScreen } from "./components/StartupScreen";
 import { StreamHealthCheckDialog } from "./components/StreamHealthCheckDialog";
 
 type Section = SearchSection;
@@ -107,6 +111,11 @@ function readShowAdultContent(): boolean {
   }
 }
 
+function visibleButton(selector: string): HTMLButtonElement | null {
+  return [...document.querySelectorAll<HTMLButtonElement>(selector)]
+    .find((button) => button.getClientRects().length > 0) ?? null;
+}
+
 function App() {
   const isDesktopApp = isTauri();
   const [section, setSection] = useState<Section>("Home");
@@ -139,7 +148,16 @@ function App() {
   const [editingSource, setEditingSource] = useState<Playlist | undefined>();
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [deletingSource, setDeletingSource] = useState<{
+    name: string;
+    completed: number;
+    total: number;
+    phase: "preparing" | "deleting" | "updating";
+  } | null>(null);
   const [ready, setReady] = useState(false);
+  const [introVisible, setIntroVisible] = useState(
+    () => isDesktopApp && !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [notificationKey, setNotificationKey] = useState(0);
@@ -150,14 +168,26 @@ function App() {
   activeSourceIdRef.current = activeSourceId;
   const updateCheckController = useRef<AbortController | null>(null);
   const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const refreshButtonRef = useRef<HTMLButtonElement>(null);
-  const globalSearchButtonRef = useRef<HTMLButtonElement>(null);
   const globalSearchReturnFocusRef = useRef<HTMLElement | null>(null);
+  const startupOverlayRef = useRef<HTMLDivElement>(null);
   const refreshOverlayRef = useRef<HTMLDivElement>(null);
   const refreshReturnFocusRef = useRef<HTMLElement | null>(null);
   const catalogRefreshInFlight = useRef(new Set<string>());
 
   const activeSource = sources.find((source) => source.id === activeSourceId) ?? null;
+  const blockingDialogOpen = sourceDialogOpen ||
+    Boolean(playableItem && !(inlineLivePlayback && playableItem.live)) ||
+    Boolean(streamHealthRequest);
+
+  useEffect(() => {
+    if (!introVisible) return;
+    const timer = window.setTimeout(() => setIntroVisible(false), 1450);
+    return () => window.clearTimeout(timer);
+  }, [introVisible]);
+
+  useEffect(() => {
+    if (!ready || introVisible) startupOverlayRef.current?.focus();
+  }, [introVisible, ready]);
 
   const checkUpdates = useCallback(async () => {
     updateCheckController.current?.abort();
@@ -188,17 +218,19 @@ function App() {
 
   async function downloadDiagnostics(): Promise<boolean> {
     const localDiagnostics = getDiagnosticLogSnapshot();
+    const catalogImports = getCatalogImportLogSnapshot();
     const backendErrors = isDesktopApp
       ? await invoke<Array<{ component: string; code: string }>>("get_backend_diagnostics")
       : [];
     const report = {
-      format: "tivihub-diagnostics-v1",
+      format: "tivihub-diagnostics-v2",
       generatedAt: new Date().toISOString(),
       appVersion: webPackage.version,
-      runtime: isDesktopApp ? "TiviHub Windows desktop app" : "TiviHub browser preview",
-      privacy: "This file contains sanitized error categories only. It excludes media titles, source names, URLs, credentials, raw messages, and stack traces.",
-      localLogStorageAvailable: localDiagnostics.storageAvailable,
+      runtime: isDesktopApp ? "TiviHub desktop app" : "TiviHub browser preview",
+      privacy: "This file contains sanitized error categories and catalog-import counts/timings only. It excludes media titles, source names, URLs, credentials, raw messages, and stack traces.",
+      localLogStorageAvailable: localDiagnostics.storageAvailable && catalogImports.storageAvailable,
       frontendErrors: localDiagnostics.entries,
+      catalogImports: catalogImports.entries,
       backendErrors,
     };
     const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
@@ -268,7 +300,7 @@ function App() {
     if (!returnFocus) return;
     refreshReturnFocusRef.current = null;
     if (returnFocus.isConnected) returnFocus.focus();
-    else refreshButtonRef.current?.focus();
+    else visibleButton(".settings-source-refresh")?.focus();
   }, [refreshing]);
 
   useEffect(() => {
@@ -309,9 +341,9 @@ function App() {
       if ((!event.ctrlKey && !event.metaKey) || event.key.toLowerCase() !== "k" || event.repeat) return;
       if (!ready || globalSearchOpen || sourceDialogOpen || refreshing || playableItem) return;
       event.preventDefault();
-      globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
         ? document.activeElement
-        : globalSearchButtonRef.current;
+        : visibleButton(".sidebar-search-button, .global-search-button");
       setGlobalSearchOpen(true);
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -495,6 +527,7 @@ function App() {
   async function connectSource(draft: PlaylistDraft) {
     clearNotifications();
     const playlist = draft.playlist;
+    const importStartedAt = performance.now();
     let catalog: CatalogCandidate;
     let importedEpisodes: Episode[] | undefined;
     if (playlist.type === "M3U") {
@@ -566,19 +599,41 @@ function App() {
       onProgress: draft.onProgress,
     });
     await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
+    recordCatalogImportSummary({
+      provider: playlist.type,
+      elapsedMillis: Math.round(performance.now() - importStartedAt),
+      channels: catalog.channels.length,
+      movies: catalog.movies.length,
+      series: catalog.series.length,
+      episodes: importedEpisodes?.length ?? null,
+    });
+    const catalogSummary = [
+      `${catalog.channels.length.toLocaleString()} live channels`,
+      `${catalog.movies.length.toLocaleString()} movies`,
+      `${catalog.series.length.toLocaleString()} series`,
+    ].join(", ");
     if (shouldActivate) {
       if (isNewSource) setSection("Live TV");
       try {
         const count = await loadGuide(playlist);
-        notify(count === null
-          ? `Source ${isNewSource ? "connected" : "updated"}. Open the TV guide to load recent programmes for the channels on each page.`
-          : `Source ${isNewSource ? "connected" : "updated"}. Loaded ${count.toLocaleString()} TV guide programmes.`,
-        "notice");
+        const guideSummary = count === null
+          ? "TV guide listings load as you browse channels."
+          : `TV guide updated with ${count.toLocaleString()} programmes.`;
+        notify(
+          `Source ${isNewSource ? "connected" : "updated"}. ${catalogSummary}. ${guideSummary}`,
+          "notice",
+        );
       } catch {
-        notify(`Source ${isNewSource ? "connected" : "updated"}. ${tvGuideFailureMessage(playlist)}`, "error");
+        notify(
+          `Source ${isNewSource ? "connected" : "updated"}. ${catalogSummary}. ${tvGuideFailureMessage(playlist)}`,
+          "error",
+        );
       }
     } else {
-      notify(`Source “${playlist.name}” updated. Your active source was not changed.`, "notice");
+      notify(
+        `Source “${playlist.name}” updated: ${catalogSummary}. Your active source was not changed.`,
+        "notice",
+      );
     }
   }
 
@@ -589,9 +644,9 @@ function App() {
 
   function openGlobalSearch() {
     if (!ready || refreshing || sourceDialogOpen || playableItem) return;
-    globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement
+    globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
       ? document.activeElement
-      : globalSearchButtonRef.current;
+      : visibleButton(".sidebar-search-button, .global-search-button");
     setGlobalSearchOpen(true);
   }
 
@@ -686,7 +741,7 @@ function App() {
       const activeElement = document.activeElement;
       refreshReturnFocusRef.current = activeElement instanceof HTMLElement && activeElement !== document.body
         ? activeElement
-        : refreshButtonRef.current;
+        : visibleButton(".settings-source-refresh");
       setRefreshing(true);
       clearNotifications();
     }
@@ -905,8 +960,14 @@ function App() {
 
   async function removeSource(source: Playlist) {
     if (!window.confirm(`Delete “${source.name}” and all catalog, favorite, guide, and library data linked to it from this app?`)) return;
+    setDeletingSource({ name: source.name, completed: 0, total: 0, phase: "preparing" });
     try {
-      await deletePlaylist(source.id);
+      await deletePlaylist(source.id, (completed, total) => {
+        setDeletingSource((current) => current
+          ? { ...current, completed, total, phase: "deleting" }
+          : current);
+      });
+      setDeletingSource((current) => current ? { ...current, phase: "updating" } : current);
       const remaining = await getPlaylists();
       if (source.id === activeSourceId && remaining[0]) {
         await setActivePlaylist(remaining[0].id);
@@ -918,6 +979,8 @@ function App() {
       notify(`“${source.name}” and its local data were deleted.`, "notice");
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : "Could not delete this source.", "error");
+    } finally {
+      setDeletingSource(null);
     }
   }
 
@@ -1220,99 +1283,104 @@ function App() {
     : undefined;
 
   return (
-    <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
-      <aside className="sidebar" aria-label="Primary navigation" inert={refreshing || globalSearchOpen}>
+    <>
+    <div
+      className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${isDesktopApp ? " desktop-app" : ""}`}
+      inert={introVisible || !ready}
+    >
+      <aside
+        className="sidebar"
+        aria-label="Primary navigation"
+        inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}
+      >
         <div className="sidebar-header">
           <button aria-label="TiviHub home" className="brand" onClick={() => navigateToSection("Home")} type="button">
             <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
             <span>TiviHub<span className="brand-period">.</span></span>
           </button>
+        </div>
+        <nav className="desktop-nav" id="desktop-navigation">
           <button
-            aria-controls="desktop-navigation"
-            aria-expanded={!sidebarCollapsed}
-            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
-            className="sidebar-collapse"
-            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-keyshortcuts="Control+K Meta+K"
+            aria-label="Search your library"
+            className="nav-item sidebar-search-button"
+            disabled={!ready || refreshing || sourceDialogOpen || Boolean(playableItem)}
+            onClick={openGlobalSearch}
+            title="Search your library (Ctrl+K / ⌘K)"
             type="button"
           >
-            <Icon name={sidebarCollapsed ? "chevron_right" : "chevron_left"} />
+            <Icon name="search" />
+            <span>Search</span>
           </button>
-        </div>
-        <p className="nav-caption">YOUR SPACE</p>
-        <nav className="desktop-nav" id="desktop-navigation">
-          {sections.map((item) => (
+          {sections.slice(0, -1).map((item) => (
             <NavItem key={item.label} icon={item.icon} label={item.label} active={section === item.label} onClick={() => navigateToSection(item.label)} />
           ))}
         </nav>
         <div className="sidebar-footer">
-          <div className="sidebar-release">
-            <span className="sidebar-version">TiviHub v{webPackage.version}</span>
-            {isDesktopApp && (
-              <button
-                aria-label={availableUpdate
-                  ? `Download TiviHub update version ${availableUpdate.version}`
-                  : updateStatus === "checking" ? "Checking for updates" : "Check for updates"}
-                className="sidebar-update-check"
-                disabled={updateStatus === "checking"}
-                onClick={() => availableUpdate ? void openAvailableUpdate() : void checkUpdates()}
-                title={availableUpdate ? `Download TiviHub v${availableUpdate.version}` : "Check for updates"}
-                type="button"
-              >
-                <span className={`sidebar-update-indicator ${updateStatus}`} />
-                <span className="sidebar-update-label">
-                  {updateStatus === "checking"
-                    ? "Checking for updates…"
-                    : updateStatus === "current"
-                      ? "Up to date"
-                      : updateStatus === "available" && availableUpdate
-                        ? `Update available · v${availableUpdate.version}`
-                        : updateStatus === "error"
-                          ? `${availableUpdate ? "Could not open installer" : "Update check failed"} · Retry`
-                          : "Check for updates"}
-                </span>
-                {availableUpdate && <Icon name="download" />}
-              </button>
-            )}
+          <button
+            aria-current={section === "Settings" ? "page" : undefined}
+            aria-label="Open settings"
+            className={`nav-item sidebar-settings-button${section === "Settings" ? " active" : ""}`}
+            onClick={() => navigateToSection("Settings")}
+            title="Settings"
+            type="button"
+          >
+            <Icon name="settings" />
+            <span>Settings</span>
+          </button>
+          <div className="sidebar-footer-controls">
+            <button
+              aria-controls="desktop-navigation"
+              aria-expanded={!sidebarCollapsed}
+              aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              className="sidebar-collapse sidebar-collapse-footer"
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              type="button"
+            >
+              <Icon name={sidebarCollapsed ? "chevron_right" : "chevron_left"} />
+            </button>
           </div>
         </div>
       </aside>
 
-      <main className="main-content" inert={refreshing || globalSearchOpen}>
+      <main className="main-content" inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}>
         <header className="topbar">
           <button className="mobile-brand" onClick={() => navigateToSection("Home")} type="button">
             <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
             <span>TiviHub<span className="brand-period">.</span></span>
           </button>
-          <div className="breadcrumb">
-            <span>PLAYER</span><span className="breadcrumb-slash">/</span><span className="breadcrumb-current">{section.toUpperCase()}</span>
-          </div>
           <div aria-hidden="true" className="titlebar-drag-region" data-tauri-drag-region />
-          <div className="topbar-actions">
+          {sources.length > 0 && (
+            <div className="source-switcher topbar-mobile-only">
+              <Icon name="playlist_play" />
+              <CustomSelect
+                ariaLabel="Active source"
+                className="source-switcher-dropdown"
+                disabled={refreshing || sourceDialogOpen || globalSearchOpen}
+                onValueChange={(sourceId) => { if (sourceId) void activateSource(sourceId); }}
+                options={[
+                  ...(!activeSource ? [{ disabled: true, label: "Choose a source", value: "" }] : []),
+                  ...sources.map((source) => ({ label: source.name, value: source.id })),
+                ]}
+                title={activeSource?.name ?? "Choose a source"}
+                value={activeSource?.id ?? ""}
+                variant="embedded"
+              />
+            </div>
+          )}
+          <div className="topbar-actions topbar-mobile-only">
             <button
               aria-keyshortcuts="Control+K Meta+K"
               aria-label="Search your library"
               className="icon-button global-search-button"
               disabled={!ready || refreshing || sourceDialogOpen || Boolean(playableItem)}
               onClick={openGlobalSearch}
-              ref={globalSearchButtonRef}
               title="Search your library (Ctrl+K / ⌘K)"
               type="button"
             >
               <Icon name="search" />
             </button>
-            {sources.length > 0 && (
-              <button
-                aria-label="Refresh current source"
-                className="icon-button refresh-button"
-                disabled={!activeSource || refreshing}
-                onClick={() => void refreshCurrentSource()}
-                ref={refreshButtonRef}
-                type="button"
-              >
-                <Icon name="refresh" />
-              </button>
-            )}
             <button
               aria-label="Open settings"
               aria-current={section === "Settings" ? "page" : undefined}
@@ -1322,13 +1390,11 @@ function App() {
             >
               <Icon name="settings" />
             </button>
-            <DesktopWindowControls />
           </div>
+          <DesktopWindowControls />
         </header>
 
-        {!ready ? (
-          <div className="startup-loading"><span className="spinner" /> Opening your local library…</div>
-        ) : (
+        {ready && (
           <>
             {(section === "Live TV" || (inlineLivePlayback && playableItem?.live)) && (
               <div
@@ -1405,6 +1471,13 @@ function App() {
                 activeSourceId={activeSourceId}
                 onAddSource={openAddSource}
                 onDownloadDiagnostics={downloadDiagnostics}
+                onRefreshSource={() => void refreshCurrentSource()}
+                refreshing={refreshing}
+                isDesktopApp={isDesktopApp}
+                updateStatus={updateStatus}
+                availableUpdateVersion={availableUpdate?.version ?? null}
+                onUpdateAction={() => availableUpdate ? void openAvailableUpdate() : void checkUpdates()}
+                version={webPackage.version}
                 apiKey={subtitleApiKey}
                 onActivate={(id) => void activateSource(id)}
                 onChooseTheme={chooseTheme}
@@ -1540,7 +1613,7 @@ function App() {
       </main>
 
       {(error || notice) && (
-        <div aria-live={error ? "assertive" : "polite"} className="notification-stack" inert={refreshing || globalSearchOpen}>
+        <div aria-live={error ? "assertive" : "polite"} className="notification-stack" inert={refreshing || globalSearchOpen || Boolean(deletingSource)}>
           <div
             className={`app-message notification-toast ${error ? "error-message" : "notice-message"}`}
             key={notificationKey}
@@ -1553,14 +1626,18 @@ function App() {
         </div>
       )}
 
-      <nav className="mobile-nav" aria-label="Primary navigation" inert={refreshing || globalSearchOpen}>
+      <nav
+        className="mobile-nav"
+        aria-label="Primary navigation"
+        inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}
+      >
         {sections.filter((item) => item.label !== "Settings").map((item) => (
           <NavItem key={item.label} icon={item.icon} label={item.label} active={section === item.label} onClick={() => navigateToSection(item.label)} compact />
         ))}
       </nav>
 
       {sourceDialogOpen && (
-        <div className="refresh-dialog-host" inert={refreshing || globalSearchOpen}>
+        <div className="refresh-dialog-host" inert={refreshing || globalSearchOpen || Boolean(deletingSource)}>
           <PlaylistDialog
             editing={editingSource}
             onLoadDemo={import.meta.env.DEV ? loadDemoLibrary : undefined}
@@ -1606,11 +1683,17 @@ function App() {
             <p id="refresh-progress-description">
               Updating channels, movies, series, and the TV guide. Please wait while the latest data is saved on this device.
             </p>
-            <div aria-label="Source refresh progress" className="refresh-progress-track" role="progressbar">
-              <span />
-            </div>
+            <ProgressIndicator label="Source refresh progress" />
           </section>
         </div>
+      )}
+      {deletingSource && (
+        <PlaylistDeletionProgress
+          completed={deletingSource.completed}
+          name={deletingSource.name}
+          phase={deletingSource.phase}
+          total={deletingSource.total}
+        />
       )}
       {globalSearchOpen && !refreshing && !sourceDialogOpen && !playableItem && (
         <GlobalSearchDialog
@@ -1625,6 +1708,14 @@ function App() {
         />
       )}
     </div>
+    {(!ready || introVisible) && (
+      <StartupScreen
+        animate={introVisible}
+        logoSrc={`${ASSET_BASE_URL}icons/tivihub.svg`}
+        screenRef={startupOverlayRef}
+      />
+    )}
+    </>
   );
 }
 
@@ -1651,6 +1742,58 @@ function NavItem({
       <Icon name={icon} />
       <span>{label === "Live TV" && compact ? "Live" : label}</span>
     </button>
+  );
+}
+
+function HomeEmptyState({
+  eyebrow,
+  title,
+  description,
+  actionLabel,
+  actionIcon,
+  onAction,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionIcon: IconName;
+  onAction: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <section aria-labelledby="home-empty-title" className="home-empty">
+      <div className="home-empty-panel">
+        <div className="home-empty-prompt">
+          <p className="eyebrow">{eyebrow}</p>
+          <h1 id="home-empty-title">{title}</h1>
+          <p className="home-empty-description">{description}</p>
+          <button className="primary-button home-empty-action" onClick={onAction} type="button">
+            <Icon name={actionIcon} />
+            {actionLabel}
+            <Icon name="arrow_forward" />
+          </button>
+          {children}
+        </div>
+        <div aria-hidden="true" className="home-empty-art">
+          <div className="home-empty-orbit home-empty-orbit-outer" />
+          <div className="home-empty-orbit home-empty-orbit-inner" />
+          <div className="home-empty-logo-core">
+            <img alt="" src={`${ASSET_BASE_URL}icons/tivihub-512.png`} />
+          </div>
+          <span className="home-empty-star home-empty-star-one">✦</span>
+          <span className="home-empty-star home-empty-star-two">✧</span>
+          <span className="home-empty-caption">TIVIHUB / DESKTOP</span>
+          <div className="home-empty-art-card home-empty-art-card-top">
+            <Icon name="movie" /><span>YOUR LIBRARY</span>
+          </div>
+          <div className="home-empty-art-card home-empty-art-card-bottom">
+            <span className="home-empty-art-pulse" /><span>READY WHEN YOU ARE</span>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1710,34 +1853,19 @@ function Home({
 
   if (sourceCount === 0) {
     return (
-      <section aria-labelledby="home-empty-title" className="home-empty">
-        <div className="home-empty-content">
-          <div aria-hidden="true" className="home-empty-art">
-            <div className="home-empty-orbit home-empty-orbit-outer" />
-            <div className="home-empty-orbit home-empty-orbit-inner" />
-            <div className="home-empty-logo-core">
-              <img alt="" src={`${ASSET_BASE_URL}icons/tivihub-512.png`} />
-            </div>
-            <span className="home-empty-star home-empty-star-one">✦</span>
-            <span className="home-empty-star home-empty-star-two">✧</span>
-            <span className="home-empty-caption">TIVIHUB / DESKTOP</span>
-            <div className="home-empty-art-card home-empty-art-card-top">
-              <Icon name="movie" /><span>YOUR LIBRARY</span>
-            </div>
-            <div className="home-empty-art-card home-empty-art-card-bottom">
-              <span className="home-empty-art-pulse" /><span>READY WHEN YOU ARE</span>
-            </div>
-          </div>
-          <div className="home-empty-prompt">
-            <h1 id="home-empty-title">Add a source to get started.</h1>
-            <button className="primary-button home-empty-action" onClick={onAddSource} type="button">
-              <Icon name="add" />
-              Add source
-              <Icon name="arrow_forward" />
-            </button>
-          </div>
+      <HomeEmptyState
+        actionIcon="add"
+        actionLabel="Add source"
+        description="Connect an M3U playlist or Xtream Codes account to build your library. Your source details are stored on this device; playback requests go directly to your provider."
+        eyebrow="YOUR PRIVATE MEDIA SPACE"
+        onAction={onAddSource}
+        title="Add your first source"
+      >
+        <div aria-label="Supported source types" className="home-empty-source-types">
+          <span><Icon name="playlist_play" /> M3U playlist</span>
+          <span><Icon name="dns" /> Xtream Codes</span>
         </div>
-      </section>
+      </HomeEmptyState>
     );
   }
 
@@ -1752,7 +1880,7 @@ function Home({
       <section className="hero">
         <div className="hero-copy">
           <p className="eyebrow"><span className="eyebrow-mark">✳</span> YOUR MEDIA. YOUR RULES.</p>
-          <h1>Tune in to<br /><span className="neon-text">your universe.</span></h1>
+          <h1>Tune in to<br /><span className="neon-text">your universe</span></h1>
           <p className="hero-description">
             Your channels, films, and series in one beautifully simple player.
             Bring your own sources and make it yours.
@@ -1963,6 +2091,21 @@ function MediaHome({
     }
   }
 
+  function libraryActionLabel(item: LibraryItem, intent: "resume" | "replay" | "details") {
+    const hasMovie = item.contentType === "MOVIE" &&
+      movies.some((movie) => movie.id === item.contentId && movie.playlistId === item.playlistId);
+    const hasSeries = item.contentType === "SERIES" &&
+      series.some((entry) => entry.id === item.contentId && entry.playlistId === item.playlistId);
+
+    if (intent === "resume") return item.streamUrl ? "Resume" : "Unavailable";
+    if (intent === "replay") {
+      if (item.streamUrl) return "Replay";
+      return hasMovie || hasSeries || item.contentType === "SERIES" ? "View details" : "Unavailable";
+    }
+    if (hasMovie || hasSeries || (!item.streamUrl && item.contentType === "SERIES")) return "View details";
+    return item.streamUrl ? "Play" : "Unavailable";
+  }
+
   function openFavorite(favorite: Favorite) {
     const movie = favorite.contentType === "MOVIE"
       ? movies.find((entry) => entry.id === favorite.contentId && entry.playlistId === favorite.playlistId)
@@ -2003,7 +2146,34 @@ function MediaHome({
     }
   }
 
-  const featuredContinue = continueWatching.find((item) => item.streamUrl) ?? continueWatching[0];
+  function favoriteActionLabel(favorite: Favorite) {
+    if (favorite.contentType === "LIVE") return favorite.streamUrl ? "Watch live" : "Unavailable";
+    if (favorite.contentType === "SERIES") return "View details";
+    if (favorite.contentType === "MOVIE" && movies.some((movie) =>
+      movie.id === favorite.contentId && movie.playlistId === favorite.playlistId,
+    )) return "View details";
+    return favorite.streamUrl ? "Play" : "Unavailable";
+  }
+
+  if (library.length === 0 && favorites.length === 0 &&
+    (movies.length > 0 || series.length > 0 || channels.length > 0)) {
+    const destination: Section = movies.length > 0 ? "Movies" : series.length > 0 ? "Series" : "Live TV";
+    return (
+      <HomeEmptyState
+        actionIcon="play_arrow"
+        actionLabel="Start watching"
+        description="Start watching a movie, series, or live channel and it will appear here."
+        eyebrow="YOUR LIBRARY"
+        onAction={() => onNavigate(destination)}
+        title="Your library is empty"
+      />
+    );
+  }
+
+  const featuredContinue = library
+    .filter((item) => item.status === "WATCHING")
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .find((item) => item.streamUrl) ?? continueWatching.find((item) => item.streamUrl) ?? continueWatching[0];
   const featuredFavorite = globalFavorites[0];
   const featuredMovie = latestMovies[0];
   const featuredSeries = latestSeries[0];
@@ -2022,7 +2192,7 @@ function MediaHome({
     featured = {
       eyebrow: "CONTINUE WATCHING",
       title: featuredContinue.title,
-      detail: featuredContinue.parentTitle || featuredContinue.contentType,
+      detail: featuredContinue.parentTitle || homeContentTypeLabel(featuredContinue.contentType),
       image: featuredContinue.artworkUrl,
       wide: featuredContinue.contentType === "LIVE",
       progress: featuredContinue.durationMillis > 0
@@ -2035,7 +2205,7 @@ function MediaHome({
     featured = {
       eyebrow: "FROM YOUR FAVORITES",
       title: featuredFavorite.title,
-      detail: featuredFavorite.contentType,
+      detail: homeContentTypeLabel(featuredFavorite.contentType),
       image: featuredFavorite.artworkUrl,
       wide: featuredFavorite.contentType === "LIVE",
       actionLabel: featuredFavorite.contentType === "LIVE" ? "Watch live" : "Open title",
@@ -2133,7 +2303,9 @@ function MediaHome({
         >
           {continueWatching.map((item) => (
             <HomeTitleCard
-              detail={item.parentTitle || item.contentType}
+              actionLabel={libraryActionLabel(item, "resume")}
+              detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
+              disabled={libraryActionLabel(item, "resume") === "Unavailable"}
               icon={item.contentType === "LIVE" ? "live_tv" : item.contentType === "SERIES" || item.contentType === "EPISODE" ? "tv" : "movie"}
               image={item.artworkUrl}
               key={item.id}
@@ -2158,7 +2330,9 @@ function MediaHome({
         >
           {watchedChannels.map((item) => (
             <HomeTitleCard
-              detail={item.title}
+              actionLabel={item.streamUrl ? "Watch live" : "Unavailable"}
+              detail="Live TV"
+              disabled={!item.streamUrl}
               icon="live_tv"
               image={item.artworkUrl}
               key={item.id}
@@ -2180,7 +2354,9 @@ function MediaHome({
         >
           {recentlyWatched.map((item) => (
             <HomeTitleCard
-              detail={item.parentTitle || item.contentType}
+              actionLabel={libraryActionLabel(item, "replay")}
+              detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
+              disabled={libraryActionLabel(item, "replay") === "Unavailable"}
               icon={item.contentType === "LIVE" ? "live_tv" : item.contentType === "SERIES" || item.contentType === "EPISODE" ? "tv" : "movie"}
               image={item.artworkUrl}
               key={item.id}
@@ -2202,7 +2378,9 @@ function MediaHome({
         >
           {globalFavorites.map((favorite) => (
             <HomeTitleCard
-              detail={favorite.contentType}
+              actionLabel={favoriteActionLabel(favorite)}
+              detail={homeContentTypeLabel(favorite.contentType)}
+              disabled={favoriteActionLabel(favorite) === "Unavailable"}
               icon={favorite.contentType === "LIVE" ? "live_tv" : favorite.contentType === "SERIES" ? "tv" : "movie"}
               image={favorite.artworkUrl}
               key={favorite.id}
@@ -2224,7 +2402,9 @@ function MediaHome({
         >
           {watchlist.map((item) => (
             <HomeTitleCard
-              detail={item.parentTitle || item.contentType}
+              actionLabel={libraryActionLabel(item, "details")}
+              detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
+              disabled={libraryActionLabel(item, "details") === "Unavailable"}
               icon={item.contentType === "SERIES" ? "tv" : "movie"}
               image={item.artworkUrl}
               key={item.id}
@@ -2237,6 +2417,16 @@ function MediaHome({
 
     </section>
   );
+}
+
+function homeContentTypeLabel(contentType: ContentType): string {
+  const labels: Record<ContentType, string> = {
+    LIVE: "Live TV",
+    MOVIE: "Movie",
+    SERIES: "Series",
+    EPISODE: "Episode",
+  };
+  return labels[contentType];
 }
 
 function HomeShelf({
@@ -2291,34 +2481,52 @@ function HomeShelf({
 
 function HomeTitleCard({
   title,
+  actionLabel,
   detail,
   image,
   icon,
   onClick,
   progress,
   wide = false,
+  disabled = false,
 }: {
   title: string;
+  actionLabel: string;
   detail: string;
   image?: string;
   icon: IconName;
   onClick: () => void;
   progress?: number;
   wide?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <button className={`home-title-card${wide ? " wide-title-card" : ""}`} onClick={onClick} title={title} type="button">
+    <button
+      aria-label={`${actionLabel} ${title}`}
+      className={`catalog-card home-title-card${wide ? " wide-title-card" : ""}`}
+      disabled={disabled}
+      onClick={onClick}
+      title={`${actionLabel} ${title}`}
+      type="button"
+    >
       <span className="home-title-art">
-        {image ? <img alt="" draggable={false} loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={image} /> : <Icon name={icon} />}
-        <span className="home-card-play"><Icon name="play_arrow" /></span>
+        <span aria-hidden="true" className="catalog-artwork-fallback"><Icon name={icon} /></span>
+        {image && <img alt="" draggable={false} loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={image} />}
+        <span aria-hidden="true" className="home-card-play">
+          <Icon name={actionLabel === "View details" ? "arrow_forward" : "play_arrow"} />
+          <span>{actionLabel}</span>
+        </span>
         {progress !== undefined && (
           <span className="home-card-progress">
             <span style={{ width: `${progress}%` }} />
           </span>
         )}
       </span>
-      <strong>{title}</strong>
-      <small>{detail}</small>
+        <span className="catalog-card-copy">
+          <strong title={title}>{title}</strong>
+          <small title={detail}>{detail}</small>
+          {disabled && <span className="home-title-action">{actionLabel}</span>}
+        </span>
     </button>
   );
 }

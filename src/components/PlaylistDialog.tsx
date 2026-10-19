@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { DrmSystem, Playlist, PlaylistType } from "../types";
 import { validateHttpsUrl } from "../providers/http";
 import { MAX_M3U_BYTES } from "../providers/m3u";
-import { Icon } from "./common";
+import { CustomSelect, Icon, type CustomSelectOption } from "./common";
+import { ProgressIndicator } from "./ProgressIndicator";
 
 export interface PlaylistDraft {
   playlist: Playlist;
@@ -11,6 +12,11 @@ export interface PlaylistDraft {
   onStage?: (stage: "connecting" | "parsing" | "saving") => void;
   onProgress?: (completed: number, total: number) => void;
 }
+
+const DRM_SYSTEM_OPTIONS: readonly CustomSelectOption<DrmSystem>[] = [
+  { label: "Widevine (Chrome / Edge)", value: "com.widevine.alpha" },
+  { label: "FairPlay (Safari)", value: "com.apple.fps" },
+];
 
 export function PlaylistDialog({
   editing,
@@ -40,25 +46,71 @@ export function PlaylistDialog({
   const [busyStage, setBusyStage] = useState<"connecting" | "parsing" | "saving">("connecting");
   const [saveProgress, setSaveProgress] = useState<{ completed: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const restoreFocusFrameRef = useRef<number | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const focusCapturedRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const drmLicenseUrlRef = useRef<HTMLInputElement>(null);
+  const drmCertificateUrlRef = useRef<HTMLInputElement>(null);
   const connectAbortController = useRef<AbortController | null>(null);
   const onCloseRef = useRef<() => void>(onClose);
   const closeDialog = () => {
-    if (busyAction === "connect" && busyStage === "saving") return;
+    if (busyAction === "demo" || (busyAction === "connect" && busyStage === "saving")) return;
     connectAbortController.current?.abort();
     onClose();
   };
   onCloseRef.current = closeDialog;
 
   useEffect(() => {
-    const previousFocus = document.activeElement;
-    document.querySelector<HTMLInputElement>(".playlist-dialog input:not([type='file'])")?.focus();
+    if (restoreFocusFrameRef.current !== null) {
+      window.cancelAnimationFrame(restoreFocusFrameRef.current);
+      restoreFocusFrameRef.current = null;
+    }
+    if (!focusCapturedRef.current) {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      focusCapturedRef.current = true;
+    }
+    dialogRef.current?.querySelector<HTMLInputElement>("input:not([type='file'])")?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCloseRef.current();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const dialog = dialogRef.current;
+      const focusable = Array.from(
+        dialog?.querySelectorAll<HTMLElement>(
+          "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length > 0);
+      if (focusable.length === 0 || !dialog) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const focusIsOutsideDialog = !dialog.contains(document.activeElement);
+      if (event.shiftKey && (document.activeElement === first || focusIsOutsideDialog)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || focusIsOutsideDialog)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+      restoreFocusFrameRef.current = window.requestAnimationFrame(() => {
+        restoreFocusFrameRef.current = null;
+        const previousFocus = previousFocusRef.current;
+        previousFocusRef.current = null;
+        focusCapturedRef.current = false;
+        if (previousFocus?.isConnected) previousFocus.focus();
+      });
     };
   }, []);
 
@@ -72,10 +124,12 @@ export function PlaylistDialog({
       !(editing?.type === "M3U" && editing.fileName)
     ) {
       setError("Choose an M3U playlist file.");
+      fileInputRef.current?.focus();
       return;
     }
     if (file && file.size > MAX_M3U_BYTES) {
       setError("Playlist files are limited to 200 MB.");
+      fileInputRef.current?.focus();
       return;
     }
     if ((type === "XTREAM" || sourceMode === "url") && !url.trim()) {
@@ -86,14 +140,27 @@ export function PlaylistDialog({
       setError("Enter the Xtream username and password.");
       return;
     }
-    try {
-      if (drmLicenseUrl) validateHttpsUrl(drmLicenseUrl, "DRM license URL");
-      if (drmCertificateUrl) validateHttpsUrl(drmCertificateUrl, "FairPlay certificate URL");
-      if (drmSystem === "com.apple.fps" && drmLicenseUrl && !drmCertificateUrl) {
-        throw new Error("FairPlay requires the HTTPS server certificate URL from your provider.");
+    if (drmLicenseUrl) {
+      try {
+        validateHttpsUrl(drmLicenseUrl, "DRM license URL");
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "DRM license URL is invalid.");
+        drmLicenseUrlRef.current?.focus();
+        return;
       }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "DRM details are invalid.");
+    }
+    if (drmCertificateUrl) {
+      try {
+        validateHttpsUrl(drmCertificateUrl, "FairPlay certificate URL");
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "FairPlay certificate URL is invalid.");
+        drmCertificateUrlRef.current?.focus();
+        return;
+      }
+    }
+    if (drmSystem === "com.apple.fps" && drmLicenseUrl && !drmCertificateUrl) {
+      setError("FairPlay requires the HTTPS server certificate URL from your provider.");
+      drmCertificateUrlRef.current?.focus();
       return;
     }
 
@@ -176,7 +243,14 @@ export function PlaylistDialog({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="dialog-card playlist-dialog" role="dialog" aria-modal="true" aria-labelledby="source-dialog-title">
+      <section
+        className="dialog-card playlist-dialog"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="source-dialog-title"
+        aria-describedby="source-dialog-description"
+      >
         <header className="dialog-heading">
           <div>
                 <p className="eyebrow">YOUR SOURCES / 01</p>
@@ -185,7 +259,7 @@ export function PlaylistDialog({
           <button
             aria-label="Close"
             className="icon-button"
-            disabled={busyAction === "connect" && busyStage === "saving"}
+            disabled={busyAction === "demo" || (busyAction === "connect" && busyStage === "saving")}
             onClick={closeDialog}
             type="button"
           >
@@ -193,8 +267,11 @@ export function PlaylistDialog({
           </button>
         </header>
 
-        <form className="dialog-form" onSubmit={(event) => void submit(event)}>
-          <fieldset className="source-type-switch">
+        <form aria-busy={busyAction !== null} className="dialog-form" onSubmit={(event) => void submit(event)}>
+          <p className="form-note source-dialog-intro" id="source-dialog-description">
+            Connect a playlist or provider account. Source details and imported content stay on this device.
+          </p>
+          <fieldset className="source-type-switch" disabled={busyAction !== null}>
             <legend className="sr-only">Source type</legend>
             {(["M3U", "XTREAM"] as const).map((item) => (
               <button
@@ -214,7 +291,7 @@ export function PlaylistDialog({
           </fieldset>
 
           {type === "M3U" && (
-            <fieldset className="source-mode-switch">
+            <fieldset className="source-mode-switch" disabled={busyAction !== null}>
               <legend className="sr-only">M3U source method</legend>
               <button
                 aria-pressed={sourceMode === "url"}
@@ -236,9 +313,10 @@ export function PlaylistDialog({
           )}
 
           <label className="form-field">
-            <span>Playlist name</span>
+            <span>Playlist name <em>Optional</em></span>
             <input
               autoComplete="off"
+              disabled={busyAction !== null}
               maxLength={80}
               onChange={(event) => setName(event.target.value)}
               placeholder="Living room"
@@ -248,10 +326,11 @@ export function PlaylistDialog({
 
           {sourceMode === "url" || type === "XTREAM" ? (
             <>
-              <label className="form-field">
-                <span>{type === "M3U" ? "Playlist URL" : "Provider server URL"}</span>
+              <label className="form-field" key="playlist-url">
+                <span>{type === "M3U" ? "Playlist URL" : "Provider server URL"} <em>Required</em></span>
                 <input
                   autoComplete="url"
+                  disabled={busyAction !== null}
                   inputMode="url"
                   onChange={(event) => setUrl(event.target.value)}
                   placeholder={type === "M3U" ? "https://provider.example/list.m3u" : "https://provider.example"}
@@ -268,20 +347,24 @@ export function PlaylistDialog({
             </>
           ) : (
             <>
-              <label className="form-field">
-                <span>M3U file</span>
+              <label className="form-field" key="playlist-file">
+                <span>M3U file <em>Required</em></span>
                 <input
                   accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl,text/plain"
                   onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                  disabled={busyAction !== null}
+                  required={!(editing?.type === "M3U" && editing.fileName)}
+                  ref={fileInputRef}
                   type="file"
                 />
                 <small>{file?.name ?? editing?.fileName ?? "No file selected"}</small>
               </label>
               <p className="form-note">M3U files are limited to 200 MB. The file stays on this device.</p>
-              <label className="form-field">
+              <label className="form-field" key="playlist-file-base-url">
                 <span>Base URL for relative streams <em>Optional</em></span>
                 <input
                   autoComplete="url"
+                  disabled={busyAction !== null}
                   inputMode="url"
                   onChange={(event) => setUrl(event.target.value)}
                   placeholder="https://provider.example/"
@@ -295,18 +378,20 @@ export function PlaylistDialog({
           {type === "XTREAM" && (
             <div className="form-row">
               <label className="form-field">
-                <span>Username</span>
+                <span>Username <em>Required</em></span>
                 <input
                   autoComplete="username"
+                  disabled={busyAction !== null}
                   onChange={(event) => setUsername(event.target.value)}
                   required
                   value={username}
                 />
               </label>
               <label className="form-field">
-                <span>Password</span>
+                <span>Password <em>Required</em></span>
                 <input
                   autoComplete="current-password"
+                  disabled={busyAction !== null}
                   onChange={(event) => setPassword(event.target.value)}
                   required
                   type="password"
@@ -318,11 +403,12 @@ export function PlaylistDialog({
 
           {(type === "M3U" || type === "XTREAM") && (
             <details className="advanced-source">
-              <summary>Guide &amp; DRM options</summary>
+              <summary>Optional guide &amp; DRM settings</summary>
               <label className="form-field">
                 <span>XMLTV guide URL <em>Optional</em></span>
                 <input
                   autoComplete="url"
+                  disabled={busyAction !== null}
                   inputMode="url"
                   onChange={(event) => setEpgUrl(event.target.value)}
                   placeholder={type === "XTREAM" ? "Uses provider's XMLTV by default" : "https://provider.example/guide.xml"}
@@ -331,34 +417,44 @@ export function PlaylistDialog({
                 />
               </label>
               <label className="form-field">
-                <span>DRM system</span>
-                <span className="select-control">
-                  <select onChange={(event) => setDrmSystem(event.target.value as DrmSystem)} value={drmSystem}>
-                    <option value="com.widevine.alpha">Widevine (Chrome / Edge)</option>
-                    <option value="com.apple.fps">FairPlay (Safari)</option>
-                  </select>
-                  <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-                </span>
+                <span>DRM system <em>Optional</em></span>
+                <div className="select-control">
+                  <CustomSelect
+                    ariaLabel="DRM system"
+                    disabled={busyAction !== null}
+                    onValueChange={setDrmSystem}
+                    options={DRM_SYSTEM_OPTIONS}
+                    value={drmSystem}
+                  />
+                </div>
               </label>
               <label className="form-field">
                 <span>DRM license URL <em>Optional</em></span>
                 <input
                   autoComplete="url"
+                  disabled={busyAction !== null}
                   inputMode="url"
                   onChange={(event) => setDrmLicenseUrl(event.target.value)}
                   placeholder="https://provider.example/license"
+                  ref={drmLicenseUrlRef}
                   type="url"
                   value={drmLicenseUrl}
                 />
               </label>
               {drmSystem === "com.apple.fps" && (
                 <label className="form-field">
-                  <span>FairPlay certificate URL</span>
+                  <span>
+                    FairPlay certificate URL
+                    <em>{drmLicenseUrl ? "Required" : "Optional"}</em>
+                  </span>
                   <input
                     autoComplete="url"
+                    disabled={busyAction !== null}
                     inputMode="url"
                     onChange={(event) => setDrmCertificateUrl(event.target.value)}
                     placeholder="https://provider.example/fairplay.cer"
+                    ref={drmCertificateUrlRef}
+                    required={Boolean(drmLicenseUrl)}
                     type="url"
                     value={drmCertificateUrl}
                   />
@@ -394,11 +490,31 @@ export function PlaylistDialog({
             </div>
           )}
           {error && <p className="form-error" role="alert">{error}</p>}
+          {busyAction === "connect" && (
+            <p aria-live="polite" className="form-note source-connect-status" role="status">
+              {busyStage === "connecting"
+                ? "Connecting to the source…"
+                : busyStage === "parsing"
+                  ? "Reading playlist content…"
+                  : "Saving playlist data locally…"}
+            </p>
+          )}
+          {busyAction === "connect" &&
+            busyStage === "saving" &&
+            saveProgress &&
+            saveProgress.total > 0 && (
+              <ProgressIndicator
+                className="source-connect-progress"
+                label="Saving imported content"
+                max={saveProgress.total}
+                value={saveProgress.completed}
+              />
+            )}
 
           <div className="dialog-actions">
             <button
               className="secondary-button"
-              disabled={busyAction === "connect" && busyStage === "saving"}
+              disabled={busyAction === "demo" || (busyAction === "connect" && busyStage === "saving")}
               onClick={closeDialog}
               type="button"
             >

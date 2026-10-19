@@ -349,6 +349,16 @@ export async function fetchM3u(url: string, signal?: AbortSignal): Promise<strin
   }
   if (!response.ok) {
     recordDiagnosticFailure("m3u-playlist", "http", response.status);
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        `The playlist server denied access (HTTP ${response.status}). Check the playlist URL and your provider account access.`,
+      );
+    }
+    if (response.status === 429 || response.status >= 500) {
+      throw new Error(
+        `The playlist server is temporarily unavailable (HTTP ${response.status}). Wait a moment and try again.`,
+      );
+    }
     throw new Error(`Playlist request failed with HTTP ${response.status}.`);
   }
   try {

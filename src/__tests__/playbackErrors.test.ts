@@ -29,6 +29,25 @@ describe("playback error messages", () => {
     expect(message).not.toContain("4032");
   });
 
+  it("explains DRM authorization failures without exposing provider details or error codes", () => {
+    const message = playbackErrorMessage({
+      code: 6007,
+      data: ["https://provider.example/license?token=secret", 403],
+      message: "Shaka Error 6007",
+    });
+
+    expect(message).toBe(
+      "This protected stream couldn't be authorized. Check the provider's DRM requirements and source settings, then try again.",
+    );
+    expect(message).not.toContain("6007");
+    expect(message).not.toContain("provider.example");
+    expect(message).not.toContain("secret");
+  });
+
+  it("distinguishes display protection failures from general DRM authorization errors", () => {
+    expect(playbackErrorMessage({ code: 6018 })).toContain("display protection");
+  });
+
   it("does not show raw technical errors to the user", () => {
     expect(playbackErrorMessage(new Error("net::ERR_ACCESS_DENIED https://secret.example/token")))
       .toBe("Couldn't play this stream. Try again or choose another stream.");

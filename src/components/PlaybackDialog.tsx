@@ -14,7 +14,7 @@ import {
   type PlaybackDiagnosticFailure,
   type PlaybackPath,
 } from "../playbackDiagnostics";
-import { Icon } from "./common";
+import { CustomSelect, Icon } from "./common";
 
 const MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
 const NATIVE_TRACK_EVENTS = ["addtrack", "removetrack", "change", "labelchange"] as const;
@@ -48,6 +48,7 @@ interface ShakaPlayer {
   addEventListener(type: string, listener: EventListener): void;
   configure(configuration: object): boolean;
   load(uri: string): Promise<unknown>;
+  retryStreaming(): void;
   getTextTracks(): ShakaTextTrack[];
   getVariantTracks(): ShakaVariantTrack[];
   selectTextTrack(track?: ShakaTextTrack | null): void;
@@ -135,17 +136,25 @@ export function PlaybackDialog({
     watched?: boolean,
   ) => Promise<void>;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const restoreFocusFrameRef = useRef<number | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const focusCapturedRef = useRef(false);
   const playerRef = useRef<ShakaPlayer | null>(null);
   const onProgressRef = useRef(onProgress);
   const onCloseRef = useRef(onClose);
+  const closeRef = useRef<() => Promise<void>>(async () => {});
   const onStartedRef = useRef(onStarted);
   const lastSaveRef = useRef(0);
   const subtitleUrlsRef = useRef<string[]>([]);
   const playbackFailuresRef = useRef<PlaybackDiagnosticFailure[]>([]);
+  const playbackPathRef = useRef<PlaybackPath>("Unknown");
   const nativeHlsFallbackAttemptedRef = useRef(false);
   const nativeHlsFallbackInProgressRef = useRef(false);
-  const [status, setStatus] = useState("Connecting to your source…");
+  const playbackFailedRef = useRef(false);
+  const hasStartedPlaybackRef = useRef(false);
+  const [status, setStatus] = useState("Preparing playback…");
   const [error, setError] = useState<string | null>(null);
   const [diagnosticCopyMessage, setDiagnosticCopyMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -185,6 +194,7 @@ export function PlaybackDialog({
   }
 
   function showPlaybackFailure(message: string, path: PlaybackPath, cause?: unknown) {
+    playbackFailedRef.current = true;
     recordPlaybackFailure(path, cause);
     setError(message);
     setDiagnosticCopyMessage(null);
@@ -224,15 +234,54 @@ export function PlaybackDialog({
 
   useEffect(() => {
     if (inline) return;
-    const previousFocus = document.activeElement;
-    document.querySelector<HTMLButtonElement>(".playback-dialog .icon-button")?.focus();
+    if (restoreFocusFrameRef.current !== null) {
+      window.cancelAnimationFrame(restoreFocusFrameRef.current);
+      restoreFocusFrameRef.current = null;
+    }
+    if (!focusCapturedRef.current) {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      focusCapturedRef.current = true;
+    }
+    dialogRef.current?.querySelector<HTMLButtonElement>(".playback-header-actions button:not(:disabled)")?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") void close();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        void closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const dialog = dialogRef.current;
+      const focusable = Array.from(
+        dialog?.querySelectorAll<HTMLElement>(
+          "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), video[controls], [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length > 0);
+      if (!dialog || focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const focusIsOutsideDialog = !dialog.contains(document.activeElement);
+      if (event.shiftKey && (document.activeElement === first || focusIsOutsideDialog)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || focusIsOutsideDialog)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+      restoreFocusFrameRef.current = window.requestAnimationFrame(() => {
+        restoreFocusFrameRef.current = null;
+        const previousFocus = previousFocusRef.current;
+        previousFocusRef.current = null;
+        focusCapturedRef.current = false;
+        if (previousFocus?.isConnected) previousFocus.focus();
+      });
     };
   }, [inline]);
 
@@ -314,8 +363,11 @@ export function PlaybackDialog({
     let player: ShakaPlayer | null = null;
     let selectedPlaybackPath: PlaybackPath = "Unknown";
     playbackFailuresRef.current = [];
+    playbackPathRef.current = "Unknown";
     nativeHlsFallbackAttemptedRef.current = false;
     nativeHlsFallbackInProgressRef.current = false;
+    playbackFailedRef.current = false;
+    hasStartedPlaybackRef.current = false;
     nativeTrackIdsRef.current = new WeakMap();
     nextNativeTrackIdRef.current = 0;
     setTracks([]);
@@ -334,9 +386,26 @@ export function PlaybackDialog({
 
     let liveStartRecorded = false;
     const onPlaying = () => {
+      playbackFailedRef.current = false;
+      hasStartedPlaybackRef.current = true;
+      setStatus("Playing");
       if (item.live && !liveStartRecorded) {
         liveStartRecorded = true;
         onStartedRef.current?.(item);
+      }
+    };
+    const onWaiting = () => {
+      if (!playbackFailedRef.current) setStatus("Buffering…");
+    };
+    const onStalled = () => {
+      if (!playbackFailedRef.current) setStatus("Waiting for stream data…");
+    };
+    const onCanPlay = () => {
+      if (!playbackFailedRef.current) setStatus(video.paused ? "Ready to play" : "Playing");
+    };
+    const onPause = () => {
+      if (hasStartedPlaybackRef.current && !video.ended && !playbackFailedRef.current) {
+        setStatus("Paused");
       }
     };
     const onVideoError = () => {
@@ -355,7 +424,10 @@ export function PlaybackDialog({
       lastSaveRef.current = now;
       void persistProgress();
     };
-    const onEnded = () => void persistProgress(true);
+    const onEnded = () => {
+      setStatus("Playback finished");
+      void persistProgress(true);
+    };
     const onTrackListChange = () => syncNativeTracks();
     const onShakaTracksChanged = () => {
       if (player) {
@@ -365,6 +437,10 @@ export function PlaybackDialog({
     };
     video.addEventListener("error", onVideoError);
     video.addEventListener("playing", onPlaying);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("stalled", onStalled);
+    video.addEventListener("canplay", onCanPlay);
+    video.addEventListener("pause", onPause);
     video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("ended", onEnded);
     video.addEventListener("loadedmetadata", onTrackListChange);
@@ -386,13 +462,14 @@ export function PlaybackDialog({
         video.removeAttribute("src");
         video.load();
         selectedPlaybackPath = "Native media element";
+        playbackPathRef.current = selectedPlaybackPath;
         video.src = item.streamUrl;
         video.load();
         await video.play();
         if (disposed) return;
         setError(null);
         setDiagnosticCopyMessage(null);
-        setStatus("Ready");
+        setStatus(video.paused ? "Ready to play" : "Playing");
       } catch (cause) {
         if (!disposed) {
           showPlaybackFailure(
@@ -430,6 +507,7 @@ export function PlaybackDialog({
           (directMediaUrl(item.streamUrl) || nativeHlsUrl(item.streamUrl, video))
         ) {
           selectedPlaybackPath = "Native media element";
+          playbackPathRef.current = selectedPlaybackPath;
           const seek = () => {
             if (resumePositionMillis > 0 && Number.isFinite(video.duration)) {
               video.currentTime = Math.min(resumePositionMillis / 1000, Math.max(video.duration - 1, 0));
@@ -439,10 +517,11 @@ export function PlaybackDialog({
           video.src = item.streamUrl;
           video.load();
           if (video.readyState >= HTMLMediaElement.HAVE_METADATA) seek();
-          setStatus("Ready");
+          setStatus("Ready to play");
           return;
         }
         selectedPlaybackPath = "Shaka Player";
+        playbackPathRef.current = selectedPlaybackPath;
         selectedPlaybackPath = "Shaka Player";
         const shakaModule = await import("shaka-player");
         if (disposed) return;
@@ -487,7 +566,7 @@ export function PlaybackDialog({
         }
         syncTracks(player);
         syncVariantTracks(player);
-        setStatus("Ready");
+        setStatus(video.paused ? "Ready to play" : "Playing");
       } catch (cause) {
         if (disposed || nativeHlsFallbackAttemptedRef.current) return;
         if (selectedPlaybackPath === "Shaka Player") handleShakaFailure(cause);
@@ -500,6 +579,10 @@ export function PlaybackDialog({
       disposed = true;
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("stalled", onStalled);
+      video.removeEventListener("canplay", onCanPlay);
+      video.removeEventListener("pause", onPause);
       video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("ended", onEnded);
       video.removeEventListener("loadedmetadata", onTrackListChange);
@@ -721,19 +804,53 @@ export function PlaybackDialog({
     if (castingDevice && !(await stopCasting())) return;
     onCloseRef.current();
   }
+  closeRef.current = close;
+
+  async function retryPlayback() {
+    const video = videoRef.current;
+    if (!video) return;
+    const player = playerRef.current;
+    const resumeAt = !item.live && Number.isFinite(video.currentTime) && video.currentTime > 0
+      ? video.currentTime
+      : resumePositionMillis / 1000;
+    playbackFailedRef.current = false;
+    hasStartedPlaybackRef.current = false;
+    setError(null);
+    setDiagnosticCopyMessage(null);
+    setStatus("Retrying playback…");
+    try {
+      if (player) {
+        player.retryStreaming();
+      } else {
+        if (resumeAt > 0) {
+          video.addEventListener("loadedmetadata", () => {
+            if (Number.isFinite(video.duration)) {
+              video.currentTime = Math.min(resumeAt, Math.max(video.duration - 1, 0));
+            }
+          }, { once: true });
+        }
+        video.load();
+      }
+      await video.play();
+      video.focus();
+    } catch (cause) {
+      showPlaybackFailure(playbackErrorMessage(cause), playbackPathRef.current, cause);
+    }
+  }
 
   const playerContent = (
       <section
         aria-labelledby="playback-title"
         aria-modal={inline ? undefined : true}
         className={`playback-dialog${inline ? " playback-inline" : ""}${mini ? " playback-mini" : ""}`}
+        ref={dialogRef}
         role={inline ? "region" : "dialog"}
       >
         <header className="playback-header">
           <div>
             <p className="eyebrow">{item.live ? "LIVE SIGNAL" : "NOW PLAYING"}</p>
             <h2 id="playback-title">{item.title}</h2>
-            <p className="playback-status">{status}</p>
+            <p aria-live="polite" className="playback-status" role="status">{status}</p>
           </div>
           <div className="playback-header-actions">
             {castingDevice && (
@@ -777,6 +894,14 @@ export function PlaybackDialog({
         {error && <p className="player-error" role="alert">{error}</p>}
         {error && (
           <div className="playback-error-actions">
+            <button className="secondary-button" onClick={() => void retryPlayback()} type="button">
+              <Icon name="refresh" />
+              Retry playback
+            </button>
+            <button className="secondary-button" onClick={() => void close()} type="button">
+              <Icon name="arrow_back" />
+              Return to browsing
+            </button>
             <button className="text-button" onClick={() => void copyDiagnostics()} type="button">
               <Icon name="content_copy" />
               Copy error details
@@ -788,13 +913,12 @@ export function PlaybackDialog({
         )}
         {saveError && <p className="player-error" role="alert">{saveError}</p>}
         <div className="player-tools">
-          <label className="player-track-select">
+          <div className="player-track-select">
             <Icon name="subtitles" />
-            <span className="sr-only">Subtitle track</span>
-            <select
-              aria-label="Subtitle track"
-              onChange={(event) => {
-                const selectedId = event.target.value === "" ? null : Number(event.target.value);
+            <CustomSelect
+              ariaLabel="Subtitle track"
+              onValueChange={(value) => {
+                const selectedId = value === "" ? null : Number(value);
                 if (playerRef.current) {
                   playerRef.current.selectTextTrack(
                     tracks.find((track) => track.id === selectedId) ?? null,
@@ -810,56 +934,48 @@ export function PlaybackDialog({
                   syncNativeTracks();
                 }
               }}
-              value={tracks.find((track) => track.active)?.id ?? ""}
-            >
-              <option value="">Subtitles off</option>
-              {tracks.map((track) => (
-                <option key={track.id} value={track.id}>{track.label}</option>
-              ))}
-            </select>
-            <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-          </label>
+              options={[
+                { label: "Subtitles off", value: "" },
+                ...tracks.map((track) => ({ label: track.label, value: String(track.id) })),
+              ]}
+              value={String(tracks.find((track) => track.active)?.id ?? "")}
+              variant="embedded"
+            />
+          </div>
           {audioLanguages.length > 1 && (
-            <label className="player-track-select">
+            <div className="player-track-select">
               <Icon name="graphic_eq" />
-              <span className="sr-only">Audio track</span>
-              <select
-                aria-label="Audio track"
-                onChange={(event) => selectAudioLanguage(event.target.value)}
+              <CustomSelect
+                ariaLabel="Audio track"
+                onValueChange={selectAudioLanguage}
+                options={audioLanguages.map((track) => ({ label: track.label, value: track.language }))}
                 value={selectedAudioLanguage}
-              >
-                {audioLanguages.map((track) => (
-                  <option key={track.language} value={track.language}>{track.label}</option>
-                ))}
-              </select>
-              <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-            </label>
+                variant="embedded"
+              />
+            </div>
           )}
           {qualityHeights.length > 1 && (
-            <label className="player-track-select">
+            <div className="player-track-select">
               <Icon name="high_quality" />
-              <span className="sr-only">Video quality</span>
-              <select
-                aria-label="Video quality"
-                onChange={(event) => selectQuality(event.target.value)}
+              <CustomSelect
+                ariaLabel="Video quality"
+                onValueChange={selectQuality}
+                options={[
+                  { label: "Auto quality", value: "auto" },
+                  ...qualityHeights.map((height) => ({ label: `${height}p`, value: String(height) })),
+                ]}
                 value={qualityChoice}
-              >
-                <option value="auto">Auto quality</option>
-                {qualityHeights.map((height) => (
-                  <option key={height} value={height}>{height}p</option>
-                ))}
-              </select>
-              <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-            </label>
+                variant="embedded"
+              />
+            </div>
           )}
           {!item.live && (
-            <label className="player-track-select">
+            <div className="player-track-select">
               <Icon name="speed" />
-              <span className="sr-only">Playback speed</span>
-              <select
-                aria-label="Playback speed"
-                onChange={(event) => {
-                  const speed = Number(event.target.value);
+              <CustomSelect
+                ariaLabel="Playback speed"
+                onValueChange={(value) => {
+                  const speed = Number(value);
                   const video = videoRef.current;
                   if (!video || !Number.isFinite(speed)) return;
                   try {
@@ -869,14 +985,14 @@ export function PlaybackDialog({
                     setError(cause instanceof Error ? `Could not change playback speed: ${cause.message}` : "Could not change playback speed.");
                   }
                 }}
-                value={playbackSpeed}
-              >
-                {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => (
-                  <option key={speed} value={speed}>{speed === 1 ? "Normal speed" : `${speed}×`}</option>
-                ))}
-              </select>
-              <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-            </label>
+                options={[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => ({
+                  label: speed === 1 ? "Normal speed" : `${speed}×`,
+                  value: String(speed),
+                }))}
+                value={String(playbackSpeed)}
+                variant="embedded"
+              />
+            </div>
           )}
           {!item.live && (
             <>

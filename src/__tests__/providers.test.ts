@@ -101,6 +101,16 @@ describe("M3U provider parsing", () => {
 
     await expect(fetchM3u("https://provider.example/large.m3u")).rejects.toThrow(/200 MB limit/);
   });
+
+  it("suggests next steps when an M3U provider denies access or is temporarily unavailable", async () => {
+    for (const [status, message] of [
+      [403, "Check the playlist URL and your provider account access."],
+      [503, "Wait a moment and try again."],
+    ] as const) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status })));
+      await expect(fetchM3u("https://provider.example/playlist.m3u")).rejects.toThrow(message);
+    }
+  });
 });
 
 describe("XMLTV dates", () => {
@@ -245,6 +255,17 @@ describe("Xtream URL construction", () => {
     await expect(loadXtreamCatalog(playlist)).rejects.toThrow(/200 MB limit/);
   });
 
+  it("suggests next steps when Xtream denies access or is temporarily unavailable", async () => {
+    for (const [status, message] of [
+      [401, "Check your Xtream URL, username, and password, then try again."],
+      [403, "Ask your provider to confirm that your account has access."],
+      [503, "Wait a moment and try again."],
+    ] as const) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status })));
+      await expect(loadXtreamCatalog(playlist)).rejects.toThrow(message);
+    }
+  });
+
   it("loads a bounded short guide per channel and decodes provider text", async () => {
     const now = Math.floor(Date.now() / 1000);
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(JSON.stringify({
@@ -309,7 +330,7 @@ describe("Xtream URL construction", () => {
     await expect(loadXtreamShortEpg(playlist, channels)).resolves.toMatchObject({
       requestedChannels: 2,
       failedChannels: 1,
-      failureMessage: "Xtream short EPG failed with HTTP 503.",
+      failureMessage: "Xtream short EPG is temporarily unavailable (HTTP 503). Wait a moment and try again.",
       programs: [{ title: "Test Programme" }],
     });
   });

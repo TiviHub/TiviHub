@@ -13,7 +13,7 @@ import type {
 } from "../types";
 
 interface EncryptedPayload {
-  iv: Uint8Array;
+  iv: Uint8Array<ArrayBuffer>;
   ciphertext: ArrayBuffer;
 }
 
@@ -64,35 +64,42 @@ interface TiviHubDatabase extends DBSchema {
   epg: {
     key: string;
     value: EpgProgram;
-    indexes: { byChannel: string };
+    indexes: { byChannel: string; bySource: string };
   };
   secrets: { key: string; value: StoredSecret };
   keys: { key: string; value: CryptoKey };
 }
 
 const DATABASE_NAME = "tivihub-web";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const CATALOG_WRITE_BATCH_SIZE = 1000;
+const DELETE_BATCH_SIZE = 10_000;
 const CREDENTIAL_KEY_ID = "local-encryption-key";
 const OPEN_SUBTITLES_KEY_ID = "open-subtitles-api-key";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const databasePromise = openDB<TiviHubDatabase>(DATABASE_NAME, DATABASE_VERSION, {
-  upgrade(database) {
-    database.createObjectStore("playlists", { keyPath: "id" });
-    database.createObjectStore("documents", { keyPath: "playlistId" });
+  upgrade(database, oldVersion, _newVersion, transaction) {
+    if (oldVersion < 1) {
+      database.createObjectStore("playlists", { keyPath: "id" });
+      database.createObjectStore("documents", { keyPath: "playlistId" });
 
-    for (const name of ["channels", "movies", "series", "favorites", "library"] as const) {
-      database.createObjectStore(name, { keyPath: "id" }).createIndex("byPlaylist", "playlistId");
+      for (const name of ["channels", "movies", "series", "favorites", "library"] as const) {
+        database.createObjectStore(name, { keyPath: "id" }).createIndex("byPlaylist", "playlistId");
+      }
+
+      const episodes = database.createObjectStore("episodes", { keyPath: "id" });
+      episodes.createIndex("byPlaylist", "playlistId");
+      episodes.createIndex("bySeries", "seriesId");
+      const epg = database.createObjectStore("epg", { keyPath: "id" });
+      epg.createIndex("byChannel", "channelId");
+      database.createObjectStore("secrets", { keyPath: "id" });
+      database.createObjectStore("keys");
     }
-
-    const episodes = database.createObjectStore("episodes", { keyPath: "id" });
-    episodes.createIndex("byPlaylist", "playlistId");
-    episodes.createIndex("bySeries", "seriesId");
-    database.createObjectStore("epg", { keyPath: "id" }).createIndex("byChannel", "channelId");
-    database.createObjectStore("secrets", { keyPath: "id" });
-    database.createObjectStore("keys");
+    if (oldVersion < 2) {
+      transaction.objectStore("epg").createIndex("bySource", "source");
+    }
   },
 });
 
@@ -209,7 +216,10 @@ export async function setActivePlaylist(id: string): Promise<void> {
   await transaction.done;
 }
 
-export async function deletePlaylist(id: string): Promise<void> {
+export async function deletePlaylist(
+  id: string,
+  onProgress?: (completed: number, total: number) => void,
+): Promise<void> {
   const database = await databasePromise;
   const names = [
     "playlists",
@@ -223,24 +233,61 @@ export async function deletePlaylist(id: string): Promise<void> {
     "epg",
   ] as const;
   const transaction = database.transaction(names, "readwrite");
-  transaction.objectStore("playlists").delete(id);
-  transaction.objectStore("documents").delete(id);
-  const cleanup: Promise<void>[] = [];
-  for (const name of ["channels", "movies", "series", "episodes", "favorites", "library"] as const) {
-    const store = transaction.objectStore(name);
-    cleanup.push((async () => {
-      const keys = await store.index("byPlaylist").getAllKeys(IDBKeyRange.only(id));
-      await Promise.all(keys.map((key) => store.delete(key)));
-    })());
+  try {
+    const playlistRange = IDBKeyRange.only(id);
+    const stores = ["channels", "movies", "series", "episodes", "favorites", "library"] as const;
+    const counts = await Promise.all([
+      transaction.objectStore("playlists").count(id),
+      transaction.objectStore("documents").count(id),
+      ...stores.map((name) => transaction.objectStore(name).index("byPlaylist").count(playlistRange)),
+      transaction.objectStore("epg").index("bySource").count(playlistRange),
+    ]);
+    const total = counts.reduce((sum, count) => sum + count, 0);
+    let completed = 0;
+    const deleteKeys = async (
+      deleteRecord: (key: string) => Promise<unknown>,
+      keys: string[],
+    ) => {
+      for (let start = 0; start < keys.length; start += DELETE_BATCH_SIZE) {
+        const end = Math.min(start + DELETE_BATCH_SIZE, keys.length);
+        await Promise.all(keys.slice(start, end).map(deleteRecord));
+        completed += end - start;
+        onProgress?.(completed, total);
+      }
+    };
+    for (const name of stores) {
+      const store = transaction.objectStore(name);
+      const keys = await store.index("byPlaylist").getAllKeys(playlistRange);
+      await deleteKeys((key) => store.delete(key), keys);
+    }
+    const epgStore = transaction.objectStore("epg");
+    await deleteKeys(
+      (key) => epgStore.delete(key),
+      await epgStore.index("bySource").getAllKeys(playlistRange),
+    );
+    await transaction.objectStore("documents").delete(id);
+    if (counts[1] > 0) {
+      completed += 1;
+      onProgress?.(completed, total);
+    }
+    await transaction.objectStore("playlists").delete(id);
+    if (counts[0] > 0) {
+      completed += 1;
+      onProgress?.(completed, total);
+    }
+    await transaction.done;
+    if (total === 0) onProgress?.(0, 0);
+  } catch (cause) {
+    try {
+      transaction.abort();
+    } catch (abortError) {
+      if (!(abortError instanceof DOMException && abortError.name === "InvalidStateError")) {
+        console.error("Could not abort the failed playlist deletion transaction", abortError);
+      }
+    }
+    await transaction.done.catch(() => undefined);
+    throw cause;
   }
-  cleanup.push((async () => {
-    const store = transaction.objectStore("epg");
-    const programs = await store.getAll();
-    await Promise.all(programs.filter((program) => program.source === id)
-      .map((program) => store.delete(program.id)));
-  })());
-  await Promise.all(cleanup);
-  await transaction.done;
 }
 
 export async function savePlaylistDocument(document: PlaylistDocument): Promise<void> {

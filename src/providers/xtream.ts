@@ -122,6 +122,21 @@ async function requestJson(
   }
   if (!response.ok) {
     recordDiagnosticFailure("xtream-catalog", "http", response.status);
+    if (response.status === 401) {
+      throw new Error(
+        `${operation} was denied (HTTP 401). Check your Xtream URL, username, and password, then try again.`,
+      );
+    }
+    if (response.status === 403) {
+      throw new Error(
+        `${operation} was denied (HTTP 403). Ask your provider to confirm that your account has access.`,
+      );
+    }
+    if (response.status === 429 || response.status >= 500) {
+      throw new Error(
+        `${operation} is temporarily unavailable (HTTP ${response.status}). Wait a moment and try again.`,
+      );
+    }
     throw new Error(`${operation} failed with HTTP ${response.status}.`);
   }
   let text: string;

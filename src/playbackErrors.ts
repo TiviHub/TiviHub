@@ -10,6 +10,12 @@ function isPlaybackErrorDetails(value: unknown): value is PlaybackErrorDetails {
 
 export function playbackErrorMessage(error: unknown): string {
   if (isPlaybackErrorDetails(error) && typeof error.code === "number") {
+    if (error.code === 6018 || error.code === 6019) {
+      return "This stream requires display protection that this device or display can't provide. Try another device or display.";
+    }
+    if (error.code >= 6000 && error.code <= 6020) {
+      return "This protected stream couldn't be authorized. Check the provider's DRM requirements and source settings, then try again.";
+    }
     if (error.code === 4032) {
       return "This stream isn't compatible with this device. Try another stream or device.";
     }

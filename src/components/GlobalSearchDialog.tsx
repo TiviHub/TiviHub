@@ -115,8 +115,12 @@ export function GlobalSearchDialog({
   function renderMatch(result: GlobalSearchMatch) {
     const typeLabel = result.type === "LIVE" ? "Channel" : result.type === "MOVIE" ? "Movie" : "Series";
     const iconName = result.type === "LIVE" ? "live_tv" : result.type === "MOVIE" ? "movie" : "tv";
+    const actionLabel = result.type === "LIVE" ? "Play" : "View details";
     return (
       <button
+        aria-label={result.type === "LIVE"
+          ? `Play ${result.item.name}`
+          : `View ${typeLabel.toLowerCase()} details for ${result.item.name}`}
         className="global-search-option"
         data-global-search-option
         key={`${result.type}:${result.item.id}`}
@@ -127,7 +131,7 @@ export function GlobalSearchDialog({
         <span className="global-search-option-icon"><Icon name={iconName} /></span>
         <span className="global-search-option-copy">
           <strong>{result.item.name}</strong>
-          <small>{typeLabel} · {result.category}</small>
+          <small>{typeLabel} · {result.category} · {actionLabel}</small>
         </span>
         <Icon name="arrow_forward" />
       </button>

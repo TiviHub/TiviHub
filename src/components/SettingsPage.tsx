@@ -33,6 +33,13 @@ export function SettingsPage({
   onActivate,
   onEdit,
   onDelete,
+  onRefreshSource,
+  refreshing,
+  version,
+  isDesktopApp,
+  updateStatus,
+  availableUpdateVersion,
+  onUpdateAction,
   apiKey,
   onSaveApiKey,
   onDataRestored,
@@ -49,6 +56,13 @@ export function SettingsPage({
   onActivate: (id: string) => void;
   onEdit: (source: Playlist) => void;
   onDelete: (source: Playlist) => void;
+  onRefreshSource: () => void;
+  refreshing: boolean;
+  version: string;
+  isDesktopApp: boolean;
+  updateStatus: "idle" | "checking" | "current" | "available" | "error";
+  availableUpdateVersion: string | null;
+  onUpdateAction: () => void;
   apiKey: string;
   onSaveApiKey: (apiKey: string) => Promise<void>;
   onDataRestored: () => Promise<void>;
@@ -171,259 +185,344 @@ export function SettingsPage({
     <section className="settings-page">
       <div className="page-intro">
         <p className="eyebrow">MAKE IT YOURS</p>
-        <h1>Settings<span className="neon-text">.</span></h1>
+        <h1>Settings</h1>
         <p>Manage this device's local data, sources, and appearance.</p>
       </div>
 
-      <div className="settings-card">
-        <div className="settings-card-heading">
-          <div className="settings-heading-icon"><Icon name="dark_mode" /></div>
-          <div><h2>Appearance</h2><p>Choose a theme that feels right on this device.</p></div>
-        </div>
-        <fieldset className="theme-options">
-          <legend className="sr-only">Color theme</legend>
-          {themeChoices.map((choice) => (
-            <button
-              aria-pressed={theme === choice.value}
-              className={`theme-option${theme === choice.value ? " selected" : ""}`}
-              key={choice.value}
-              onClick={() => onChooseTheme(choice.value)}
-              type="button"
-            >
-              <span className="theme-option-icon"><Icon name={choice.icon} /></span>
-              <span>{choice.label}</span>
-              {theme === choice.value && <Icon name="check" />}
-            </button>
-          ))}
-        </fieldset>
-      </div>
+      <div className="settings-layout">
+        <nav aria-label="Settings sections" className="settings-nav">
+          <p>ON THIS PAGE</p>
+          <a href="#settings-sources"><Icon name="playlist_play" /><span>Sources</span></a>
+          <a href="#settings-appearance"><Icon name="dark_mode" /><span>Appearance</span></a>
+          <a href="#settings-content-visibility"><Icon name="shield" /><span>Adult content</span></a>
+          <a href="#settings-subtitles"><Icon name="subtitles" /><span>Subtitles</span></a>
+          <a href="#settings-backup"><Icon name="backup" /><span>Encrypted backup</span></a>
+          <a href="#settings-diagnostics"><Icon name="download" /><span>Diagnostics</span></a>
+          <a href="#settings-privacy-card"><Icon name="lock" /><span>Privacy by design</span></a>
+          <a href="#settings-legal"><Icon name="info" /><span>Legal and content rights</span></a>
+          {isDesktopApp && <a href="#settings-updates"><Icon name="download" /><span>App updates</span></a>}
+        </nav>
 
-      <div className="settings-card">
-        <div className="settings-card-heading">
-          <div className="settings-heading-icon"><Icon name="shield" /></div>
-          <div><h2>Adult content</h2><p>Choose whether adult movies, series, and TV are shown.</p></div>
-        </div>
-        <label className="adult-content-toggle">
-          <span>
-            <strong>Show adult content</strong>
-            <small>Matches Adult, XXX, Porn, Erotic, and 18+ labels in titles and categories.</small>
-          </span>
-          <input
-            checked={showAdultContent}
-            onChange={(event) => onSetShowAdultContent(event.target.checked)}
-            type="checkbox"
-          />
-        </label>
-      </div>
-
-      <div className="settings-card">
-        <div className="settings-card-heading">
-          <div className="settings-heading-icon"><Icon name="playlist_play" /></div>
-          <div><h2>Your sources</h2><p>Remote catalogs are cached locally, auto-refresh every 24 hours, and can be refreshed anytime.</p></div>
-        </div>
-        {sources.length === 0 ? (
-          <p className="settings-empty">No sources connected yet. Add a playlist to browse your media.</p>
-        ) : (
-          <div className="source-list">
-            {sources.map((source) => (
-              <article className={`source-row${source.id === activeSourceId ? " active" : ""}`} key={source.id}>
-                <span className="source-row-icon"><Icon name={source.type === "M3U" ? "playlist_play" : "dns"} /></span>
-                <div className="source-row-copy">
-                  <strong>{source.name}</strong>
-                  <small>{source.type}{source.expiresAtMillis ? ` · Expires ${new Date(source.expiresAtMillis).toLocaleDateString()}` : ""}</small>
-                  <small title={source.lastCatalogRefreshAt
-                    ? `Last successful catalog refresh: ${new Date(source.lastCatalogRefreshAt).toLocaleString()}`
-                    : "A catalog refresh has not been recorded for this source yet."}>
-                    Last successful refresh: {source.lastCatalogRefreshAt
-                      ? new Date(source.lastCatalogRefreshAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })
-                      : "Not recorded"}
-                  </small>
-                  {source.lastCatalogRefreshAttemptAt && source.lastCatalogRefreshOutcome && (
-                    <small>
-                      Latest attempt: {refreshOutcomeLabel(source.lastCatalogRefreshOutcome)} ·{" "}
-                      {new Date(source.lastCatalogRefreshAttemptAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
-                    </small>
-                  )}
-                  {source.lastCatalogRefreshSummary && (
-                    <small>Changes: {formatCatalogChangeSummary(source.lastCatalogRefreshSummary)}</small>
-                  )}
-                </div>
-                {source.id !== activeSourceId && (
-                  <button className="secondary-button source-select-button" onClick={() => onActivate(source.id)} type="button">Use</button>
-                )}
-                {source.id === activeSourceId && <span className="active-source-tag"><Icon name="check_circle" /> Active</span>}
-                <button aria-label={`Edit ${source.name}`} className="icon-button" onClick={() => onEdit(source)} type="button"><Icon name="edit" /></button>
-                <button aria-label={`Delete ${source.name}`} className="icon-button danger-button" onClick={() => onDelete(source)} type="button"><Icon name="delete" /></button>
-              </article>
-            ))}
-          </div>
-        )}
-        <div className="settings-actions">
-          <button className="secondary-button" onClick={onAddSource} type="button">
-            <Icon name="add" /> {sources.length === 0 ? "Add source" : "Add another source"}
-          </button>
-          {activeSourceId && (
-            <button
-              className="secondary-button"
-              disabled={epgBusy}
-              onClick={async () => {
-                setEpgBusy(true);
-                try { await onRefreshEpg(); } finally { setEpgBusy(false); }
-              }}
-              type="button"
-            >
-              <Icon name="schedule" /> {epgBusy ? "Updating guide…" : "Refresh TV guide"}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="settings-card">
-        <div className="settings-card-heading">
-          <div className="settings-heading-icon"><Icon name="subtitles" /></div>
-          <div><h2>Subtitles</h2><p>Optional OpenSubtitles search from this app.</p></div>
-        </div>
-        <form className="settings-form" onSubmit={(event) => void saveKey(event)}>
-          <label className="form-field">
-            <span>OpenSubtitles API key <em>Optional</em></span>
-            <input
-              autoComplete="off"
-              onChange={(event) => setKeyDraft(event.target.value)}
-              placeholder="Paste your personal API key"
-              type="password"
-              value={keyDraft}
-            />
-          </label>
-          <p className="form-note">Encrypted in this app and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.</p>
-          <button className="secondary-button" type="submit"><Icon name="lock" /> Save key</button>
-          {keyNotice && <p className="settings-message" role="status">{keyNotice}</p>}
-        </form>
-      </div>
-
-      <div className="settings-card">
-        <div className="settings-card-heading">
-          <div className="settings-heading-icon"><Icon name="backup" /></div>
-          <div><h2>Encrypted backup</h2><p>Move or restore your data without a TiviHub account.</p></div>
-        </div>
-        <div className="backup-grid">
-          <form className="backup-form" onSubmit={(event) => void exportBackup(event)}>
-            <h3>Export</h3>
-            <label className="form-field">
-              <span>Backup password</span>
-              <input autoComplete="new-password" minLength={12} onChange={(event) => setBackupPassword(event.target.value)} required type="password" value={backupPassword} />
-            </label>
-            <label className="form-field">
-              <span>Confirm password</span>
-              <input autoComplete="new-password" minLength={12} onChange={(event) => setBackupConfirm(event.target.value)} required type="password" value={backupConfirm} />
-            </label>
-            <button className="primary-button" disabled={backupBusy} type="submit"><Icon name="download" /> Download encrypted backup</button>
-          </form>
-          <form className="backup-form" onSubmit={(event) => void inspectBackup(event)}>
-            <h3>Import</h3>
-            <label className="form-field">
-              <span>Backup file</span>
-              <input accept=".tivihub,.json,application/json" onChange={(event) => { setBackupFile(event.target.files?.[0] ?? null); setPendingSnapshot(null); }} required type="file" />
-            </label>
-            <label className="form-field">
-              <span>Backup password</span>
-              <input autoComplete="current-password" onChange={(event) => setImportPassword(event.target.value)} required type="password" value={importPassword} />
-            </label>
-            <button className="secondary-button" disabled={backupBusy} type="submit"><Icon name="search" /> Check backup</button>
-          </form>
-        </div>
-        {pendingSnapshot && (
-          <div className="backup-preview">
-            <div>
-              <strong>Backup is valid</strong>
-              <p>{pendingSnapshot.playlists.length} sources · {pendingSnapshot.channels.length + pendingSnapshot.movies.length + pendingSnapshot.series.length} catalog items · {pendingSnapshot.favorites.length} favorites · {pendingSnapshot.library.length} library items</p>
+        <div className="settings-content">
+          <section aria-labelledby="settings-appearance-heading" className="settings-group" id="settings-appearance">
+            <div className="settings-card">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="dark_mode" /></div>
+                <div><h2 id="settings-appearance-heading">Appearance</h2><p>Choose a theme that feels right on this device.</p></div>
+              </div>
+              <fieldset className="theme-options">
+                <legend className="sr-only">Color theme</legend>
+                {themeChoices.map((choice) => (
+                  <button
+                    aria-pressed={theme === choice.value}
+                    className={`theme-option${theme === choice.value ? " selected" : ""}`}
+                    key={choice.value}
+                    onClick={() => onChooseTheme(choice.value)}
+                    type="button"
+                  >
+                    <span className="theme-option-icon"><Icon name={choice.icon} /></span>
+                    <span>{choice.label}</span>
+                    {theme === choice.value && <Icon name="check" />}
+                  </button>
+                ))}
+              </fieldset>
             </div>
-            <button className="primary-button" disabled={backupBusy} onClick={() => void applyBackup()} type="button"><Icon name="restore" /> Replace local data</button>
-          </div>
-        )}
-        {backupError && <p className="form-error" role="alert">{backupError}</p>}
-        {backupNotice && <p className="settings-message" role="status">{backupNotice}</p>}
-        <p className="form-note">Backups use AES-256-GCM encryption. Choose a strong password of at least 12 characters and keep it safe; TiviHub cannot recover it.</p>
-      </div>
+          </section>
 
-      <div className="settings-card">
-        <div className="settings-card-heading">
-          <div className="settings-heading-icon"><Icon name="download" /></div>
-          <div><h2>Diagnostics</h2><p>Download recent request errors to share when asking for help.</p></div>
-        </div>
-        <p className="diagnostics-description">
-          The log is stored only on this device and keeps up to 100 recent failures. Its export
-          excludes media titles, source names, URLs, credentials, raw error messages, and stack traces.
-          Review the file before sharing it.
-        </p>
-        <div className="diagnostics-download-row">
-          <button
-            className="secondary-button"
-            disabled={diagnosticsBusy}
-            onClick={() => void downloadDiagnostics()}
-            type="button"
-          >
-            <Icon name="download" /> {diagnosticsBusy ? "Preparing log…" : "Download diagnostic log"}
-          </button>
-          {diagnosticsNotice && (
-            <p aria-live="polite" className="settings-message" role="status">{diagnosticsNotice}</p>
+          <section aria-labelledby="settings-content-heading" className="settings-group" id="settings-content-visibility">
+            <div className="settings-card">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="shield" /></div>
+                <div><h2 id="settings-content-heading">Adult content</h2><p>Choose whether adult movies, series, and TV are shown.</p></div>
+              </div>
+              <label className="adult-content-toggle">
+                <span>
+                  <strong>Show adult content</strong>
+                  <small>Matches Adult, XXX, Porn, Erotic, and 18+ labels in titles and categories.</small>
+                </span>
+                <input
+                  checked={showAdultContent}
+                  onChange={(event) => onSetShowAdultContent(event.target.checked)}
+                  type="checkbox"
+                />
+              </label>
+            </div>
+          </section>
+
+          <section aria-labelledby="settings-sources-heading" className="settings-group settings-sources" id="settings-sources">
+            <div className="settings-card">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="playlist_play" /></div>
+                <div><h2 id="settings-sources-heading">Your sources</h2><p>Remote catalogs are cached locally, auto-refresh every 24 hours, and can be refreshed anytime.</p></div>
+              </div>
+              {sources.length === 0 ? (
+                <p className="settings-empty">No sources connected yet. Add a playlist to browse your media.</p>
+              ) : (
+                <div className="source-list">
+                  {sources.map((source) => (
+                    <article className={`source-row${source.id === activeSourceId ? " active" : ""}`} key={source.id}>
+                      <span className="source-row-icon"><Icon name={source.type === "M3U" ? "playlist_play" : "dns"} /></span>
+                      <div className="source-row-copy">
+                        <strong>{source.name}</strong>
+                        <small>{source.type}{source.expiresAtMillis ? ` · Expires ${new Date(source.expiresAtMillis).toLocaleDateString()}` : ""}</small>
+                        <small title={source.lastCatalogRefreshAt
+                          ? `Last successful catalog refresh: ${new Date(source.lastCatalogRefreshAt).toLocaleString()}`
+                          : "A catalog refresh has not been recorded for this source yet."}>
+                          Last successful refresh: {source.lastCatalogRefreshAt
+                            ? new Date(source.lastCatalogRefreshAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })
+                            : "Not recorded"}
+                        </small>
+                        {source.lastCatalogRefreshAttemptAt && source.lastCatalogRefreshOutcome && (
+                          <small>
+                            Latest attempt: {refreshOutcomeLabel(source.lastCatalogRefreshOutcome)} ·{" "}
+                            {new Date(source.lastCatalogRefreshAttemptAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                          </small>
+                        )}
+                        {source.lastCatalogRefreshSummary && (
+                          <small>Changes: {formatCatalogChangeSummary(source.lastCatalogRefreshSummary)}</small>
+                        )}
+                      </div>
+                      {source.id !== activeSourceId && (
+                        <button className="secondary-button source-select-button" onClick={() => onActivate(source.id)} type="button">Use</button>
+                      )}
+                      {source.id === activeSourceId && <span className="active-source-tag"><Icon name="check_circle" /> Active</span>}
+                      <button aria-label={`Edit ${source.name}`} className="icon-button" onClick={() => onEdit(source)} type="button"><Icon name="edit" /></button>
+                      <button aria-label={`Delete ${source.name}`} className="icon-button danger-button" onClick={() => onDelete(source)} type="button"><Icon name="delete" /></button>
+                    </article>
+                  ))}
+                </div>
+              )}
+              <div className="settings-actions">
+                <button className="secondary-button" onClick={onAddSource} type="button">
+                  <Icon name="add" /> {sources.length === 0 ? "Add source" : "Add another source"}
+                </button>
+                {activeSourceId && (
+                  <button
+                    className="secondary-button settings-source-refresh"
+                    disabled={refreshing}
+                    onClick={onRefreshSource}
+                    type="button"
+                  >
+                    <Icon name="refresh" /> {refreshing ? "Refreshing source…" : "Refresh source"}
+                  </button>
+                )}
+                {activeSourceId && (
+                  <button
+                    className="secondary-button"
+                    disabled={epgBusy}
+                    onClick={async () => {
+                      setEpgBusy(true);
+                      try { await onRefreshEpg(); } finally { setEpgBusy(false); }
+                    }}
+                    type="button"
+                  >
+                    <Icon name="schedule" /> {epgBusy ? "Updating guide…" : "Refresh TV guide"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section aria-labelledby="settings-subtitles-heading" className="settings-group" id="settings-subtitles">
+            <div className="settings-card">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="subtitles" /></div>
+                <div><h2 id="settings-subtitles-heading">Subtitles</h2><p>Optional OpenSubtitles search from this app.</p></div>
+              </div>
+              <form className="settings-form" onSubmit={(event) => void saveKey(event)}>
+                <label className="form-field">
+                  <span>OpenSubtitles API key <em>Optional</em></span>
+                  <input
+                    autoComplete="off"
+                    onChange={(event) => setKeyDraft(event.target.value)}
+                    placeholder="Paste your personal API key"
+                    type="password"
+                    value={keyDraft}
+                  />
+                </label>
+                <p className="form-note">Encrypted in this app and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.</p>
+                <button className="secondary-button" type="submit"><Icon name="lock" /> Save key</button>
+                {keyNotice && <p className="settings-message" role="status">{keyNotice}</p>}
+              </form>
+            </div>
+          </section>
+
+          <section aria-labelledby="settings-data-heading" className="settings-group settings-data" id="settings-data">
+            <h2 className="sr-only" id="settings-data-heading">Data and diagnostics</h2>
+            <div className="settings-card" id="settings-backup">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="backup" /></div>
+                <div><h2>Encrypted backup</h2><p>Move or restore your data without a TiviHub account.</p></div>
+              </div>
+              <div className="backup-grid">
+                <form className="backup-form" onSubmit={(event) => void exportBackup(event)}>
+                  <h3>Export</h3>
+                  <label className="form-field">
+                    <span>Backup password</span>
+                    <input autoComplete="new-password" minLength={12} onChange={(event) => setBackupPassword(event.target.value)} required type="password" value={backupPassword} />
+                  </label>
+                  <label className="form-field">
+                    <span>Confirm password</span>
+                    <input autoComplete="new-password" minLength={12} onChange={(event) => setBackupConfirm(event.target.value)} required type="password" value={backupConfirm} />
+                  </label>
+                  <button className="primary-button" disabled={backupBusy} type="submit"><Icon name="download" /> Download encrypted backup</button>
+                </form>
+                <form className="backup-form" onSubmit={(event) => void inspectBackup(event)}>
+                  <h3>Import</h3>
+                  <label className="form-field">
+                    <span>Backup file</span>
+                    <input accept=".tivihub,.json,application/json" onChange={(event) => { setBackupFile(event.target.files?.[0] ?? null); setPendingSnapshot(null); }} required type="file" />
+                  </label>
+                  <label className="form-field">
+                    <span>Backup password</span>
+                    <input autoComplete="current-password" onChange={(event) => setImportPassword(event.target.value)} required type="password" value={importPassword} />
+                  </label>
+                  <button className="secondary-button" disabled={backupBusy} type="submit"><Icon name="search" /> Check backup</button>
+                </form>
+              </div>
+              {pendingSnapshot && (
+                <div className="backup-preview">
+                  <div>
+                    <strong>Backup is valid</strong>
+                    <p>{pendingSnapshot.playlists.length} sources · {pendingSnapshot.channels.length + pendingSnapshot.movies.length + pendingSnapshot.series.length} catalog items · {pendingSnapshot.favorites.length} favorites · {pendingSnapshot.library.length} library items</p>
+                  </div>
+                  <button className="primary-button" disabled={backupBusy} onClick={() => void applyBackup()} type="button"><Icon name="restore" /> Replace local data</button>
+                </div>
+              )}
+              {backupError && <p className="form-error" role="alert">{backupError}</p>}
+              {backupNotice && <p className="settings-message" role="status">{backupNotice}</p>}
+              <p className="form-note">Backups use AES-256-GCM encryption. Choose a strong password of at least 12 characters and keep it safe; TiviHub cannot recover it.</p>
+            </div>
+
+            <div className="settings-card" id="settings-diagnostics">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="download" /></div>
+                <div><h2>Diagnostics</h2><p>Download recent request errors and playlist-import summaries for troubleshooting.</p></div>
+              </div>
+              <p className="diagnostics-description">
+                The log is stored only on this device and keeps up to 100 recent failures plus 20 import
+                summaries. Import summaries contain only source type, elapsed time, and catalog counts.
+                The export excludes media titles, source names, URLs, credentials, raw error messages,
+                and stack traces. Review the file before sharing it.
+              </p>
+              <div className="diagnostics-download-row">
+                <button
+                  className="secondary-button"
+                  disabled={diagnosticsBusy}
+                  onClick={() => void downloadDiagnostics()}
+                  type="button"
+                >
+                  <Icon name="download" /> {diagnosticsBusy ? "Preparing log…" : "Download diagnostic log"}
+                </button>
+                {diagnosticsNotice && (
+                  <p aria-live="polite" className="settings-message" role="status">{diagnosticsNotice}</p>
+                )}
+              </div>
+              <p className="form-note">
+                TiviHub saves the log automatically in your Downloads folder as{" "}
+                <code>tivihub-diagnostics-YYYY-MM-DD.json</code>.
+              </p>
+            </div>
+          </section>
+
+          <section aria-labelledby="settings-privacy-heading" className="settings-group settings-privacy" id="settings-privacy">
+            <h2 className="sr-only" id="settings-privacy-heading">Privacy and legal</h2>
+            <div className="settings-card privacy-settings" id="settings-privacy-card">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="shield" /></div>
+                <div><h2>Privacy by design</h2><p>No TiviHub account or application server.</p></div>
+              </div>
+              <p className="privacy-description">
+                Playlists, credentials, favorites, playback progress, and settings stay on this device.
+                Backups are encrypted files that you choose where to save. The installed app does not
+                contact TiviHub servers. Playback and subtitle requests go directly to their configured
+                providers, which receive your connection and request details. The website host may log
+                visits and installer downloads. Cached stream links can contain provider tokens.
+                Local storage is not protection against malicious code running on this device or
+                extensions.
+              </p>
+              <div className="privacy-tag"><span className="status-pulse" /> DATA STAYS ON THIS DEVICE</div>
+            </div>
+
+            <div className="settings-card legal-settings" id="settings-legal">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="info" /></div>
+                <div><h2>Legal and content rights</h2><p>Important information about using third-party sources.</p></div>
+              </div>
+              <div className="legal-notice-copy">
+                <p>
+                  TiviHub is a desktop player and catalog organizer for sources you configure.
+                  It does not supply, sell, license, or host your channels or media, and it does not
+                  verify that a provider or source is authorized.
+                </p>
+                <ul>
+                  <li>
+                    You are responsible for using only sources and content you are authorized to access.
+                    Check copyright rules, provider terms, territorial restrictions, and the laws that
+                    apply where you use the app.
+                  </li>
+                  <li>
+                    Playback and guide requests go directly from this app to the configured provider.
+                    Subtitle searches go directly to OpenSubtitles. Those services have their own terms
+                    and privacy practices; TiviHub does not control them.
+                  </li>
+                  <li>
+                    TiviHub does not provide DRM licenses or bypass DRM, authentication, subscriptions,
+                    geographic controls, or other technical protection measures. Use playback only where
+                    the provider and rights holder permit it.
+                  </li>
+                  <li>
+                    Media, programme data, artwork, names, and trademarks remain the property of their
+                    respective owners. The MIT license applies to TiviHub software only; it does not
+                    grant rights to third-party content or brands.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          {isDesktopApp && (
+            <section aria-labelledby="settings-updates-heading" className="settings-group" id="settings-updates">
+              <div className="settings-card">
+                <div className="settings-card-heading">
+                  <div className="settings-heading-icon"><Icon name="download" /></div>
+                  <div><h2 id="settings-updates-heading">Application updates</h2><p>Check for the latest TiviHub desktop version.</p></div>
+                </div>
+                <div className="settings-update-row">
+                  <div className="settings-update-details">
+                    <p className="settings-version">Installed version · v{version}</p>
+                    <div aria-live="polite" className="settings-update-status" role="status">
+                      <span className={`settings-update-indicator ${updateStatus}`} />
+                      <span>
+                        {updateStatus === "checking"
+                          ? "Checking for updates…"
+                          : updateStatus === "current"
+                            ? "Up to date"
+                            : updateStatus === "available" && availableUpdateVersion
+                              ? `Update available · v${availableUpdateVersion}`
+                              : updateStatus === "error"
+                                ? availableUpdateVersion ? "Could not open installer" : "Update check failed"
+                                : "Check for updates"}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    disabled={updateStatus === "checking"}
+                    onClick={onUpdateAction}
+                    type="button"
+                  >
+                    <Icon name={availableUpdateVersion ? "download" : "refresh"} />
+                    {availableUpdateVersion
+                      ? `Download v${availableUpdateVersion}`
+                      : updateStatus === "checking"
+                        ? "Checking…"
+                        : updateStatus === "error" ? "Retry check" : "Check for updates"}
+                  </button>
+                </div>
+              </div>
+            </section>
           )}
-        </div>
-        <p className="form-note">
-          TiviHub saves the log automatically in your Downloads folder as{" "}
-          <code>tivihub-diagnostics-YYYY-MM-DD.json</code>.
-        </p>
-      </div>
-
-      <div className="settings-card privacy-settings">
-        <div className="settings-card-heading">
-          <div className="settings-heading-icon"><Icon name="shield" /></div>
-          <div><h2>Privacy by design</h2><p>No TiviHub account or application server.</p></div>
-        </div>
-        <p className="privacy-description">
-          Playlists, credentials, favorites, playback progress, and settings stay on this device.
-          Backups are encrypted files that you choose where to save. The installed app does not
-          contact TiviHub servers. Playback and subtitle requests go directly to their configured
-          providers, which receive your connection and request details. The website host may log
-          visits and installer downloads. Cached stream links can contain provider tokens.
-          Local storage is not protection against malicious code running on this device or
-          extensions.
-        </p>
-        <div className="privacy-tag"><span className="status-pulse" /> DATA STAYS ON THIS DEVICE</div>
-      </div>
-
-      <div className="settings-card legal-settings">
-        <div className="settings-card-heading">
-          <div className="settings-heading-icon"><Icon name="info" /></div>
-          <div><h2>Legal and content rights</h2><p>Important information about using third-party sources.</p></div>
-        </div>
-        <div className="legal-notice-copy">
-          <p>
-            TiviHub is a desktop player and catalog organizer for sources you configure.
-            It does not supply, sell, license, or host your channels or media, and it does not
-            verify that a provider or source is authorized.
-          </p>
-          <ul>
-            <li>
-              You are responsible for using only sources and content you are authorized to access.
-              Check copyright rules, provider terms, territorial restrictions, and the laws that
-              apply where you use the app.
-            </li>
-            <li>
-              Playback and guide requests go directly from this app to the configured provider.
-              Subtitle searches go directly to OpenSubtitles. Those services have their own terms
-              and privacy practices; TiviHub does not control them.
-            </li>
-            <li>
-              TiviHub does not provide DRM licenses or bypass DRM, authentication, subscriptions,
-              geographic controls, or other technical protection measures. Use playback only where
-              the provider and rights holder permit it.
-            </li>
-            <li>
-              Media, programme data, artwork, names, and trademarks remain the property of their
-              respective owners. The MIT license applies to TiviHub software only; it does not
-              grant rights to third-party content or brands.
-            </li>
-          </ul>
         </div>
       </div>
     </section>

@@ -7,10 +7,12 @@ import {
   getEpgPrograms,
   getEpisodes,
   getFavorites,
+  getMovies,
   getPlaylists,
   saveCatalog,
   saveEpisodes,
   savePlaylist,
+  replaceEpg,
   replaceEpgForChannels,
   restoreSnapshot,
   toggleFavorite,
@@ -310,6 +312,60 @@ describe("local IndexedDB storage", () => {
     await deletePlaylist(source.id);
     await expect(getChannels(source.id)).resolves.toEqual([]);
     await expect(getFavorites()).resolves.not.toContainEqual(favorite);
+    await expect(getPlaylists()).resolves.not.toContainEqual(expect.objectContaining({ id: source.id }));
+  });
+
+  it("reports bounded progress while deleting a large source and preserves other-source guide data", async () => {
+    const source = playlist("storage-test-progress-delete");
+    const otherSource = playlist("storage-test-progress-delete-other");
+    const channels: LiveChannel[] = Array.from({ length: 1_050 }, (_, index) => ({
+      id: `${source.id}:channel:${index}`,
+      playlistId: source.id,
+      name: `Channel ${index}`,
+      group: "News",
+      streamUrl: `https://provider.example/live/${index}.m3u8`,
+    }));
+    const movies = Array.from({ length: 1_050 }, (_, index) => ({
+      id: `${source.id}:movie:${index}`,
+      playlistId: source.id,
+      name: `Movie ${index}`,
+      streamUrl: `https://provider.example/movie/${index}.mp4`,
+    }));
+    const guide: EpgProgram = {
+      id: `${source.id}:guide`,
+      channelId: channels[0].id,
+      title: "Source guide",
+      startMillis: Date.now(),
+      endMillis: Date.now() + 60_000,
+      source: source.id,
+    };
+    const otherGuide: EpgProgram = { ...guide, id: `${otherSource.id}:guide`, source: otherSource.id };
+    await savePlaylist(source);
+    await savePlaylist(otherSource);
+    await saveCatalog({
+      playlistId: source.id,
+      channels,
+      movies,
+      series: [],
+      episodes: [],
+    });
+    await replaceEpg(source.id, [guide]);
+    await replaceEpg(otherSource.id, [otherGuide]);
+    const progress: Array<[number, number]> = [];
+
+    await deletePlaylist(source.id, (completed, total) => progress.push([completed, total]));
+
+    expect(progress.length).toBeGreaterThan(2);
+    expect(progress.every(([completed, total], index) =>
+      completed <= total && (index === 0 || completed > progress[index - 1][0]),
+    )).toBe(true);
+    expect(progress.every(([completed], index) =>
+      index === 0 || completed - progress[index - 1][0] <= 10_000,
+    )).toBe(true);
+    expect(progress.at(-1)).toEqual([2_102, 2_102]);
+    await expect(getChannels(source.id)).resolves.toEqual([]);
+    await expect(getMovies(source.id)).resolves.toEqual([]);
+    await expect(getEpgPrograms()).resolves.toContainEqual(otherGuide);
     await expect(getPlaylists()).resolves.not.toContainEqual(expect.objectContaining({ id: source.id }));
   });
 

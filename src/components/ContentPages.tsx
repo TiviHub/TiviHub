@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { isAdultContent } from "../adultContent";
 import type {
+  ContentType,
   EpgProgram,
   Episode,
   Favorite,
@@ -12,11 +13,37 @@ import type {
 } from "../types";
 import { sortCatalogItems, topCatalogItems, type CatalogSort } from "../catalogSorting";
 import { LiveGuide } from "./LiveGuide";
-import { HorizontalDragTrack, Icon } from "./common";
+import { CustomSelect, Icon, type CustomSelectOption } from "./common";
 
 type CatalogSection = "Live TV" | "Movies" | "Series";
 type CatalogItem = LiveChannel | Movie | Series;
 type FeaturedCatalogItem = Movie | Series;
+type LibraryGroupKey = "LIVE" | "MOVIE" | "SERIES";
+
+const LIBRARY_CONTENT_GROUPS = [
+  { key: "LIVE", label: "Live TV", icon: "live_tv" },
+  { key: "MOVIE", label: "Movies", icon: "movie" },
+  { key: "SERIES", label: "Series", icon: "tv" },
+] as const;
+
+function libraryGroupFor(contentType: ContentType): LibraryGroupKey {
+  if (contentType === "LIVE") return "LIVE";
+  if (contentType === "MOVIE") return "MOVIE";
+  return "SERIES";
+}
+
+const CATALOG_SORT_OPTIONS: readonly CustomSelectOption<CatalogSort>[] = [
+  { label: "Default (Latest Added)", value: "added" },
+  { label: "Alphabetical (A-Z)", value: "name" },
+  { label: "Year (Newest)", value: "year" },
+  { label: "Rating (Highest)", value: "rating" },
+];
+
+const LIBRARY_STATUS_OPTIONS: readonly CustomSelectOption<LibraryItem["status"]>[] = [
+  { label: "Watchlist", value: "WATCHLIST" },
+  { label: "Watching", value: "WATCHING" },
+  { label: "Watched", value: "WATCHED" },
+];
 
 function titleOf(item: CatalogItem): string {
   return item.name;
@@ -72,7 +99,12 @@ function CatalogCard({
     : categoryOf(item));
   return (
     <article className={`catalog-card${isLive ? " live-card" : ""}`}>
-      <button className="catalog-card-main" onClick={onOpen} type="button">
+      <button
+        aria-label={isLive ? `Play ${item.name}` : `View details for ${item.name}`}
+        className="catalog-card-main"
+        onClick={onOpen}
+        type="button"
+      >
         <span className="catalog-artwork">
           <span className="catalog-artwork-fallback"><Icon name={isLive ? "live_tv" : section === "Movies" ? "movie" : "tv"} /></span>
           {artwork && (
@@ -305,7 +337,7 @@ export function CatalogPage({
       <header className="page-intro catalog-intro">
         <div>
           <p className="eyebrow">{section === "Live TV" ? "ON AIR / CHANNELS" : section === "Movies" ? "YOUR CINEMA" : "THE NEXT EPISODE"}</p>
-          <h1>{section}<span className="neon-text">.</span></h1>
+          <h1>{section}</h1>
           <p>{items.length.toLocaleString()} {section === "Live TV" ? "channels" : section.toLowerCase()} in this source</p>
         </div>
         <div className="catalog-controls">
@@ -321,20 +353,19 @@ export function CatalogPage({
               value={query}
             />
           </label>
-          <label className="category-select">
+          <div className="category-select">
             <Icon name="filter_list" />
-            <span className="sr-only">Filter by category</span>
-            <select
-              onChange={(event) => {
-                setCategory(event.target.value);
+            <CustomSelect
+              ariaLabel="Filter by category"
+              onValueChange={(value) => {
+                setCategory(value);
                 setPage(1);
               }}
+              options={categories.map((value) => ({ label: value, value }))}
               value={category}
-            >
-              {categories.map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-            <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-          </label>
+              variant="embedded"
+            />
+          </div>
           {selectedGroupChannels.length > 0 && onCheckStreamGroup && (
             <button
               aria-label={`Check all ${selectedGroupChannels.length} channels in ${category}`}
@@ -348,25 +379,19 @@ export function CatalogPage({
             </button>
           )}
           {(section === "Movies" || section === "Series") && (
-            <label className="category-select sort-select">
+            <div className="category-select sort-select">
               <Icon name="sort" />
-              <span className="sr-only">Sort {section.toLowerCase()}</span>
-              <select
-                aria-label={`Sort ${section.toLowerCase()}`}
-                onChange={(event) => {
-                  const nextSort = event.target.value as CatalogSort;
+              <CustomSelect
+                ariaLabel={`Sort ${section.toLowerCase()}`}
+                onValueChange={(nextSort) => {
                   startSortTransition(() => setSort(nextSort));
                   setPage(1);
                 }}
+                options={CATALOG_SORT_OPTIONS}
                 value={sort}
-              >
-                <option value="added">Default (Latest Added)</option>
-                <option value="name">Alphabetical (A-Z)</option>
-                <option value="year">Year (Newest)</option>
-                <option value="rating">Rating (Highest)</option>
-              </select>
-              <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-            </label>
+                variant="embedded"
+              />
+            </div>
           )}
           {section === "Live TV" && channels.length > 0 && (
             <button
@@ -395,22 +420,15 @@ export function CatalogPage({
             <section aria-label="Top 5 · Recently added" className="catalog-featured-row">
               <div className="catalog-featured-heading">
                 <h2>Top 5 · Recently added</h2>
-                <span>{recentlyAdded.length} titles</span>
               </div>
-              <HorizontalDragTrack
-                aria-label="Top 5 · Recently added"
-                className="catalog-featured-track"
-                data-count={recentlyAdded.length}
-                role="region"
-                tabIndex={0}
-              >
+              <div className="catalog-grid catalog-featured-grid">
                 {recentlyAdded.map((item) => renderCatalogCard(item))}
-              </HorizontalDragTrack>
+              </div>
             </section>
           </div>
         )}
       {items.length === 0 ? (
-        <div className="catalog-empty">
+        <div aria-live="polite" className="catalog-empty" role="status">
           <div className="empty-icon"><Icon name={section === "Live TV" ? "live_tv" : section === "Movies" ? "movie" : "tv"} /></div>
           <h2>{loading ? "Tuning in…" : `No ${section.toLowerCase()} yet`}</h2>
           <p>{loading ? "Your catalog will appear here when the source finishes loading." : "Add or refresh a playlist that includes this content."}</p>
@@ -419,7 +437,18 @@ export function CatalogPage({
         <div className="catalog-empty compact-empty">
           <Icon name="search" />
           <h2>No matches</h2>
-          <p>Try another title or category.</p>
+          <p aria-live="polite" role="status">Try another title or category, or clear your filters to see the full catalog.</p>
+          <button
+            className="text-button"
+            onClick={() => {
+              setQuery("");
+              setCategory("All");
+              setPage(1);
+            }}
+            type="button"
+          >
+            Clear filters
+          </button>
         </div>
       ) : section === "Live TV" ? (
         <div className={`live-tv-layout${showFullGuide ? ` is-full-guide${guidePlayerCollapsed ? " player-collapsed" : ""}` : ""}`}>
@@ -436,6 +465,7 @@ export function CatalogPage({
                 return (
                   <article className={`live-channel-list-item${isSelected ? " selected" : ""}`} key={channel.id} role="listitem">
                     <button
+                      aria-label={`Play ${channel.name}`}
                       aria-pressed={isSelected}
                       className="live-channel-select"
                       onClick={() => {
@@ -471,18 +501,19 @@ export function CatalogPage({
             </div>
             {pageCount > 1 && (
               <nav aria-label="Channel pages" className="live-channel-pagination">
-                <label className="live-channel-page-size">
-                  <span className="sr-only">Channels per page</span>
-                  <select
-                    onChange={(event) => {
-                      setPageSize(Number(event.target.value));
+                <div className="live-channel-page-size">
+                  <CustomSelect
+                    ariaLabel="Channels per page"
+                    className="live-channel-page-size-dropdown"
+                    onValueChange={(value) => {
+                      setPageSize(Number(value));
                       setPage(1);
                     }}
-                    value={pageSize}
-                  >
-                    {[12, 24, 48, 96].map((size) => <option key={size} value={size}>{size}</option>)}
-                  </select>
-                </label>
+                    options={[12, 24, 48, 96].map((size) => ({ label: String(size), value: String(size) }))}
+                    value={String(pageSize)}
+                    variant="compact"
+                  />
+                </div>
                 <span>Page <strong>{currentPage}</strong> / <strong>{pageCount}</strong></span>
                 <div>
                   <button
@@ -602,20 +633,19 @@ export function CatalogPage({
           <p className="pagination-range">
             Showing <strong>{firstItem.toLocaleString()}–{lastItem.toLocaleString()}</strong> of {filtered.length.toLocaleString()}
           </p>
-          <label className="page-size-control">
+          <div className="page-size-control">
             <span>Per page</span>
-            <select
-              aria-label={`Items per page for ${section}`}
-              onChange={(event) => {
-                setPageSize(Number(event.target.value));
+            <CustomSelect
+              ariaLabel={`Items per page for ${section}`}
+              onValueChange={(value) => {
+                setPageSize(Number(value));
                 setPage(1);
               }}
-              value={pageSize}
-            >
-              {[12, 24, 48, 96].map((size) => <option key={size} value={size}>{size}</option>)}
-            </select>
-            <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-          </label>
+              options={[12, 24, 48, 96].map((size) => ({ label: String(size), value: String(size) }))}
+              value={String(pageSize)}
+              variant="compact"
+            />
+          </div>
           <div className="pagination-buttons">
             <button
               aria-label="Previous page"
@@ -669,7 +699,7 @@ export function MovieDetail({
         {movie.posterUrl ? <img alt="" src={movie.posterUrl} /> : <div className="movie-detail-poster"><Icon name="movie" /></div>}
         <div>
           <p className="eyebrow">MOVIE DETAILS{movie.year ? ` / ${movie.year}` : ""}</p>
-          <h1>{movie.name}<span className="neon-text">.</span></h1>
+          <h1>{movie.name}</h1>
           <div className="detail-meta">
             <span>{movie.rating !== undefined ? `★ ${movie.rating.toFixed(1)}` : "No rating"}</span>
             {movie.category && <span>{movie.category}</span>}
@@ -770,7 +800,7 @@ export function SeriesDetail({
           : <div className="movie-detail-poster"><Icon name="tv" /></div>}
         <div>
           <p className="eyebrow">SERIES DETAILS / {series.seasons} {series.seasons === 1 ? "SEASON" : "SEASONS"}</p>
-          <h1>{series.name}<span className="neon-text">.</span></h1>
+          <h1>{series.name}</h1>
           <div className="detail-meta">
             <span>{series.rating !== undefined ? `★ ${series.rating.toFixed(1)}` : "No rating"}</span>
             {series.year !== undefined && <span>{series.year}</span>}
@@ -816,15 +846,19 @@ export function SeriesDetail({
           <h2>Episodes</h2>
         </div>
         {seasons.length > 1 && (
-          <label className="category-select">
+          <div className="category-select">
             <Icon name="filter_list" />
-            <span className="sr-only">Filter season</span>
-            <select onChange={(event) => setSeason(event.target.value === "all" ? "all" : Number(event.target.value))} value={season}>
-              <option value="all">All seasons</option>
-              {seasons.map((value) => <option key={value} value={value}>Season {value}</option>)}
-            </select>
-            <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-          </label>
+            <CustomSelect
+              ariaLabel="Filter season"
+              onValueChange={(value) => setSeason(value === "all" ? "all" : Number(value))}
+              options={[
+                { label: "All seasons", value: "all" },
+                ...seasons.map((value) => ({ label: `Season ${value}`, value: String(value) })),
+              ]}
+              value={String(season)}
+              variant="embedded"
+            />
+          </div>
         )}
       </div>
       {loading && <div className="inline-status"><span className="spinner" /> Loading episodes…</div>}
@@ -869,12 +903,20 @@ export function LibraryPage({
   onRemoveFavorite: (favorite: Favorite) => void;
 }) {
   const [tab, setTab] = useState<"Continue watching" | "Watchlist" | "Watched" | "Favorites">("Continue watching");
+  const [contentFilter, setContentFilter] = useState<LibraryGroupKey | "ALL">("ALL");
   const watching = [...library]
     .filter((item) => item.status === "WATCHING")
     .sort((a, b) => b.updatedAt - a.updatedAt);
   const watchlist = library.filter((item) => item.status === "WATCHLIST");
   const watched = library.filter((item) => item.status === "WATCHED").sort((a, b) => b.updatedAt - a.updatedAt);
   const content = tab === "Continue watching" ? watching : tab === "Watchlist" ? watchlist : tab === "Watched" ? watched : [];
+  const activeItems = tab === "Favorites" ? favorites : content;
+  const visibleContent = contentFilter === "ALL"
+    ? content
+    : content.filter((item) => libraryGroupFor(item.contentType) === contentFilter);
+  const visibleFavorites = contentFilter === "ALL"
+    ? favorites
+    : favorites.filter((favorite) => libraryGroupFor(favorite.contentType) === contentFilter);
 
   function playLibraryItem(item: LibraryItem) {
     if (!item.streamUrl) return;
@@ -897,25 +939,65 @@ export function LibraryPage({
     <section className="library-page">
       <header className="page-intro">
         <p className="eyebrow">SAVED ON THIS DEVICE</p>
-        <h1>Your library<span className="neon-text">.</span></h1>
+        <h1>Your library</h1>
         <p>Favorites and watch progress stay in this app.</p>
       </header>
-      <div className="library-tabs" role="tablist" aria-label="Library categories">
+      <div className="library-tabs" role="group" aria-label="Library categories">
         {(["Continue watching", "Watchlist", "Watched", "Favorites"] as const).map((value) => (
-          <button aria-selected={tab === value} className={tab === value ? "active" : ""} key={value} onClick={() => setTab(value)} role="tab" type="button">
+          <button
+            aria-pressed={tab === value}
+            className={tab === value ? "active" : ""}
+            key={value}
+            onClick={() => {
+              setTab(value);
+              setContentFilter("ALL");
+            }}
+            type="button"
+          >
             {value}<span>{value === "Continue watching" ? watching.length : value === "Watchlist" ? watchlist.length : value === "Watched" ? watched.length : favorites.length}</span>
           </button>
         ))}
       </div>
+      {activeItems.length > 0 && (
+        <div className="library-content-tabs" role="group" aria-label={`Filter ${tab} by content type`}>
+          <button
+            aria-pressed={contentFilter === "ALL"}
+            className={contentFilter === "ALL" ? "active" : ""}
+            onClick={() => setContentFilter("ALL")}
+            type="button"
+          >
+            All<span>{activeItems.length}</span>
+          </button>
+          {LIBRARY_CONTENT_GROUPS.map((group) => {
+            const count = activeItems.filter((item) => libraryGroupFor(item.contentType) === group.key).length;
+            return (
+              <button
+                aria-pressed={contentFilter === group.key}
+                className={contentFilter === group.key ? "active" : ""}
+                key={group.key}
+                onClick={() => setContentFilter(group.key)}
+                type="button"
+              >
+                <Icon name={group.icon} />{group.label}<span>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       {tab === "Favorites" ? (
-        favorites.length === 0 ? (
+        visibleFavorites.length === 0 ? (
           <LibraryEmpty label="No favorites yet" detail="Tap the heart on a channel, movie, or series to keep it here." />
         ) : (
           <div className="favorite-list">
-            {favorites.map((favorite) => (
+            {visibleFavorites.map((favorite) => (
               <article className="favorite-row" key={favorite.id}>
-                {favorite.artworkUrl ? <img alt="" loading="lazy" src={favorite.artworkUrl} /> : <span className="favorite-art-placeholder"><Icon name="movie" /></span>}
-                <div><strong>{favorite.title}</strong><small>{favorite.contentType}</small></div>
+                {favorite.artworkUrl
+                  ? <img alt="" loading="lazy" src={favorite.artworkUrl} />
+                  : <span className="favorite-art-placeholder"><Icon name={LIBRARY_CONTENT_GROUPS.find((group) => group.key === libraryGroupFor(favorite.contentType))!.icon} /></span>}
+                <div>
+                  <strong>{favorite.title}</strong>
+                  <small>{LIBRARY_CONTENT_GROUPS.find((group) => group.key === libraryGroupFor(favorite.contentType))!.label}</small>
+                </div>
                 {favorite.streamUrl && (
                   <button
                     aria-label={`Play ${favorite.title}`}
@@ -943,51 +1025,60 @@ export function LibraryPage({
             ))}
           </div>
         )
-      ) : content.length === 0 ? (
+      ) : visibleContent.length === 0 ? (
         <LibraryEmpty
           label={tab === "Continue watching" ? "Nothing in progress" : tab === "Watchlist" ? "Your watchlist is empty" : "Nothing watched yet"}
-          detail={tab === "Continue watching" ? "Start a movie or episode, and your place will be saved automatically." : "Add titles from your provider catalog to keep them close."}
+          detail={tab === "Continue watching"
+            ? "Start a movie or episode, and your place will be saved automatically."
+            : tab === "Watchlist"
+              ? "Add a title from Movies or Series, or change its status to Watchlist."
+              : "Change a title's status to Watched when you finish it."}
         />
       ) : (
         <div className="library-items">
-          {content.map((item) => (
+          {visibleContent.map((item) => (
             <article className={`library-item${item.contentType === "LIVE" ? " live-library-item" : ""}`} key={item.id}>
-              <button
-                aria-label={`Resume ${item.title}`}
-                className="library-item-art"
-                disabled={!item.streamUrl}
-                onClick={() => playLibraryItem(item)}
-                type="button"
-              >
-                <span className="library-item-art-fallback">
-                  <Icon name={item.contentType === "LIVE" ? "live_tv" : "movie"} />
-                </span>
-                {item.artworkUrl && (
-                  <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={item.artworkUrl} />
-                )}
-                <span aria-hidden="true" className="library-item-art-play"><Icon name="play_arrow" /></span>
-              </button>
-              <button className="library-item-main" disabled={!item.streamUrl} onClick={() => playLibraryItem(item)} type="button">
-                <strong>{item.title}</strong>
-                {item.parentTitle && <small>{item.parentTitle}</small>}
-                {item.durationMillis > 0 && (
-                  <span className="library-progress">
-                    <span style={{ width: `${Math.max(0, Math.min(100, item.positionMillis / item.durationMillis * 100))}%` }} />
-                  </span>
-                )}
-              </button>
-              <label className="status-select">
-                <span className="sr-only">Library status for {item.title}</span>
-                <select onChange={(event) => onChangeStatus(item, event.target.value as LibraryItem["status"])} value={item.status}>
-                  <option value="WATCHLIST">Watchlist</option>
-                  <option value="WATCHING">Watching</option>
-                  <option value="WATCHED">Watched</option>
-                </select>
-                <span aria-hidden="true" className="select-chevron"><Icon name="expand_more" /></span>
-              </label>
-              <button aria-label={`Remove ${item.title} from library`} className="icon-button" onClick={() => onRemove(item.id, item.title)} type="button">
-                <Icon name="delete" />
-              </button>
+                    <button
+                      aria-label={`${item.status === "WATCHING" ? "Resume" : item.status === "WATCHED" ? "Replay" : "Watch"} ${item.title}`}
+                      className="library-item-main"
+                      disabled={!item.streamUrl}
+                      onClick={() => playLibraryItem(item)}
+                      type="button"
+                    >
+                      <span className="library-item-art">
+                        <span className="library-item-art-fallback">
+                          <Icon name={item.contentType === "LIVE" ? "live_tv" : item.contentType === "MOVIE" ? "movie" : "tv"} />
+                        </span>
+                        {item.artworkUrl && (
+                          <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={item.artworkUrl} />
+                        )}
+                        <span aria-hidden="true" className="library-item-art-play">
+                          <Icon name="play_arrow" />
+                          <span>{item.status === "WATCHING" ? "Resume" : item.status === "WATCHED" ? "Replay" : "Watch"}</span>
+                        </span>
+                      </span>
+                      <span className="library-item-copy">
+                        <strong>{item.title}</strong>
+                        {item.parentTitle && <small>{item.parentTitle}</small>}
+                        {item.durationMillis > 0 && (
+                          <span className="library-progress">
+                            <span style={{ width: `${Math.max(0, Math.min(100, item.positionMillis / item.durationMillis * 100))}%` }} />
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    <div className="status-select">
+                      <CustomSelect
+                        ariaLabel={`Library status for ${item.title}`}
+                        onValueChange={(status) => onChangeStatus(item, status)}
+                        options={LIBRARY_STATUS_OPTIONS}
+                        value={item.status}
+                        variant="compact"
+                      />
+                    </div>
+                    <button aria-label={`Remove ${item.title} from library`} className="icon-button" onClick={() => onRemove(item.id, item.title)} type="button">
+                      <Icon name="delete" />
+                    </button>
             </article>
           ))}
         </div>
