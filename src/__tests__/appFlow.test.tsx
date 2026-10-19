@@ -49,7 +49,7 @@ describe("application source lifecycle", () => {
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(await screen.findByRole("button", { name: /^Add (?:another )?source$/ }));
     await user.click(await screen.findByRole("button", { name: "Import demo" }));
-    await screen.findByText("TiviHub Demo Library");
+    await screen.findAllByText("TiviHub Demo Library");
     await user.click(screen.getAllByRole("button", { name: "Home" })[0]);
 
     expect(await screen.findByRole("heading", { name: "Most recent playback" })).toBeTruthy();
@@ -69,7 +69,7 @@ describe("application source lifecycle", () => {
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(await screen.findByRole("button", { name: /^Add (?:another )?source$/ }));
     await user.click(await screen.findByRole("button", { name: "Import demo" }));
-    await screen.findByText("TiviHub Demo Library");
+    await screen.findAllByText("TiviHub Demo Library");
     await user.click(screen.getAllByRole("button", { name: "Home" })[0]);
 
     expect(await screen.findByRole("heading", { name: "Your library is empty" })).toBeTruthy();
@@ -89,7 +89,7 @@ describe("application source lifecycle", () => {
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(await screen.findByRole("button", { name: /^Add (?:another )?source$/ }));
     await user.click(await screen.findByRole("button", { name: "Import demo" }));
-    await screen.findByText("TiviHub Demo Library");
+    await screen.findAllByText("TiviHub Demo Library");
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
