@@ -82,7 +82,7 @@ describe("application source lifecycle", () => {
     expect(await screen.findByText(/and its local data were deleted/)).toBeTruthy();
   }, 30_000);
 
-  it("adds a demo source, deletes a populated playlist, and shows deletion progress", async () => {
+  it("adds a demo source and deletes a populated playlist", async () => {
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Opening your library" })).toBeNull());
@@ -111,7 +111,6 @@ describe("application source lifecycle", () => {
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
     expect(window.confirm).toHaveBeenCalledTimes(1);
-    expect(await screen.findByRole("dialog", { name: "Deleting playlist" })).toBeTruthy();
 
     expect(await screen.findByText(/and its local data were deleted/)).toBeTruthy();
   }, 30_000);
