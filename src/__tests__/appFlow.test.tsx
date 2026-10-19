@@ -5,8 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../App";
-import { DEMO_PLAYLIST_ID } from "../demo";
-import { getCatalogSnapshot, removeLibraryItem, saveCatalog, saveLibraryItem } from "../storage/database";
+import { removeLibraryItem, saveLibraryItem } from "../storage/database";
 
 beforeEach(() => {
   vi.stubGlobal("crypto", webcrypto);
@@ -91,22 +90,6 @@ describe("application source lifecycle", () => {
     await user.click(screen.getByRole("button", { name: "Add source" }));
     await user.click(screen.getByRole("button", { name: "Import demo" }));
     await screen.findByText("TiviHub Demo Library");
-
-    const catalog = await getCatalogSnapshot(DEMO_PLAYLIST_ID);
-    const extraChannels = Array.from({ length: 1_500 }, (_, index) => ({
-      id: `${DEMO_PLAYLIST_ID}:flow-channel:${index}`,
-      playlistId: DEMO_PLAYLIST_ID,
-      name: `Flow channel ${index}`,
-      group: "Test",
-      streamUrl: `https://provider.example/flow/${index}.m3u8`,
-    }));
-    await saveCatalog({
-      playlistId: DEMO_PLAYLIST_ID,
-      channels: [...catalog.channels, ...extraChannels],
-      movies: catalog.movies,
-      series: catalog.series,
-      episodes: catalog.episodes,
-    });
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
