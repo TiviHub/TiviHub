@@ -45,7 +45,7 @@ Playback supports compatible HLS and DASH streams. Whether a particular stream w
 
 **[Download the latest TiviHub for Windows 10/11 (64-bit)](https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe)**
 
-v1.4.0 includes the Windows 10/11 x64 installer, Linux x64 AppImage and `.deb` packages, and macOS arm64 and x64 `.dmg` packages. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) to choose a package and read the release notes.
+v1.6.0 includes the Windows 10/11 x64 installer, Linux x64 AppImage and `.deb` packages, and macOS arm64 and x64 `.dmg` packages. Visit [GitHub Releases](https://github.com/TiviHub/TiviHub/releases) to choose a package and read the release notes.
 
 ## Privacy and local data
 
