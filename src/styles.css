@@ -6968,3 +6968,9 @@ button:disabled {
   }
 
 }
+
+.external-ratings { margin: 0.75rem 0; }
+.external-ratings p { margin: 0.25rem 0; }
+.external-ratings-list { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin: 0.25rem 0; }
+.external-ratings-list dt { font-size: 0.75rem; opacity: 0.75; }
+.external-ratings-list dd { margin: 0; font-weight: 600; }

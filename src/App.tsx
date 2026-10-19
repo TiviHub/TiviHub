@@ -38,7 +38,11 @@ import {
   getFavorites,
   getLibraryItems,
   getMovies,
+  getMdblistApiKey,
   getOpenSubtitlesApiKey,
+  getRatingsCacheEntry,
+  saveMdblistApiKey,
+  saveRatingsCacheEntry,
   getPlaylistDocument,
   getPlaylists,
   getSeries,
@@ -67,6 +71,7 @@ import type {
   Playlist,
   Series,
 } from "./types";
+import { createRatingsService } from "./ratingsService";
 import { CatalogPage, LibraryPage, MovieDetail, SeriesDetail } from "./components/ContentPages";
 import { CustomSelect, Icon, type IconName } from "./components/common";
 import { DesktopWindowControls } from "./components/DesktopWindowControls";
@@ -81,6 +86,10 @@ import { StreamHealthCheckDialog } from "./components/StreamHealthCheckDialog";
 
 type Section = SearchSection;
 type ThemePreference = "system" | "light" | "dark";
+const ratingsService = createRatingsService({
+  cache: { get: getRatingsCacheEntry, put: saveRatingsCacheEntry },
+  getApiKey: getMdblistApiKey,
+});
 const ASSET_BASE_URL = import.meta.env.BASE_URL;
 
 const sections: { label: Section; icon: IconName }[] = [
@@ -133,6 +142,7 @@ function App() {
   const [epg, setEpg] = useState<EpgProgram[]>([]);
   const [guideLoadCount, setGuideLoadCount] = useState(0);
   const [subtitleApiKey, setSubtitleApiKey] = useState("");
+  const [mdblistApiKey, setMdblistApiKey] = useState("");
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
   const [streamHealthRequest, setStreamHealthRequest] = useState<{
@@ -360,11 +370,12 @@ function App() {
     const activeSources = chosen
       ? savedSources.map((source) => ({ ...source, active: source.id === chosen.id }))
       : savedSources;
-    const [savedFavorites, savedLibrary, allEpg, key] = await Promise.all([
+    const [savedFavorites, savedLibrary, allEpg, key, savedMdblistKey] = await Promise.all([
       getFavorites(),
       getLibraryItems(),
       getEpgPrograms(),
       getOpenSubtitlesApiKey(),
+      getMdblistApiKey(),
     ]);
     setSources(activeSources);
     setActiveSourceId(chosen?.id ?? null);
@@ -372,6 +383,7 @@ function App() {
     setLibrary(savedLibrary);
     setEpg(chosen ? allEpg.filter((program) => program.source === chosen.id) : []);
     setSubtitleApiKey(key);
+    setMdblistApiKey(savedMdblistKey);
     if (chosen) {
       const [savedChannels, savedMovies, savedSeries] = await Promise.all([
         getChannels(chosen.id),
@@ -1021,6 +1033,11 @@ function App() {
     setSubtitleApiKey(value.trim());
   }
 
+  async function saveMdblistKey(value: string) {
+    await saveMdblistApiKey(value);
+    setMdblistApiKey(value.trim());
+  }
+
   async function onDataRestored() {
     await reloadLocalData();
     setSelectedSeries(null);
@@ -1490,6 +1507,8 @@ function App() {
                 }}
                 onRefreshEpg={refreshGuide}
                 onSaveApiKey={saveApiKey}
+                mdblistApiKey={mdblistApiKey}
+                onSaveMdblistApiKey={saveMdblistKey}
                 sources={sources}
                 theme={theme}
                 showAdultContent={showAdultContent}
@@ -1500,6 +1519,7 @@ function App() {
                 inLibrary={visibleLibrary.some((entry) => entry.contentId === selectedMovie.id && entry.contentType === "MOVIE")}
                 continueWatching={Boolean(movieProgress)}
                 movie={selectedMovie}
+                ratingsService={ratingsService}
                 onAddToLibrary={() => void addToWatchlist(selectedMovie, "MOVIE")}
                 onBack={() => setSelectedMovie(null)}
                 onFavorite={() => void toggleFavorite(selectedMovie, "MOVIE")}
@@ -1577,6 +1597,7 @@ function App() {
                   onFavorite={() => void toggleFavorite(selectedSeries, "SERIES")}
                   onPlay={(item) => openPlayback(item)}
                   series={selectedSeries}
+                  ratingsService={ratingsService}
                 />
               ) : (
                 <CatalogPage

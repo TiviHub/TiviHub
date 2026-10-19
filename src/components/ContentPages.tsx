@@ -1,3 +1,5 @@
+import { ExternalRatingsPanel } from "./ExternalRatings";
+import type { RatingsService } from "../ratingsService";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { isAdultContent } from "../adultContent";
 import type {
@@ -681,7 +683,9 @@ export function MovieDetail({
   onFavorite,
   onAddToLibrary,
   onRemoveFromLibrary,
+  ratingsService,
 }: {
+  ratingsService?: RatingsService;
   movie: Movie;
   favorite: boolean;
   inLibrary: boolean;
@@ -705,6 +709,7 @@ export function MovieDetail({
             {movie.category && <span>{movie.category}</span>}
           </div>
           <p>{movie.overview || "No overview was provided by this source."}</p>
+          <ExternalRatingsPanel item={movie} mediaType="MOVIE" service={ratingsService} />
           <div className="movie-detail-actions">
             <button className="primary-button" onClick={onPlay} type="button">
               <Icon name="play_arrow" /> {continueWatching ? "Continue watching" : "Watch movie"}
@@ -765,7 +770,9 @@ export function SeriesDetail({
   onContinueWatching,
   onAddToLibrary,
   onRemoveFromLibrary,
+  ratingsService,
 }: {
+  ratingsService?: RatingsService;
   series: Series;
   episodes: Episode[];
   showAdultContent: boolean;
@@ -807,6 +814,7 @@ export function SeriesDetail({
             {series.category && <span>{series.category}</span>}
           </div>
           <p>{series.overview || "No overview was provided by this source."}</p>
+          <ExternalRatingsPanel item={series} mediaType="SERIES" service={ratingsService} />
           <div className="movie-detail-actions">
             <button
               className="primary-button"

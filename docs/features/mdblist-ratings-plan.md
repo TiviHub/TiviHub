@@ -341,3 +341,34 @@ The implementation is ready when:
 - API keys are never exposed in source, logs, diagnostics, URLs, or unencrypted storage.
 - Existing catalogs, library data, favorites, EPG data, and provider ratings remain compatible.
 - `npm run typecheck`, `npm test`, `npm run test:e2e`, and `npm run build` pass.
+
+## Implementation status (first increment)
+
+Implemented: detail-page lazy loading for movies and series, source-labelled rating UI, IndexedDB `ratings` store (database version 3), the MDBList provider and a cache/dedupe/concurrency service, and a user-supplied API key in Settings. Not implemented: catalog-card enrichment, external-rating sorting, TV season/episode ratings, and a mocked-network E2E test (Playwright browsers are required).
+
+### Setup
+
+1. Create a free MDBList account and API key at mdblist.com.
+2. Paste it under **Settings → External ratings**. Ratings then load when you open a movie or series.
+
+### Privacy
+
+- The key is encrypted with the same local AES-GCM key as other secrets and is never bundled.
+- It is **not** included in backups and is cleared by a restore; re-enter it afterwards.
+- MDBList requires the key as an `apikey` query parameter, so it is sent only to `api.mdblist.com` when a detail page needs a rating. Errors and diagnostics never include it.
+- The request goes directly from your device to MDBList; MDBList sees your network address and the title looked up.
+
+### Cache behavior
+
+- Records are keyed by media type plus IMDb ID, else TMDB ID, else normalised title and year (a title with no ID and no year is never looked up). Playlist IDs are never part of the key, so one title shared across sources uses one record.
+- Successful results are fresh for 7 days; "not found" results for 24 hours. Fresh hits make no request and need no API key.
+- Stale results are shown immediately and refreshed in the background; if the refresh fails they stay visible. Temporary failures (network, 401/403, 429, 5xx) are never cached.
+- Concurrent lookups of one title share one request; at most two requests run at once.
+- Xtream catalogs supply IMDb/TMDB IDs when the provider includes them; M3U catalogs fall back to title + year via MDBList search, accepting only a single exact match.
+
+### Known limitations
+
+- The endpoint shapes (`/{imdb|tmdb}/{movie|show}/{id}`, `/search/{movie|show}`) follow MDBList's public API as understood during development; they could not be verified against live documentation in the build environment, so confirm them with one manual request. All provider calls go through an injectable transport (`MdblistTransport`) so a different client can replace browser `fetch`.
+- If MDBList blocks browser cross-origin requests, ratings show as unavailable. No proxy or backend was added; that needs a separate architectural decision.
+- The free tier is limited (about 1,000 requests/day); rate limiting appears as an unavailable state.
+- Check MDBList's terms regarding attribution and storing third-party scores (e.g. Rotten Tomatoes) before commercial use.
