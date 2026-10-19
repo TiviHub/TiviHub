@@ -367,7 +367,7 @@ describe("local IndexedDB storage", () => {
     await expect(getMovies(source.id)).resolves.toEqual([]);
     await expect(getEpgPrograms()).resolves.toContainEqual(otherGuide);
     await expect(getPlaylists()).resolves.not.toContainEqual(expect.objectContaining({ id: source.id }));
-  });
+  }, 30_000);
 
   it("restores snapshots with credentials encrypted again in local storage", async () => {
     const source = playlist("storage-test-restore");

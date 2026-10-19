@@ -47,8 +47,8 @@ describe("application source lifecycle", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Opening your library" })).toBeNull());
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
-    await user.click(screen.getByRole("button", { name: "Add source" }));
-    await user.click(screen.getByRole("button", { name: "Import demo" }));
+    await user.click(await screen.findByRole("button", { name: "Add source" }));
+    await user.click(await screen.findByRole("button", { name: "Import demo" }));
     await screen.findByText("TiviHub Demo Library");
     await user.click(screen.getAllByRole("button", { name: "Home" })[0]);
 
@@ -67,8 +67,8 @@ describe("application source lifecycle", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Opening your library" })).toBeNull());
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
-    await user.click(screen.getByRole("button", { name: "Add source" }));
-    await user.click(screen.getByRole("button", { name: "Import demo" }));
+    await user.click(await screen.findByRole("button", { name: "Add source" }));
+    await user.click(await screen.findByRole("button", { name: "Import demo" }));
     await screen.findByText("TiviHub Demo Library");
     await user.click(screen.getAllByRole("button", { name: "Home" })[0]);
 
@@ -87,8 +87,8 @@ describe("application source lifecycle", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Opening your library" })).toBeNull());
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
-    await user.click(screen.getByRole("button", { name: "Add source" }));
-    await user.click(screen.getByRole("button", { name: "Import demo" }));
+    await user.click(await screen.findByRole("button", { name: "Add source" }));
+    await user.click(await screen.findByRole("button", { name: "Import demo" }));
     await screen.findByText("TiviHub Demo Library");
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
