@@ -1,12 +1,7 @@
 import { recordDiagnosticFailure } from "../diagnosticLog";
+import type { OpenSubtitleSearchResult } from "../types";
 
-export interface SubtitleResult {
-  fileId: number;
-  fileName: string;
-  language: string;
-  release?: string;
-  downloadCount: number;
-}
+export type SubtitleResult = OpenSubtitleSearchResult;
 
 interface DownloadDetails {
   link?: unknown;
@@ -15,6 +10,30 @@ interface DownloadDetails {
 
 const API_BASE = "https://api.opensubtitles.com/api/v1";
 const MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
+export const OPENSUBTITLES_REQUEST_TIMEOUT_MILLIS = 20_000;
+
+function withRequestTimeout<T>(
+  signal: AbortSignal | undefined,
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      recordDiagnosticFailure("subtitle-search", "network");
+      reject(new Error("OpenSubtitles did not respond within 20 seconds. Check your connection and try again."));
+      controller.abort();
+    }, OPENSUBTITLES_REQUEST_TIMEOUT_MILLIS);
+  });
+  const operationPromise = Promise.resolve().then(() => operation(controller.signal));
+  return Promise.race([operationPromise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", onAbort);
+  });
+}
 
 async function request(
   url: string,
@@ -48,10 +67,18 @@ async function request(
   }
 }
 
-export async function searchOpenSubtitles(
+export function searchOpenSubtitles(
   apiKey: string,
   query: string,
   signal?: AbortSignal,
+): Promise<SubtitleResult[]> {
+  return withRequestTimeout(signal, (requestSignal) => searchOpenSubtitlesRequest(apiKey, query, requestSignal));
+}
+
+async function searchOpenSubtitlesRequest(
+  apiKey: string,
+  query: string,
+  signal: AbortSignal,
 ): Promise<SubtitleResult[]> {
   if (!query.trim()) throw new Error("Enter a movie or episode title to search.");
   const url = new URL(`${API_BASE}/subtitles`);
@@ -86,7 +113,12 @@ export async function searchOpenSubtitles(
       const info = file as { file_id?: unknown; file_name?: unknown };
       const fileId = Number(info.file_id);
       const fileName = typeof info.file_name === "string" ? info.file_name : "";
-      if (!Number.isSafeInteger(fileId) || fileId <= 0 || !/\.(srt|vtt)$/i.test(fileName)) return [];
+      if (
+        !Number.isSafeInteger(fileId) ||
+        fileId <= 0 ||
+        !fileName.trim() ||
+        /\.(zip|rar|7z|idx|sub|ass|ssa)$/i.test(fileName)
+      ) return [];
       return [{
         fileId,
         fileName,
@@ -98,10 +130,18 @@ export async function searchOpenSubtitles(
   });
 }
 
-export async function downloadOpenSubtitle(
+export function downloadOpenSubtitle(
   apiKey: string,
   fileId: number,
   signal?: AbortSignal,
+): Promise<{ name: string; contents: string }> {
+  return withRequestTimeout(signal, (requestSignal) => downloadOpenSubtitleRequest(apiKey, fileId, requestSignal));
+}
+
+async function downloadOpenSubtitleRequest(
+  apiKey: string,
+  fileId: number,
+  signal: AbortSignal,
 ): Promise<{ name: string; contents: string }> {
   if (!Number.isSafeInteger(fileId) || fileId <= 0) {
     throw new Error("OpenSubtitles file ID is invalid.");

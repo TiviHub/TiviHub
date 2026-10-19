@@ -195,6 +195,7 @@ export interface ExternalRating {
 
 export interface ExternalRatings {
   ratings: ExternalRating[];
+  overview?: string;
   ids?: { imdb?: string; tmdb?: string };
 }
 
@@ -208,4 +209,50 @@ export interface RatingsCacheEntry {
   fetchedAt: number;
   expiresAt: number;
   notFound?: boolean;
+}
+
+export interface MdblistPopularItem {
+  title: string;
+  year?: number;
+  imdbId?: string;
+  tmdbId?: string;
+}
+
+export interface MdblistPopularCacheEntry {
+  key: string;
+  mediaType: RatingsMediaType;
+  items: MdblistPopularItem[];
+  fetchedAt: number;
+  expiresAt: number;
+}
+
+export interface MdblistRateLimitState {
+  key: string;
+  limit?: number;
+  remaining?: number;
+  resetAt?: number;
+  retryAfterUntil?: number;
+}
+
+export interface OpenSubtitleSearchResult {
+  fileId: number;
+  fileName: string;
+  language: string;
+  release?: string;
+  downloadCount: number;
+}
+
+export interface OpenSubtitleSearchCacheEntry {
+  key: string;
+  results: OpenSubtitleSearchResult[];
+  fetchedAt: number;
+  expiresAt: number;
+}
+
+export interface OpenSubtitleFileCacheEntry {
+  fileId: number;
+  name: string;
+  contents: string;
+  fetchedAt: number;
+  expiresAt: number;
 }

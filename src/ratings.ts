@@ -23,6 +23,20 @@ export function normalizeTitle(title: string): string {
     .trim();
 }
 
+export function normalizeCatalogTitle(title: string, year?: number): string {
+  let cleaned = title.replace(/^\s*[a-z]{2,3}\s*-\s*/i, "").trim();
+  const videoQualitySuffix = /(?:\s+|\s*[\[(])(?:4k|2160p|1080p|720p|480p|uhd|fhd|hd|hdr10?|dolby\s+vision|dv|hevc|x26[45])(?:\s*[\])])?\s*$/i;
+  while (videoQualitySuffix.test(cleaned)) {
+    cleaned = cleaned.replace(videoQualitySuffix, "").trim();
+  }
+  if (year !== undefined) {
+    cleaned = cleaned
+      .replace(new RegExp(`\\s*(?:\\(${year}\\)|\\[${year}\\]|${year})\\s*$`), "")
+      .trim();
+  }
+  return cleaned;
+}
+
 export function normalizeImdbId(value: unknown): string | undefined {
   const text = typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
   return IMDB_ID.test(text) ? text.toLowerCase() : undefined;
@@ -42,10 +56,10 @@ export function createTitleIdentity(
   const tmdbId = normalizeTmdbId(item.tmdbId);
   const title = item.name.trim();
   const base = { mediaType, title, year: item.year, imdbId, tmdbId };
-  if (imdbId) return { ...base, key: `${type}:imdb:${imdbId}` };
-  if (tmdbId) return { ...base, key: `${type}:tmdb:${tmdbId}` };
-  const normalized = normalizeTitle(title);
+  if (imdbId) return { ...base, key: `${type}:imdb:v2:${imdbId}` };
+  if (tmdbId) return { ...base, key: `${type}:tmdb:v2:${tmdbId}` };
+  const normalized = normalizeTitle(normalizeCatalogTitle(title, item.year));
   // Without an external ID, require a year so we never guess among remakes.
   if (!normalized || item.year === undefined || !Number.isInteger(item.year)) return null;
-  return { ...base, key: `${type}:title:${normalized}:${item.year}` };
+  return { ...base, key: `${type}:title:v3:${normalized}:${item.year}` };
 }

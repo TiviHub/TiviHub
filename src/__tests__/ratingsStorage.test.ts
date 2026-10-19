@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import { webcrypto } from "node:crypto";
 import { openDB } from "idb";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { Movie, RatingsCacheEntry } from "../types";
+import type { MdblistRateLimitState, Movie, RatingsCacheEntry } from "../types";
 
 const entry = (key: string): RatingsCacheEntry => ({
   key,
@@ -58,6 +58,52 @@ describe("ratings cache storage", () => {
     expect((await storage.getRatingsCacheEntry("series:imdb:tt0113277"))?.mediaType).toBe("SERIES");
     await storage.clearRatingsCache();
     expect(await storage.getRatingsCacheEntry("movie:imdb:tt0113277")).toBeUndefined();
+  });
+
+  it("persists the popular catalog cache in its own database store", async () => {
+    const storage = await import("../storage/database");
+    const entry = {
+      key: "movie:tmdbpopular",
+      mediaType: "MOVIE" as const,
+      items: [{ title: "Example Movie", year: 2024, tmdbId: "42" }],
+      fetchedAt: 1,
+      expiresAt: 2,
+    };
+    await storage.saveMdblistPopularCacheEntry(entry);
+    await expect(storage.getMdblistPopularCacheEntry(entry.key)).resolves.toEqual(entry);
+  });
+
+  it("persists shared MDBList rate-limit state", async () => {
+    const storage = await import("../storage/database");
+    const state: MdblistRateLimitState = {
+      key: "account",
+      limit: 1000,
+      remaining: 998,
+      resetAt: 2_000_000,
+    };
+    await storage.saveMdblistRateLimitState(state);
+    await expect(storage.getMdblistRateLimitState("account")).resolves.toEqual(state);
+  });
+
+  it("persists OpenSubtitles search results and downloaded files", async () => {
+    const storage = await import("../storage/database");
+    const searchEntry = {
+      key: "query:example movie",
+      results: [{ fileId: 81, fileName: "movie.srt", language: "en", downloadCount: 10 }],
+      fetchedAt: 1,
+      expiresAt: 2,
+    };
+    const fileEntry = {
+      fileId: 81,
+      name: "movie.srt",
+      contents: "subtitle contents",
+      fetchedAt: 1,
+      expiresAt: 2,
+    };
+    await storage.saveOpenSubtitleSearchCacheEntry(searchEntry);
+    await storage.saveOpenSubtitleFileCacheEntry(fileEntry);
+    await expect(storage.getOpenSubtitleSearchCacheEntry(searchEntry.key)).resolves.toEqual(searchEntry);
+    await expect(storage.getOpenSubtitleFileCacheEntry(fileEntry.fileId)).resolves.toEqual(fileEntry);
   });
 
   it("encrypts the MDBList key and keeps it out of backups", async () => {

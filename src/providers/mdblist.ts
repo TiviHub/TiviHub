@@ -1,21 +1,15 @@
-import { normalizeImdbId, normalizeTitle, normalizeTmdbId, type TitleIdentity } from "../ratings";
+import {
+  normalizeCatalogTitle,
+  normalizeImdbId,
+  normalizeTitle,
+  normalizeTmdbId,
+  type TitleIdentity,
+} from "../ratings";
+import { mdblistRateLimiter, type MdblistRateLimiter } from "../mdblistRateLimit";
+import { MdblistError } from "../mdblistError";
 import type { ExternalRating, ExternalRatings } from "../types";
 
-export type MdblistErrorKind =
-  | "missing-key"
-  | "auth"
-  | "rate-limited"
-  | "server"
-  | "network"
-  | "invalid-response";
-
-/** Error messages are user-safe: they never include the API key or request URL. */
-export class MdblistError extends Error {
-  constructor(readonly kind: MdblistErrorKind, message: string, readonly status?: number) {
-    super(message);
-    this.name = "MdblistError";
-  }
-}
+export { MdblistError } from "../mdblistError";
 
 export interface MdblistRequest {
   url: string;
@@ -44,6 +38,7 @@ async function getJson(
   params: Record<string, string>,
   apiKey: string,
   transport: MdblistTransport,
+  rateLimiter: MdblistRateLimiter,
   signal?: AbortSignal,
 ): Promise<unknown | null> {
   const key = apiKey.trim();
@@ -52,14 +47,26 @@ async function getJson(
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
   url.searchParams.set("apikey", key);
   let response: Response;
+  const release = await rateLimiter.acquire();
+  if (signal?.aborted) {
+    release();
+    throw new DOMException("The operation was aborted.", "AbortError");
+  }
   try {
     response = await transport({ url: url.toString(), signal });
   } catch (error) {
+    release();
     if (isAbort(error) || signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+    if (error instanceof MdblistError) throw error;
     throw new MdblistError(
       "network",
       "MDBList could not be reached from TiviHub. Check your connection and cross-origin access.",
     );
+  }
+  try {
+    await rateLimiter.recordResponse(response);
+  } finally {
+    release();
   }
   if (response.status === 404) return null;
   if (response.status === 401 || response.status === 403) {
@@ -100,7 +107,14 @@ export function parseMdblistRatings(payload: unknown): ExternalRatings {
   if (!payload || typeof payload !== "object") {
     throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
   }
-  const body = payload as { ratings?: unknown; ids?: unknown };
+  const body = payload as {
+    ratings?: unknown;
+    ids?: unknown;
+    overview?: unknown;
+    description?: unknown;
+    plot?: unknown;
+    synopsis?: unknown;
+  };
   if (!Array.isArray(body.ratings)) {
     throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
   }
@@ -123,10 +137,20 @@ export function parseMdblistRatings(payload: unknown): ExternalRatings {
       ...(votes !== undefined && votes >= 0 ? { votes: Math.floor(votes) } : {}),
     });
   }
-  const ids = body.ids && typeof body.ids === "object" ? body.ids as { imdb?: unknown; tmdb?: unknown } : {};
-  const imdb = normalizeImdbId(ids.imdb);
-  const tmdb = normalizeTmdbId(ids.tmdb);
-  return { ratings, ...(imdb || tmdb ? { ids: { ...(imdb ? { imdb } : {}), ...(tmdb ? { tmdb } : {}) } } : {}) };
+  const ids = body.ids && typeof body.ids === "object"
+    ? body.ids as { imdb?: unknown; tmdb?: unknown; imdbid?: unknown; tmdbid?: unknown }
+    : {};
+  const imdb = normalizeImdbId(ids.imdb ?? ids.imdbid);
+  const tmdb = normalizeTmdbId(ids.tmdb ?? ids.tmdbid);
+  const overview = [body.overview, body.description, body.plot, body.synopsis]
+    .find((value): value is string => typeof value === "string" && Boolean(value.trim()))
+    ?.trim()
+    .slice(0, 5000);
+  return {
+    ratings,
+    ...(overview ? { overview } : {}),
+    ...(imdb || tmdb ? { ids: { ...(imdb ? { imdb } : {}), ...(tmdb ? { tmdb } : {}) } } : {}),
+  };
 }
 
 interface SearchCandidate {
@@ -139,15 +163,17 @@ function findExactMatch(payload: unknown, identity: TitleIdentity): SearchCandid
   if (!Array.isArray(list)) {
     throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
   }
-  const wanted = normalizeTitle(identity.title);
+  const wanted = normalizeTitle(normalizeCatalogTitle(identity.title, identity.year));
   const matches = list.flatMap((raw): SearchCandidate[] => {
     if (!raw || typeof raw !== "object") return [];
     const item = raw as { title?: unknown; year?: unknown; ids?: unknown; imdbid?: unknown; tmdbid?: unknown };
-    if (typeof item.title !== "string" || normalizeTitle(item.title) !== wanted) return [];
+    if (typeof item.title !== "string" || normalizeTitle(normalizeCatalogTitle(item.title, identity.year)) !== wanted) return [];
     if (identity.year !== undefined && Number(item.year) !== identity.year) return [];
-    const ids = item.ids && typeof item.ids === "object" ? item.ids as { imdb?: unknown; tmdb?: unknown } : {};
-    const imdb = normalizeImdbId(ids.imdb ?? item.imdbid);
-    const tmdb = normalizeTmdbId(ids.tmdb ?? item.tmdbid);
+    const ids = item.ids && typeof item.ids === "object"
+      ? item.ids as { imdb?: unknown; tmdb?: unknown; imdbid?: unknown; tmdbid?: unknown }
+      : {};
+    const imdb = normalizeImdbId(ids.imdb ?? ids.imdbid ?? item.imdbid);
+    const tmdb = normalizeTmdbId(ids.tmdb ?? ids.tmdbid ?? item.tmdbid);
     return imdb || tmdb ? [{ imdb, tmdb }] : [];
   });
   // Ambiguous matches are treated as "not found" rather than guessed.
@@ -162,6 +188,7 @@ export async function fetchMdblistRatings(
   apiKey: string,
   signal?: AbortSignal,
   transport: MdblistTransport = browserTransport,
+  rateLimiter: MdblistRateLimiter = mdblistRateLimiter,
 ): Promise<ExternalRatings | null> {
   let provider: "imdb" | "tmdb";
   let id: string;
@@ -172,9 +199,9 @@ export async function fetchMdblistRatings(
     provider = "tmdb";
     id = identity.tmdbId;
   } else {
-    const params: Record<string, string> = { query: identity.title };
+    const params: Record<string, string> = { query: normalizeCatalogTitle(identity.title, identity.year) };
     if (identity.year !== undefined) params.year = String(identity.year);
-    const found = await getJson(`/search/${mediaPath(identity)}`, params, apiKey, transport, signal);
+    const found = await getJson(`/search/${mediaPath(identity)}`, params, apiKey, transport, rateLimiter, signal);
     const candidate = found ? findExactMatch(found, identity) : null;
     if (!candidate) return null;
     provider = candidate.imdb ? "imdb" : "tmdb";
@@ -185,6 +212,7 @@ export async function fetchMdblistRatings(
     {},
     apiKey,
     transport,
+    rateLimiter,
     signal,
   );
   return payload ? parseMdblistRatings(payload) : null;

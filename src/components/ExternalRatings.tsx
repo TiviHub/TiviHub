@@ -6,7 +6,7 @@ import type { ExternalRating, Movie, RatingsMediaType, Series } from "../types";
 
 type RatingsState =
   | { phase: "loading" }
-  | { phase: "ready"; ratings: ExternalRating[]; refreshing: boolean; refreshFailed: boolean }
+  | { phase: "ready"; ratings: ExternalRating[]; overview?: string; refreshing: boolean; refreshFailed: boolean }
   | { phase: "not-found" }
   | { phase: "unmatched" }
   | { phase: "error"; message: string };
@@ -14,26 +14,45 @@ type RatingsState =
 const SOURCE_LABELS: Record<string, string> = {
   imdb: "IMDb",
   tmdb: "TMDB",
-  trakt: "Trakt",
-  letterboxd: "Letterboxd",
-  tomatoes: "Rotten Tomatoes (critics)",
-  tomatoesaudience: "Rotten Tomatoes (audience)",
+  tomatoes: "Rotten Tomatoes",
   metacritic: "Metacritic",
-  metacriticuser: "Metacritic (users)",
-  popcorn: "Rotten Tomatoes (audience)",
-  rogerebert: "RogerEbert.com",
-  myanimelist: "MyAnimeList",
 };
+
+const PRIMARY_RATING_SOURCES = ["imdb", "tmdb", "tomatoes", "metacritic"] as const;
 
 export function ratingSourceLabel(source: string): string {
   return SOURCE_LABELS[source] ?? source.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatRating(rating: ExternalRating): string {
-  const main = rating.value !== undefined
-    ? String(Math.round(rating.value * 10) / 10)
-    : `${Math.round(rating.score ?? 0)}/100`;
-  return rating.votes !== undefined ? `${main} · ${rating.votes.toLocaleString("en-US")} votes` : main;
+  const score = rating.value ?? rating.score;
+  if (score === undefined) return "";
+  return rating.source === "tomatoes"
+    ? `${Math.round(score)}%`
+    : rating.source === "metacritic"
+      ? `${Math.round(score)}/100`
+      : rating.value !== undefined
+        ? String(Math.round(rating.value * 10) / 10)
+        : `${Math.round(rating.score ?? 0)}/100`;
+}
+
+function RatingLogo({ source }: { source: string }) {
+  if (source === "tomatoes") {
+    return (
+      <span aria-hidden="true" className="external-rating-logo external-rating-logo-tomatoes">
+        <svg viewBox="0 0 20 20">
+          <path d="M10 5.5C5.4 2.2 2.1 6.1 2.6 10.6c.4 4 3.4 6.6 7.4 6.6s7-2.6 7.4-6.6C17.9 6.1 14.6 2.2 10 5.5Z" />
+          <path d="M10 5.4 8 2.7l2.4 1 2.8-1.2-1.1 2.6 2.4.2-2.5 1.1-2-1.3-2.2 1L5 4.8l3.1.3L7 2.9Z" />
+        </svg>
+        RT
+      </span>
+    );
+  }
+  return (
+    <span aria-hidden="true" className={`external-rating-logo external-rating-logo-${source}`}>
+      {source === "metacritic" ? "M" : source === "imdb" ? "IMDb" : "TMDB"}
+    </span>
+  );
 }
 
 export function ExternalRatingsPanel({
@@ -66,17 +85,19 @@ export function ExternalRatingsPanel({
           return;
         }
         const ratings = result.ratings?.ratings ?? [];
-        setState({ phase: "ready", ratings, refreshing: Boolean(result.refresh), refreshFailed: false });
+        const overview = result.ratings?.overview;
+        setState({ phase: "ready", ratings, overview, refreshing: Boolean(result.refresh), refreshFailed: false });
         if (result.refresh) {
           const refreshed = await result.refresh;
           if (controller.signal.aborted) return;
           setState(refreshed.refreshFailed
-            ? { phase: "ready", ratings, refreshing: false, refreshFailed: true }
+            ? { phase: "ready", ratings, overview, refreshing: false, refreshFailed: true }
             : refreshed.status === "not-found"
               ? { phase: "not-found" }
               : {
                 phase: "ready",
                 ratings: refreshed.ratings?.ratings ?? [],
+                overview: refreshed.ratings?.overview,
                 refreshing: false,
                 refreshFailed: false,
               });
@@ -93,20 +114,34 @@ export function ExternalRatingsPanel({
   }, [service, name, year, imdbId, tmdbId, mediaType]);
 
   if (!service) return null;
+  const hasPlaylistOverview = Boolean(item.overview?.trim());
+  const displayedRatings = state.phase === "ready"
+    ? PRIMARY_RATING_SOURCES.flatMap((source) => {
+      const rating = state.ratings.find((entry) => entry.source === source);
+      return rating ? [rating] : [];
+    })
+    : [];
   return (
     <section aria-label="External ratings" className="external-ratings">
+      {!hasPlaylistOverview && state.phase === "ready" && state.overview && (
+        <p className="external-ratings-overview">{state.overview}</p>
+      )}
       {state.phase === "loading" && <p role="status">Loading external ratings…</p>}
       {state.phase === "unmatched" && <p>External ratings unavailable: this title has no year or ID to match safely.</p>}
       {state.phase === "not-found" && <p>No external ratings were found for this title.</p>}
       {state.phase === "error" && <p role="status">External ratings unavailable. {state.message}</p>}
       {state.phase === "ready" && (
-        state.ratings.length === 0
+        displayedRatings.length === 0
           ? <p>No external ratings were found for this title.</p>
           : (
             <dl className="external-ratings-list">
-              {state.ratings.map((rating) => (
-                <div key={rating.source}>
-                  <dt>{ratingSourceLabel(rating.source)}</dt>
+              {displayedRatings.map((rating) => (
+                <div
+                  aria-label={`${ratingSourceLabel(rating.source)} ${formatRating(rating)}`}
+                  className={`external-rating-badge external-rating-${rating.source}`}
+                  key={rating.source}
+                >
+                  <dt><RatingLogo source={rating.source} /></dt>
                   <dd>{formatRating(rating)}</dd>
                 </div>
               ))}
@@ -115,7 +150,6 @@ export function ExternalRatingsPanel({
       )}
       {state.phase === "ready" && state.refreshing && <p role="status">Refreshing saved ratings…</p>}
       {state.phase === "ready" && state.refreshFailed && <p role="status">Showing saved ratings; refresh failed.</p>}
-      <p className="form-note">External ratings by MDBList. The rating above is from your source.</p>
     </section>
   );
 }

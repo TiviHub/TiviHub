@@ -9,10 +9,13 @@ import type {
   Favorite,
   LibraryItem,
   LiveChannel,
+  MdblistPopularItem,
   Movie,
   PlayableItem,
   Series,
 } from "../types";
+import { rankLocalCatalogByPopularity } from "../catalogPopularity";
+import type { PopularCatalogService } from "../popularCatalogService";
 import { sortCatalogItems, topCatalogItems, type CatalogSort } from "../catalogSorting";
 import { LiveGuide } from "./LiveGuide";
 import { CustomSelect, Icon, type CustomSelectOption } from "./common";
@@ -119,7 +122,9 @@ function CatalogCard({
             />
           )}
           {isLive && <span className="live-badge"><span /> LIVE</span>}
-          {!isLive && "seasons" in item && <span className="catalog-meta">{item.seasons} seasons</span>}
+          {!isLive && "seasons" in item && item.seasons > 0 && (
+            <span className="catalog-meta">{item.seasons} seasons</span>
+          )}
         </span>
         <span className="catalog-card-copy">
           <strong title={titleOf(item)}>{titleOf(item)}</strong>
@@ -176,6 +181,8 @@ export function CatalogPage({
   livePlayer,
   livePlaybackItemId,
   livePlayerMini = false,
+  mdblistApiKey = "",
+  popularCatalogService,
 }: {
   section: CatalogSection;
   channels: LiveChannel[];
@@ -196,6 +203,8 @@ export function CatalogPage({
   livePlayer?: ReactNode;
   livePlaybackItemId?: string;
   livePlayerMini?: boolean;
+  mdblistApiKey?: string;
+  popularCatalogService?: PopularCatalogService;
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
@@ -206,12 +215,30 @@ export function CatalogPage({
   const [guidePlayerCollapsed, setGuidePlayerCollapsed] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(24);
+  const [popularState, setPopularState] = useState<
+    { mediaType: "MOVIE" | "SERIES"; items: MdblistPopularItem[]; error?: boolean } | null
+  >(null);
   const deferredQuery = useDeferredValue(query);
+  const featuredMediaType = section === "Movies" ? "MOVIE" : section === "Series" ? "SERIES" : null;
+  const items = section === "Live TV" ? channels : section === "Movies" ? movies : series;
   useEffect(() => setPage(1), [section]);
+  useEffect(() => {
+    if (!featuredMediaType || !mdblistApiKey.trim() || !popularCatalogService || deferredQuery.trim() || items.length === 0) {
+      setPopularState(null);
+      return;
+    }
+    let active = true;
+    setPopularState(null);
+    void popularCatalogService.getPopularCatalog(featuredMediaType, mdblistApiKey).then((items) => {
+      if (active) setPopularState({ mediaType: featuredMediaType, items });
+    }).catch(() => {
+      if (active) setPopularState({ mediaType: featuredMediaType, items: [], error: true });
+    });
+    return () => { active = false; };
+  }, [deferredQuery, featuredMediaType, items.length, mdblistApiKey, popularCatalogService]);
   useEffect(() => {
     if (livePlayerMini) setShowFullGuide(false);
   }, [livePlayerMini]);
-  const items = section === "Live TV" ? channels : section === "Movies" ? movies : series;
   const selectedGroupChannels = section === "Live TV" && category !== "All"
     ? channels.filter((channel) => channel.group === category)
     : [];
@@ -277,6 +304,17 @@ export function CatalogPage({
       5,
     )
     : [];
+  const popularItems = useMemo(() => {
+    if (!featuredMediaType || popularState?.mediaType !== featuredMediaType) return [];
+    return rankLocalCatalogByPopularity(
+      filtered.filter((item): item is FeaturedCatalogItem => !("group" in item)),
+      popularState.items,
+    ).slice(0, 5);
+  }, [featuredMediaType, filtered, popularState]);
+  const usePopularPanel = Boolean(
+    mdblistApiKey.trim() && popularCatalogService && !deferredQuery.trim() && featuredMediaType,
+  );
+  const featuredItems = usePopularPanel && popularItems.length > 0 ? popularItems : recentlyAdded;
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const paginatedItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -417,15 +455,22 @@ export function CatalogPage({
       )}
       {(section === "Movies" || section === "Series") &&
         deferredQuery.trim() === "" &&
-        recentlyAdded.length > 0 && (
+        (featuredItems.length > 0 || (usePopularPanel && (!popularState || popularState.error))) && (
           <div className="catalog-featured">
-            <section aria-label="Top 5 · Recently added" className="catalog-featured-row">
+            <section aria-label={usePopularPanel && popularItems.length > 0 ? "Popular on TMDB" : "Top 5 · Recently added"} className="catalog-featured-row">
               <div className="catalog-featured-heading">
-                <h2>Top 5 · Recently added</h2>
+                <h2>{usePopularPanel && popularItems.length > 0 ? "Popular on TMDB" : "Top 5 · Recently added"}</h2>
               </div>
-              <div className="catalog-grid catalog-featured-grid">
-                {recentlyAdded.map((item) => renderCatalogCard(item))}
-              </div>
+              {usePopularPanel && popularState?.error && (
+                <p aria-live="polite" role="status">MDBList popular titles are unavailable. Showing recently added instead.</p>
+              )}
+              {usePopularPanel && !popularState
+                ? <p aria-live="polite" className="inline-status" role="status"><span className="spinner" /> Loading popular titles…</p>
+                : (
+                  <div className="catalog-grid catalog-featured-grid">
+                    {featuredItems.map((item) => renderCatalogCard(item))}
+                  </div>
+                )}
             </section>
           </div>
         )}
@@ -673,8 +718,76 @@ export function CatalogPage({
   );
 }
 
+function relatedPlaylistItems<T extends Movie | Series>(selected: T, items: T[]): T[] {
+  const candidates = items.filter((item) =>
+    item.id !== selected.id && item.playlistId === selected.playlistId,
+  );
+  const category = selected.category?.trim().toLocaleLowerCase();
+  const sameCategory = category
+    ? candidates.filter((item) => item.category?.trim().toLocaleLowerCase() === category)
+    : [];
+  return sortCatalogItems(sameCategory.length > 0 ? sameCategory : candidates, "added").slice(0, 9);
+}
+
+function MoreFromPlaylist<T extends Movie | Series>({
+  items,
+  section,
+  onSelect,
+}: {
+  items: T[];
+  section: "Movies" | "Series";
+  onSelect: (item: T) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section aria-label="More from this playlist" className="detail-more-playlist">
+      <div className="detail-more-heading">
+        <div>
+          <p className="eyebrow">KEEP EXPLORING</p>
+          <h2>More from this playlist</h2>
+        </div>
+      </div>
+      <div className="detail-more-rail">
+        {items.map((item) => (
+          <article className="catalog-card detail-more-card" key={item.id}>
+            <button
+              aria-label={`View details for ${item.name}`}
+              className="catalog-card-main"
+              onClick={() => onSelect(item)}
+              type="button"
+            >
+              <span className="catalog-artwork detail-more-artwork">
+                <span className="catalog-artwork-fallback">
+                  <Icon name={section === "Movies" ? "movie" : "tv"} />
+                </span>
+                {item.posterUrl && (
+                  <img
+                    alt=""
+                    loading="lazy"
+                    onError={(event) => { event.currentTarget.hidden = true; }}
+                    src={item.posterUrl}
+                  />
+                )}
+              </span>
+              <span className="catalog-card-copy">
+                <strong title={item.name}>{item.name}</strong>
+                <small>
+                  {[item.year, item.rating !== undefined ? `★ ${item.rating.toFixed(1)}` : undefined]
+                    .filter((value) => value !== undefined)
+                    .join(" · ") || item.category || section}
+                </small>
+              </span>
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function MovieDetail({
   movie,
+  playlistMovies = [],
   favorite,
   inLibrary,
   continueWatching,
@@ -684,9 +797,11 @@ export function MovieDetail({
   onAddToLibrary,
   onRemoveFromLibrary,
   ratingsService,
+  onOpenMovie,
 }: {
   ratingsService?: RatingsService;
   movie: Movie;
+  playlistMovies?: Movie[];
   favorite: boolean;
   inLibrary: boolean;
   continueWatching: boolean;
@@ -695,11 +810,14 @@ export function MovieDetail({
   onFavorite: () => void;
   onAddToLibrary: () => void;
   onRemoveFromLibrary: () => void;
+  onOpenMovie?: (movie: Movie) => void;
 }) {
+  const relatedMovies = relatedPlaylistItems(movie, playlistMovies);
   return (
     <section className="series-detail-page">
       <button className="back-button" onClick={onBack} type="button"><Icon name="arrow_back" /> Movies</button>
       <header className="series-detail-header">
+        {movie.posterUrl && <img alt="" aria-hidden="true" className="detail-backdrop" src={movie.posterUrl} />}
         {movie.posterUrl ? <img alt="" src={movie.posterUrl} /> : <div className="movie-detail-poster"><Icon name="movie" /></div>}
         <div>
           <p className="eyebrow">MOVIE DETAILS{movie.year ? ` / ${movie.year}` : ""}</p>
@@ -708,7 +826,7 @@ export function MovieDetail({
             <span>{movie.rating !== undefined ? `★ ${movie.rating.toFixed(1)}` : "No rating"}</span>
             {movie.category && <span>{movie.category}</span>}
           </div>
-          <p>{movie.overview || "No overview was provided by this source."}</p>
+          {movie.overview?.trim() && <p>{movie.overview}</p>}
           <ExternalRatingsPanel item={movie} mediaType="MOVIE" service={ratingsService} />
           <div className="movie-detail-actions">
             <button className="primary-button" onClick={onPlay} type="button">
@@ -735,6 +853,13 @@ export function MovieDetail({
           </div>
         </div>
       </header>
+      {onOpenMovie && (
+        <MoreFromPlaylist
+          items={relatedMovies}
+          onSelect={onOpenMovie}
+          section="Movies"
+        />
+      )}
     </section>
   );
 }
@@ -771,8 +896,12 @@ export function SeriesDetail({
   onAddToLibrary,
   onRemoveFromLibrary,
   ratingsService,
+  playlistSeries = [],
+  onOpenSeries,
 }: {
   ratingsService?: RatingsService;
+  playlistSeries?: Series[];
+  onOpenSeries?: (series: Series) => void;
   series: Series;
   episodes: Episode[];
   showAdultContent: boolean;
@@ -788,32 +917,49 @@ export function SeriesDetail({
   onAddToLibrary: () => void;
   onRemoveFromLibrary: () => void;
 }) {
-  const [season, setSeason] = useState<number | "all">("all");
+  const [seasonSelection, setSeasonSelection] = useState<{ seriesId: string; season: number | "all" }>(() => ({
+    seriesId: series.id,
+    season: 1,
+  }));
+  const requestedSeason = seasonSelection.seriesId === series.id ? seasonSelection.season : 1;
   const availableEpisodes = showAdultContent
     ? episodes
     : episodes.filter((episode) => !isAdultContent(episode.name));
   const seasons = [...new Set(availableEpisodes.map((episode) => episode.season))].sort((a, b) => a - b);
+  const season = requestedSeason === "all"
+    ? "all"
+    : seasons.includes(requestedSeason)
+      ? requestedSeason
+      : seasons.includes(1)
+        ? 1
+        : seasons[0] ?? "all";
   const visible = availableEpisodes
     .filter((episode) => season === "all" || episode.season === season)
     .sort((a, b) => a.season - b.season || a.number - b.number);
   const firstEpisode = [...availableEpisodes].sort((a, b) => a.season - b.season || a.number - b.number)[0];
+  const relatedSeries = relatedPlaylistItems(series, playlistSeries);
+  const seasonCount = seasons.length;
+  const seriesDetails = loading
+    ? "SERIES DETAILS / LOADING EPISODES"
+    : `SERIES DETAILS / ${seasonCount} ${seasonCount === 1 ? "SEASON" : "SEASONS"} / ${availableEpisodes.length} ${availableEpisodes.length === 1 ? "EPISODE" : "EPISODES"}`;
 
   return (
     <section className="series-detail-page">
       <button className="back-button" onClick={onBack} type="button"><Icon name="arrow_back" /> Series</button>
       <header className="series-detail-header">
+        {series.posterUrl && <img alt="" aria-hidden="true" className="detail-backdrop" src={series.posterUrl} />}
         {series.posterUrl
           ? <img alt="" src={series.posterUrl} />
           : <div className="movie-detail-poster"><Icon name="tv" /></div>}
         <div>
-          <p className="eyebrow">SERIES DETAILS / {series.seasons} {series.seasons === 1 ? "SEASON" : "SEASONS"}</p>
+          <p className="eyebrow">{seriesDetails}</p>
           <h1>{series.name}</h1>
           <div className="detail-meta">
             <span>{series.rating !== undefined ? `★ ${series.rating.toFixed(1)}` : "No rating"}</span>
             {series.year !== undefined && <span>{series.year}</span>}
             {series.category && <span>{series.category}</span>}
           </div>
-          <p>{series.overview || "No overview was provided by this source."}</p>
+          {series.overview?.trim() && <p>{series.overview}</p>}
           <ExternalRatingsPanel item={series} mediaType="SERIES" service={ratingsService} />
           <div className="movie-detail-actions">
             <button
@@ -858,7 +1004,10 @@ export function SeriesDetail({
             <Icon name="filter_list" />
             <CustomSelect
               ariaLabel="Filter season"
-              onValueChange={(value) => setSeason(value === "all" ? "all" : Number(value))}
+              onValueChange={(value) => setSeasonSelection({
+                seriesId: series.id,
+                season: value === "all" ? "all" : Number(value),
+              })}
               options={[
                 { label: "All seasons", value: "all" },
                 ...seasons.map((value) => ({ label: `Season ${value}`, value: String(value) })),
@@ -891,6 +1040,13 @@ export function SeriesDetail({
           </button>
         ))}
       </div>
+      {onOpenSeries && (
+        <MoreFromPlaylist
+          items={relatedSeries}
+          onSelect={onOpenSeries}
+          section="Series"
+        />
+      )}
     </section>
   );
 }
@@ -902,6 +1058,7 @@ export function LibraryPage({
   onChangeStatus,
   onRemove,
   onRemoveFavorite,
+  onOpenFavorite,
 }: {
   library: LibraryItem[];
   favorites: Favorite[];
@@ -909,6 +1066,7 @@ export function LibraryPage({
   onChangeStatus: (item: LibraryItem, status: LibraryItem["status"]) => void;
   onRemove: (id: string, title: string) => void;
   onRemoveFavorite: (favorite: Favorite) => void;
+  onOpenFavorite?: (favorite: Favorite) => void;
 }) {
   const [tab, setTab] = useState<"Continue watching" | "Watchlist" | "Watched" | "Favorites">("Continue watching");
   const [contentFilter, setContentFilter] = useState<LibraryGroupKey | "ALL">("ALL");
@@ -998,10 +1156,39 @@ export function LibraryPage({
         ) : (
           <div className="favorite-list">
             {visibleFavorites.map((favorite) => (
-              <article className="favorite-row" key={favorite.id}>
-                {favorite.artworkUrl
-                  ? <img alt="" loading="lazy" src={favorite.artworkUrl} />
-                  : <span className="favorite-art-placeholder"><Icon name={LIBRARY_CONTENT_GROUPS.find((group) => group.key === libraryGroupFor(favorite.contentType))!.icon} /></span>}
+              <article className={`favorite-row${favorite.contentType === "LIVE" ? " live-favorite-row" : ""}`} key={favorite.id}>
+                <button
+                  aria-label={favorite.contentType === "LIVE" ? `Play ${favorite.title}` : `View details for ${favorite.title}`}
+                  className="favorite-art-button"
+                  disabled={favorite.contentType === "LIVE" ? !favorite.streamUrl : !onOpenFavorite}
+                  onClick={() => {
+                    if (favorite.contentType === "LIVE" && favorite.streamUrl) {
+                      onPlay({
+                        id: favorite.contentId,
+                        playlistId: favorite.playlistId,
+                        contentType: favorite.contentType,
+                        title: favorite.title,
+                        streamUrl: favorite.streamUrl,
+                        artworkUrl: favorite.artworkUrl,
+                        live: true,
+                        drmLicenseUrl: favorite.drmLicenseUrl,
+                        drmSystem: favorite.drmSystem,
+                      }, 0);
+                    } else {
+                      onOpenFavorite?.(favorite);
+                    }
+                  }}
+                  type="button"
+                >
+                  <span className="library-item-art-fallback">
+                    <Icon name={LIBRARY_CONTENT_GROUPS.find((group) => group.key === libraryGroupFor(favorite.contentType))!.icon} />
+                  </span>
+                  {favorite.artworkUrl && <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={favorite.artworkUrl} />}
+                  <span aria-hidden="true" className="library-item-art-play">
+                    <Icon name={favorite.contentType === "LIVE" ? "play_arrow" : "arrow_forward"} />
+                    <span>{favorite.contentType === "LIVE" ? "Play" : "See details"}</span>
+                  </span>
+                </button>
                 <div>
                   <strong>{favorite.title}</strong>
                   <small>{LIBRARY_CONTENT_GROUPS.find((group) => group.key === libraryGroupFor(favorite.contentType))!.label}</small>

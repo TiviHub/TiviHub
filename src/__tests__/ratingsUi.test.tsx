@@ -23,7 +23,17 @@ function service(getRatings: RatingsService["getRatings"]): RatingsService {
 
 const ratingsResult: RatingsResult = {
   status: "fresh",
-  ratings: { ratings: [{ source: "imdb", value: 8.3, votes: 12345 }, { source: "tomatoes", score: 87 }] },
+  ratings: {
+    overview: "A summary supplied by MDBList.",
+    ratings: [
+      { source: "imdb", value: 8.3, votes: 12345 },
+      { source: "tomatoes", score: 87 },
+      { source: "tmdb", value: 7.6 },
+      { source: "metacritic", score: 68 },
+      { source: "trakt", value: 7.9 },
+      { source: "popcorn", score: 91 },
+    ],
+  },
 };
 
 function renderMovie(ratingsService: RatingsService, onPlay = vi.fn()) {
@@ -40,6 +50,108 @@ afterEach(() => {
 });
 
 describe("detail page external ratings", () => {
+  it("shows playable movies from the same playlist and opens the selected title", async () => {
+    const onOpenMovie = vi.fn();
+    const related = {
+      ...movie,
+      id: "p1:movie:2",
+      name: "Arrival",
+      posterUrl: "https://images.example/arrival.jpg",
+    };
+    render(<MovieDetail
+      continueWatching={false}
+      favorite={false}
+      inLibrary={false}
+      movie={{ ...movie, posterUrl: "https://images.example/heat.jpg" }}
+      onAddToLibrary={vi.fn()}
+      onBack={vi.fn()}
+      onFavorite={vi.fn()}
+      onOpenMovie={onOpenMovie}
+      onPlay={vi.fn()}
+      onRemoveFromLibrary={vi.fn()}
+      playlistMovies={[
+        related,
+        ...Array.from({ length: 8 }, (_, index) => ({
+          ...related,
+          id: `p1:movie:${index + 3}`,
+          name: `Related ${index + 1}`,
+        })),
+        { ...related, id: "p2:movie:1", playlistId: "p2", name: "Other playlist movie" },
+      ]}
+      ratingsService={service(async () => ({ status: "not-found" }))}
+    />);
+    expect(document.querySelector(".series-detail-header .detail-backdrop")?.getAttribute("src")).toBe("https://images.example/heat.jpg");
+    expect(screen.getByText("More from this playlist")).toBeTruthy();
+    expect(document.querySelector(".detail-more-heading > span")).toBeNull();
+    expect(screen.queryByText("Other playlist movie")).toBeNull();
+    expect(document.querySelectorAll(".detail-more-card")).toHaveLength(9);
+    expect(document.querySelector(".detail-more-artwork.catalog-artwork .catalog-artwork-fallback")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "View details for Arrival" }));
+    expect(onOpenMovie).toHaveBeenCalledWith(related);
+  });
+
+  it("shows and opens related series from the same playlist", async () => {
+    const onOpenSeries = vi.fn();
+    const related = { ...series, id: "p1:series:2", name: "The Wire" };
+    render(<SeriesDetail
+      continueWatching={false}
+      episodes={[]}
+      error={null}
+      favorite={false}
+      inLibrary={false}
+      loading={false}
+      onAddToLibrary={vi.fn()}
+      onBack={vi.fn()}
+      onContinueWatching={vi.fn()}
+      onFavorite={vi.fn()}
+      onOpenSeries={onOpenSeries}
+      onPlay={vi.fn()}
+      onRemoveFromLibrary={vi.fn()}
+      playlistSeries={[related]}
+      series={{ ...series, posterUrl: "https://images.example/dark.jpg" }}
+      showAdultContent={false}
+      ratingsService={service(async () => ({ status: "not-found" }))}
+    />);
+    expect(document.querySelector(".series-detail-header .detail-backdrop")?.getAttribute("src")).toBe("https://images.example/dark.jpg");
+    expect(
+      screen.getByRole("heading", { name: "Episodes" }).compareDocumentPosition(screen.getByText("More from this playlist")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "View details for The Wire" }));
+    expect(onOpenSeries).toHaveBeenCalledWith(related);
+  });
+
+  it("defaults the episode list to season 1 while retaining the all-seasons option", async () => {
+    render(<SeriesDetail
+      continueWatching={false}
+      episodes={[
+        { id: "episode-1", playlistId: "p1", seriesId: series.id, season: 1, number: 1, name: "Pilot", streamUrl: "https://p.example/1.mp4" },
+        { id: "episode-2", playlistId: "p1", seriesId: series.id, season: 2, number: 1, name: "New Chapter", streamUrl: "https://p.example/2.mp4" },
+      ]}
+      error={null}
+      favorite={false}
+      inLibrary={false}
+      loading={false}
+      onAddToLibrary={vi.fn()}
+      onBack={vi.fn()}
+      onContinueWatching={vi.fn()}
+      onFavorite={vi.fn()}
+      onPlay={vi.fn()}
+      onRemoveFromLibrary={vi.fn()}
+      series={series}
+      showAdultContent={false}
+      ratingsService={service(async () => ({ status: "not-found" }))}
+    />);
+
+    expect(screen.getByText(/S01 E01 · Pilot/)).toBeTruthy();
+    expect(screen.queryByText(/S02 E01 · New Chapter/)).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Filter season" }).textContent).toContain("Season 1");
+    expect(screen.getByText("SERIES DETAILS / 2 SEASONS / 2 EPISODES")).toBeTruthy();
+    await userEvent.click(screen.getByRole("combobox", { name: "Filter season" }));
+    await userEvent.click(await screen.findByRole("option", { name: "All seasons" }));
+    expect(screen.getByText(/S02 E01 · New Chapter/)).toBeTruthy();
+  });
+
   it("shows loading, then source-labelled ratings next to the provider rating", async () => {
     let resolve!: (value: RatingsResult) => void;
     renderMovie(service(() => new Promise((done) => { resolve = done; })));
@@ -47,10 +159,38 @@ describe("detail page external ratings", () => {
     expect(screen.getByText("★ 7.1")).toBeTruthy();
     resolve(ratingsResult);
     expect(await screen.findByText("IMDb")).toBeTruthy();
-    expect(screen.getByText("8.3 · 12,345 votes")).toBeTruthy();
-    expect(screen.getByText("Rotten Tomatoes (critics)")).toBeTruthy();
-    expect(screen.getByText("87/100")).toBeTruthy();
+    expect(screen.getByText("8.3")).toBeTruthy();
+    expect(document.querySelector('[aria-label="Rotten Tomatoes 87%"]')).toBeTruthy();
+    expect(screen.getByText("87%")).toBeTruthy();
+    expect(screen.getByText("TMDB")).toBeTruthy();
+    expect(screen.getByText("7.6")).toBeTruthy();
+    expect(document.querySelector('[aria-label="Metacritic 68/100"]')).toBeTruthy();
+    expect(screen.getByText("68/100")).toBeTruthy();
+    expect(screen.queryByText("Trakt")).toBeNull();
+    expect(screen.queryByText("Rotten Tomatoes (audience)")).toBeNull();
+    expect(screen.getByText("A summary supplied by MDBList.")).toBeTruthy();
+    expect(screen.queryByText(/votes/)).toBeNull();
+    expect(screen.queryByText(/External ratings by MDBList/)).toBeNull();
+    expect(document.querySelectorAll(".external-rating-badge")).toHaveLength(4);
     expect(screen.getByText("★ 7.1")).toBeTruthy();
+  });
+
+  it("prefers the playlist summary over an MDBList summary", async () => {
+    render(<MovieDetail
+      continueWatching={false}
+      favorite={false}
+      inLibrary={false}
+      movie={{ ...movie, overview: "Playlist-provided summary." }}
+      onAddToLibrary={vi.fn()}
+      onBack={vi.fn()}
+      onFavorite={vi.fn()}
+      onPlay={vi.fn()}
+      onRemoveFromLibrary={vi.fn()}
+      ratingsService={service(async () => ratingsResult)}
+    />);
+    expect(await screen.findByText("IMDb")).toBeTruthy();
+    expect(screen.getByText("Playlist-provided summary.")).toBeTruthy();
+    expect(screen.queryByText("A summary supplied by MDBList.")).toBeNull();
   });
 
   it("keeps provider rating and playback usable when MDBList is unavailable", async () => {

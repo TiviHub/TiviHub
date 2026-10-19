@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchMdblistRatings, MdblistError, parseMdblistRatings, type MdblistTransport } from "../providers/mdblist";
 import { createTitleIdentity } from "../ratings";
+import type { MdblistRateLimiter } from "../mdblistRateLimit";
 
 const SECRET = "test-key-123";
+const noRateLimit: MdblistRateLimiter = {
+  acquire: async () => () => undefined,
+  recordResponse: async () => undefined,
+};
 const movie = createTitleIdentity({ name: "Heat", year: 1995, imdbId: "tt0113277" }, "MOVIE")!;
 const series = createTitleIdentity({ name: "Dark", year: 2017, tmdbId: "70523" }, "SERIES")!;
 
@@ -22,13 +27,13 @@ const validBody = {
 };
 
 async function failure(transport: MdblistTransport, key = SECRET, identity = movie) {
-  return fetchMdblistRatings(identity, key, undefined, transport).catch((error: unknown) => error);
+  return fetchMdblistRatings(identity, key, undefined, transport, noRateLimit).catch((error: unknown) => error);
 }
 
 describe("MDBList provider", () => {
   it("parses valid responses and drops invalid rating rows", async () => {
     const transport = vi.fn<MdblistTransport>(async () => json(validBody));
-    const result = await fetchMdblistRatings(movie, SECRET, undefined, transport);
+    const result = await fetchMdblistRatings(movie, SECRET, undefined, transport, noRateLimit);
     expect(result).toEqual({
       ids: { imdb: "tt0113277", tmdb: "949" },
       ratings: [
@@ -41,9 +46,14 @@ describe("MDBList provider", () => {
     expect(url.searchParams.get("apikey")).toBe(SECRET);
   });
 
+  it("keeps an MDBList description when available", () => {
+    expect(parseMdblistRatings({ ratings: [], description: "MDBList movie summary." }))
+      .toEqual({ ratings: [], overview: "MDBList movie summary." });
+  });
+
   it("uses the show path for series and TMDB IDs", async () => {
     const transport = vi.fn<MdblistTransport>(async () => json({ ratings: [] }));
-    await expect(fetchMdblistRatings(series, SECRET, undefined, transport)).resolves.toEqual({ ratings: [] });
+    await expect(fetchMdblistRatings(series, SECRET, undefined, transport, noRateLimit)).resolves.toEqual({ ratings: [] });
     expect(new URL(transport.mock.calls[0][0].url).pathname).toBe("/tmdb/show/70523");
   });
 
@@ -63,8 +73,8 @@ describe("MDBList provider", () => {
   });
 
   it("returns null for 404 and not-found bodies", async () => {
-    await expect(fetchMdblistRatings(movie, SECRET, undefined, async () => json({}, 404))).resolves.toBeNull();
-    await expect(fetchMdblistRatings(movie, SECRET, undefined, async () => json({ error: "Not found" })))
+    await expect(fetchMdblistRatings(movie, SECRET, undefined, async () => json({}, 404), noRateLimit)).resolves.toBeNull();
+    await expect(fetchMdblistRatings(movie, SECRET, undefined, async () => json({ error: "Not found" }), noRateLimit))
       .resolves.toBeNull();
   });
 
@@ -96,12 +106,23 @@ describe("MDBList provider", () => {
     expect(transport).not.toHaveBeenCalled();
   });
 
+  it("does not call MDBList when the shared quota guard is blocking requests", async () => {
+    const transport = vi.fn<MdblistTransport>();
+    const rateLimiter: MdblistRateLimiter = {
+      acquire: async () => { throw new MdblistError("rate-limited", "wait", 429, 123); },
+      recordResponse: async () => undefined,
+    };
+    await expect(fetchMdblistRatings(movie, SECRET, undefined, transport, rateLimiter))
+      .rejects.toMatchObject({ kind: "rate-limited", retryAt: 123 });
+    expect(transport).not.toHaveBeenCalled();
+  });
+
   it("propagates cancellation", async () => {
     const controller = new AbortController();
     const transport: MdblistTransport = ({ signal }) => new Promise((_, reject) => {
       signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
     });
-    const pending = fetchMdblistRatings(movie, SECRET, controller.signal, transport);
+    const pending = fetchMdblistRatings(movie, SECRET, controller.signal, transport, noRateLimit);
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
@@ -112,22 +133,67 @@ describe("MDBList provider", () => {
       new URL(url).pathname.startsWith("/search")
         ? json({ search: [{ title: "Heat", year: 1995, ids: { imdb: "tt0113277" } }, { title: "Heat", year: 1986, ids: { imdb: "tt0091187" } }] })
         : json(validBody));
-    await expect(fetchMdblistRatings(byTitle, SECRET, undefined, transport)).resolves.toMatchObject({ ratings: expect.any(Array) });
+    await expect(fetchMdblistRatings(byTitle, SECRET, undefined, transport, noRateLimit)).resolves.toMatchObject({ ratings: expect.any(Array) });
     expect(transport).toHaveBeenCalledTimes(2);
 
     const ambiguous = vi.fn<MdblistTransport>(async () =>
       json({ search: [{ title: "Heat", year: 1995, ids: { imdb: "tt0113277" } }, { title: "HEAT", year: 1995, ids: { imdb: "tt0000001" } }] }));
-    await expect(fetchMdblistRatings(byTitle, SECRET, undefined, ambiguous)).resolves.toBeNull();
+    await expect(fetchMdblistRatings(byTitle, SECRET, undefined, ambiguous, noRateLimit)).resolves.toBeNull();
     expect(ambiguous).toHaveBeenCalledTimes(1);
+  });
+
+  it("strips a language prefix and embedded year before searching and matching", async () => {
+    const byTitle = createTitleIdentity({ name: "EN - Turok Son Of Stone (2008)", year: 2008 }, "MOVIE")!;
+    const transport = vi.fn<MdblistTransport>(async ({ url }) =>
+      new URL(url).pathname === "/search/movie"
+        ? json({ search: [{ title: "Turok: Son of Stone", year: 2008, ids: { imdb: "tt0409084" } }] })
+        : json(validBody));
+
+    await expect(fetchMdblistRatings(byTitle, SECRET, undefined, transport, noRateLimit))
+      .resolves.toMatchObject({ ratings: expect.any(Array) });
+    expect(transport).toHaveBeenCalledTimes(2);
+    const searchUrl = new URL(transport.mock.calls[0][0].url);
+    expect(searchUrl.searchParams.get("query")).toBe("Turok Son Of Stone");
+    expect(searchUrl.searchParams.get("year")).toBe("2008");
+    expect(new URL(transport.mock.calls[1][0].url).pathname).toBe("/imdb/movie/tt0409084");
+  });
+
+  it("strips video quality tags after the year before searching and matching", async () => {
+    const byTitle = createTitleIdentity(
+      { name: "Batman v Superman: Dawn of Justice (2016) 4K", year: 2016 },
+      "MOVIE",
+    )!;
+    const transport = vi.fn<MdblistTransport>(async ({ url }) =>
+      new URL(url).pathname === "/search/movie"
+        ? json({
+          search: [{
+            title: "Batman v Superman: Dawn of Justice",
+            year: 2016,
+            ids: { imdbid: "tt2975590", tmdbid: 209112, traktid: 129583, mdblist: "1h50" },
+          }],
+          total: 1,
+        })
+        : json(validBody));
+
+    await expect(fetchMdblistRatings(byTitle, SECRET, undefined, transport, noRateLimit))
+      .resolves.toMatchObject({ ratings: expect.any(Array) });
+    expect(transport).toHaveBeenCalledTimes(2);
+    const searchUrl = new URL(transport.mock.calls[0][0].url);
+    expect(searchUrl.searchParams.get("query")).toBe("Batman v Superman: Dawn of Justice");
+    expect(searchUrl.searchParams.get("year")).toBe("2016");
+    expect(new URL(transport.mock.calls[1][0].url).pathname).toBe("/imdb/movie/tt2975590");
+    expect(byTitle.key).toBe("movie:title:v3:batman v superman dawn of justice:2016");
   });
 });
 
 describe("title identity", () => {
   it("prefers IMDb, then TMDB, then year-qualified normalized titles", () => {
-    expect(createTitleIdentity({ name: "X", imdbId: "TT0113277", tmdbId: "5" }, "MOVIE")?.key).toBe("movie:imdb:tt0113277");
-    expect(createTitleIdentity({ name: "X", tmdbId: "5" }, "MOVIE")?.key).toBe("movie:tmdb:5");
+    expect(createTitleIdentity({ name: "X", imdbId: "TT0113277", tmdbId: "5" }, "MOVIE")?.key).toBe("movie:imdb:v2:tt0113277");
+    expect(createTitleIdentity({ name: "X", tmdbId: "5" }, "MOVIE")?.key).toBe("movie:tmdb:v2:5");
     expect(createTitleIdentity({ name: " Amélie: The  Film! ", year: 2001 }, "MOVIE")?.key)
-      .toBe("movie:title:amelie the film:2001");
+      .toBe("movie:title:v3:amelie the film:2001");
+    expect(createTitleIdentity({ name: "EN - Turok Son Of Stone (2008)", year: 2008 }, "MOVIE")?.key)
+      .toBe("movie:title:v3:turok son of stone:2008");
   });
 
   it("refuses to guess without IDs or a year", () => {

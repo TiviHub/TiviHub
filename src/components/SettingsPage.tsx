@@ -44,6 +44,7 @@ export function SettingsPage({
   onSaveApiKey,
   mdblistApiKey = "",
   onSaveMdblistApiKey,
+  onOpenExternalUrl,
   onDataRestored,
   onRefreshEpg,
   onDownloadDiagnostics,
@@ -69,6 +70,7 @@ export function SettingsPage({
   onSaveApiKey: (apiKey: string) => Promise<void>;
   mdblistApiKey?: string;
   onSaveMdblistApiKey?: (apiKey: string) => Promise<void>;
+  onOpenExternalUrl?: (url: string) => Promise<void> | void;
   onDataRestored: () => Promise<void>;
   onRefreshEpg: () => Promise<void>;
   onDownloadDiagnostics: () => Promise<boolean>;
@@ -214,6 +216,9 @@ export function SettingsPage({
           <a href="#settings-appearance"><Icon name="dark_mode" /><span>Appearance</span></a>
           <a href="#settings-content-visibility"><Icon name="shield" /><span>Adult content</span></a>
           <a href="#settings-subtitles"><Icon name="subtitles" /><span>Subtitles</span></a>
+          {onSaveMdblistApiKey && (
+            <a href="#settings-ratings"><Icon name="high_quality" /><span>External ratings</span></a>
+          )}
           <a href="#settings-backup"><Icon name="backup" /><span>Encrypted backup</span></a>
           <a href="#settings-diagnostics"><Icon name="download" /><span>Diagnostics</span></a>
           <a href="#settings-privacy-card"><Icon name="lock" /><span>Privacy by design</span></a>
@@ -358,7 +363,22 @@ export function SettingsPage({
                     value={keyDraft}
                   />
                 </label>
-                <p className="form-note">Encrypted in this app and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.</p>
+                <p className="form-note">
+                  Encrypted in this app and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.{" "}
+                  <a
+                    href="https://www.opensubtitles.com/en/consumers"
+                    onClick={(event) => {
+                      if (!onOpenExternalUrl) return;
+                      event.preventDefault();
+                      void onOpenExternalUrl("https://www.opensubtitles.com/en/consumers");
+                    }}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Get an OpenSubtitles API key
+                  </a>
+                  .
+                </p>
                 <button className="secondary-button" type="submit"><Icon name="lock" /> Save key</button>
                 {keyNotice && <p className="settings-message" role="status">{keyNotice}</p>}
               </form>
@@ -383,7 +403,22 @@ export function SettingsPage({
                       value={mdblistDraft}
                     />
                   </label>
-                  <p className="form-note">Encrypted in this app, never included in backups, and sent only to MDBList when you open a title. Re-enter it after restoring a backup.</p>
+                  <p className="form-note">
+                    Encrypted in this app, never included in backups, and sent only to MDBList when you open a title. Re-enter it after restoring a backup.{" "}
+                    <a
+                      href="https://mdblist.com/preferences/#api"
+                      onClick={(event) => {
+                        if (!onOpenExternalUrl) return;
+                        event.preventDefault();
+                        void onOpenExternalUrl("https://mdblist.com/preferences/#api");
+                      }}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Get an MDBList API key
+                    </a>
+                    .
+                  </p>
                   <button className="secondary-button" type="submit"><Icon name="lock" /> Save MDBList key</button>
                   {mdblistNotice && <p className="settings-message" role="status">{mdblistNotice}</p>}
                 </form>

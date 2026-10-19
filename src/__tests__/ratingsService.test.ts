@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MdblistError } from "../providers/mdblist";
 import { createTitleIdentity } from "../ratings";
-import { createRatingsService, type RatingsCache } from "../ratingsService";
+import { createRatingsService, RATINGS_TTL_MILLIS, type RatingsCache } from "../ratingsService";
 import type { ExternalRatings, RatingsCacheEntry } from "../types";
 
 const identity = createTitleIdentity({ name: "Heat", year: 1995, imdbId: "tt0113277" }, "MOVIE")!;
@@ -33,6 +33,30 @@ describe("ratings service", () => {
     expect((await service.getRatings(identity)).status).toBe("fetched");
     expect(await service.getRatings(identity)).toMatchObject({ status: "fresh", ratings });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses saved ratings for 30 days before refreshing", async () => {
+    const cache = memoryCache();
+    const fetcher = vi.fn(async () => ratings);
+    let now = 1_000_000;
+    const service = createRatingsService({
+      cache,
+      fetcher,
+      getApiKey: async () => "key",
+      now: () => now,
+    });
+
+    await service.getRatings(identity);
+    expect(cache.map.get(identity.key)?.expiresAt).toBe(now + 30 * 24 * 60 * 60 * 1000);
+    now += RATINGS_TTL_MILLIS - 1;
+    expect((await service.getRatings(identity)).status).toBe("fresh");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    now += 1;
+    const stale = await service.getRatings(identity);
+    expect(stale.status).toBe("stale");
+    await stale.refresh;
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("serves a fresh cache without needing an API key", async () => {
@@ -103,7 +127,7 @@ describe("ratings service", () => {
     await service.getRatings(identity);
     await service.getRatings(asSeries);
     expect(fetcher).toHaveBeenCalledTimes(2);
-    expect([...cache.map.keys()].sort()).toEqual(["movie:imdb:tt0113277", "series:imdb:tt0113277"]);
+    expect([...cache.map.keys()].sort()).toEqual(["movie:imdb:v2:tt0113277", "series:imdb:v2:tt0113277"]);
     // Same title from two playlists produces the same identity and one record.
     const fromPlaylistB = createTitleIdentity({ name: "Heat", year: 1995, imdbId: "tt0113277" }, "MOVIE")!;
     await service.getRatings(fromPlaylistB);
