@@ -1,9 +1,18 @@
 name: Release
 
+# A pushed version tag builds and publishes a release. Every other trigger is a dry run: the same
+# builds, but nothing touches GitHub releases (every release step requires a tag ref) and the
+# installers are kept as workflow artifacts instead. Dry runs start from the "release-dry-run" label
+# on a pull request, a manual run, or a push to the branch ci-proof/release-dry-run.
 on:
   push:
     tags:
       - "v*.*.*"
+    branches:
+      - "ci-proof/release-dry-run"
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,6 +20,8 @@ permissions:
 jobs:
   create-release:
     name: Create GitHub Release
+    # Only a tag may touch GitHub releases.
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -44,6 +55,8 @@ jobs:
   windows:
     name: Build Windows installer
     needs: create-release
+    # create-release is skipped in a dry run; any other outcome than success or skipped stops the build.
+    if: ${{ !cancelled() && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') && (github.event_name != 'pull_request' || github.event.label.name == 'release-dry-run') }}
     runs-on: windows-latest
     steps:
       - name: Check out source
@@ -59,7 +72,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Validate release version
-        run: node scripts/verify-release-version.mjs
+        shell: bash
+        run: |
+          # A dry run has no tag, so check the versions against each other using the version itself as the tag.
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then export GITHUB_REF_NAME="v$(node -p "require('./package.json').version")"; fi
+          node scripts/verify-release-version.mjs
 
       - name: Install dependencies
         run: npm ci
@@ -74,15 +91,25 @@ jobs:
         run: npm run package:windows
 
       - name: Upload release assets
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = $env:GITHUB_REF_NAME
           gh release upload $tag "dist/releases/TiviHub-$tag-windows-x64.exe" dist/releases/TiviHub-setup.exe --clobber
 
+      - name: Keep the installer as a workflow artifact (dry run)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/releases/*.exe
+          retention-days: 3
+
   unix:
     name: Build ${{ matrix.name }}
     needs: create-release
+    if: ${{ !cancelled() && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') && (github.event_name != 'pull_request' || github.event.label.name == 'release-dry-run') }}
     strategy:
       fail-fast: false
       matrix:
@@ -114,7 +141,10 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf libssl-dev libgtk-3-dev libayatana-appindicator3-dev xdg-utils file
 
       - name: Validate release version
-        run: node scripts/verify-release-version.mjs
+        run: |
+          # A dry run has no tag, so check the versions against each other using the version itself as the tag.
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then export GITHUB_REF_NAME="v$(node -p "require('./package.json').version")"; fi
+          node scripts/verify-release-version.mjs
 
       - name: Install dependencies
         run: npm ci
@@ -129,13 +159,24 @@ jobs:
         run: npm run package:unix
 
       - name: Upload release assets
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist/releases/TiviHub-"$GITHUB_REF_NAME"-* --clobber
 
+      - name: Keep the packages as a workflow artifact (dry run)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-packages
+          path: dist/releases/*
+          retention-days: 3
+
   publish:
     name: Publish GitHub Release
     needs: [windows, unix]
+    # Publishing exists only for a tag.
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
