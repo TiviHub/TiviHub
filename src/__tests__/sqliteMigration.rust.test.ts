@@ -14,7 +14,7 @@ const dir = mkdtempSync(path.join(os.tmpdir(), "tivihub-migration-"));
 const dbPath = path.join(dir, "tivihub.sqlite3");
 let harness: RustHarness | undefined;
 
-afterEach(() => harness?.close());
+afterEach(async () => harness?.close());
 
 function plaintextInFiles(needle: string): string[] {
   return readdirSync(dir).filter((name) => readFileSync(path.join(dir, name)).includes(needle));
@@ -33,7 +33,7 @@ describe("IndexedDB to the Rust SQLite store", () => {
     const stored = (await sqlite.getAll("playlists")).find((p) => p.id === "r1")!;
     expect(stored.privateData).toBeTruthy();
     expect(await sqlite.decrypt((await sqlite.get("secrets", "mdblist-api-key"))!.payload)).toBe("mdb-secret");
-    harness.close();
+    await harness.close();
     // The WAL holds recent writes until a checkpoint, so every file in the data dir is checked.
     expect(plaintextInFiles("r1-c").length).toBeGreaterThan(0); // control: the search can see stored data
     expect(plaintextInFiles("pw-r1")).toEqual([]);
@@ -53,14 +53,14 @@ describe("IndexedDB to the Rust SQLite store", () => {
       return real.tx(ops);
     } };
     await expect(migrateToSqlite(idbBackend, crashing)).rejects.toThrow("crash");
-    harness.close();
+    await harness.close();
 
     harness = startRustHarness(crashPath);
     const reopened = createSqliteBackend(harness.invoke);
     expect(await reopened.metaGet("migrated_from_idb")).toBeNull();
     expect(await migrateToSqlite(idbBackend, reopened)).toBe(true);
     expect((await reopened.getAll("channels")).filter((c) => c.id === "r2-c")).toHaveLength(1);
-    harness.close();
+    await harness.close();
     rmSync(crashDir, { recursive: true, force: true });
   });
 });

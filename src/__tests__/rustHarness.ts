@@ -14,7 +14,8 @@ let built = false;
 export type RustHarness = {
   /** Same shape as Tauri's `invoke`, answered by the real Rust store. */
   invoke: <T = unknown>(command: string, args?: Record<string, unknown>) => Promise<T>;
-  close: () => void;
+  /** Resolves once the process has exited and released its files. */
+  close: () => Promise<void>;
 };
 
 /** Starts the Rust store (src-tauri/examples/storage_harness.rs) in memory or on a database file. */
@@ -42,6 +43,11 @@ export function startRustHarness(databasePath?: string): RustHarness {
         pending.set(id, { resolve: resolve as (value: never) => void, reject });
         child.stdin.write(`${JSON.stringify({ id, command, args })}\n`);
       }),
-    close: () => void child.kill(),
+    close: () =>
+      new Promise<void>((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) return resolve();
+        child.once("exit", () => resolve());
+        child.kill();
+      }),
   };
 }
