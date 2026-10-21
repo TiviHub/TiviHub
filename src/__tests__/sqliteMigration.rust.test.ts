@@ -43,7 +43,8 @@ describe("IndexedDB to the Rust SQLite store", () => {
 
   it("completes after a crash partway through, with no duplicate rows", async () => {
     await seedIdb("r2");
-    const crashPath = path.join(mkdtempSync(path.join(os.tmpdir(), "tivihub-crash-")), "tivihub.sqlite3");
+    const crashDir = mkdtempSync(path.join(os.tmpdir(), "tivihub-crash-"));
+    const crashPath = path.join(crashDir, "tivihub.sqlite3");
     harness = startRustHarness(crashPath);
     const real = createSqliteBackend(harness.invoke);
     let puts = 0;
@@ -59,5 +60,7 @@ describe("IndexedDB to the Rust SQLite store", () => {
     expect(await reopened.metaGet("migrated_from_idb")).toBeNull();
     expect(await migrateToSqlite(idbBackend, reopened)).toBe(true);
     expect((await reopened.getAll("channels")).filter((c) => c.id === "r2-c")).toHaveLength(1);
+    harness.close();
+    rmSync(crashDir, { recursive: true, force: true });
   });
 });
