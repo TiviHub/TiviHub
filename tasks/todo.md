@@ -54,7 +54,7 @@ l.tivihub.desktop`, see the spike note)
 
 ## Phase 2: Measurements
 
-- [ ] **T5: Startup and memory runner** (M)
+- [x] **T5: Startup and memory runner** (M)
   - Description: For a seeded dataset, do 5 cold starts (discard a warm-up), record time to ready, the app plus WebView working set at ready, JS heap from CDP, and write one JSON per run with the machine specs and commit hash.
   - Acceptance:
     - Output has median, worst and spread per metric.
@@ -64,7 +64,7 @@ l.tivihub.desktop`, see the spike note)
   - Dependencies: T4
   - Files: `scripts/perf/baseline.mjs`, `scripts/perf/system.mjs`, `scripts/perf/results.mjs`
 
-- [ ] **T6: Interaction latency** (M)
+- [x] **T6: Interaction latency** (M)
   - Description: Script the six interactions (Movies, sort by year, filter by genre, global search typing, Live TV, Home) and record long tasks over 50 ms, with the worst, per interaction.
   - Acceptance:
     - Each interaction reports count and max of long tasks.
@@ -74,14 +74,14 @@ l.tivihub.desktop`, see the spike note)
   - Dependencies: T5
   - Files: `scripts/perf/interactions.mjs`, `scripts/perf/baseline.mjs`
 
-- [ ] **T7: Catalog refresh timing** (S)
+- [x] **T7: Catalog refresh timing** (S)
   - Description: Time a full refresh of the seeded source against the mock server, with long tasks.
   - Acceptance: refresh duration and long-task max recorded for M and L; the app ends with the same counts.
   - Verify: `npm run perf:baseline -- --size M --refresh`.
   - Dependencies: T5
   - Files: `scripts/perf/refresh.mjs`, `scripts/perf/baseline.mjs`
 
-- [ ] **T8: Where startup time goes** (S)
+- [x] **T8: Where startup time goes** (S)
   - Description: Capture a CDP CPU profile of startup on dataset L and summarize the top functions by self time (no source changes).
   - Acceptance:
     - A table of the top 15 functions with self time and share of startup.
@@ -91,11 +91,11 @@ l.tivihub.desktop`, see the spike note)
   - Files: `scripts/perf/profile-startup.mjs`, `docs/plans/baseline-results/startup-profile.md`
 
 ### Checkpoint 2: numbers are trustworthy
-- [ ] Datasets S, M, L measured with at least 5 runs each
-- [ ] Two full runs agree within 15 percent (or the note records that they do not)
-- [ ] Review with maintainer; adjust the matrix if the machine cannot do XL
+- [x] Datasets M, L, XL measured with 5 runs each (S only used for the accessibility scan)
+- [ ] Two full runs agree within 15 percent: NOT met on L (long tasks vary 30 to 73 percent, refresh 27 percent); recorded in the findings note
+- [x] The machine handled XL
 
-- [ ] **T9: Full matrix M, L, XL** (S)
+- [x] **T9: Full matrix M, L, XL** (S)
   - Description: Run T5 to T7 for M, L and XL and store the raw JSON.
   - Acceptance: results for all three sizes, at least 5 runs per figure, committed under `docs/plans/baseline-results/`, small files only.
   - Verify: `npm run perf:baseline -- --all`; the folder lists three sizes with per-run files.
@@ -104,7 +104,7 @@ l.tivihub.desktop`, see the spike note)
 
 ## Phase 3: Audit
 
-- [ ] **T10: Automated accessibility on 8 screens** (M, blocked on approval)
+- [x] **T10: Automated accessibility on 8 screens** (M, blocked on approval)
   - Description: With `@axe-core/playwright`, scan Home, Live TV, Movies, Series, Library, Downloads, Settings and the playback dialog, through the same CDP connection.
   - Acceptance:
     - Maintainer approves the new dev dependency before installation.
@@ -113,7 +113,7 @@ l.tivihub.desktop`, see the spike note)
   - Dependencies: T1, maintainer approval
   - Files: `scripts/perf/a11y.mjs`, `package.json`, `package-lock.json`
 
-- [ ] **T11: Keyboard-only, reduced motion, contrast** (S)
+- [x] **T11: Keyboard-only, reduced motion, contrast** (S)
   - Description: Scripted keyboard pass (tab order reaches the main controls, Escape closes dialogs, focus returns) with reduced motion enabled and a contrast check of theme tokens.
   - Acceptance: a pass or fail per flow with the failing step named; contrast ratios listed for the light and dark themes.
   - Verify: `npm run perf:a11y -- --keyboard`.
@@ -127,21 +127,21 @@ l.tivihub.desktop`, see the spike note)
   - Dependencies: none
   - Files: `docs/plans/baseline-results/screen-reader.md`
 
-- [ ] **T13a: Filesystem permission reach** (S)
+- [x] **T13a: Filesystem permission reach** (S)
   - Description: Find out what `fs:allow-write` and `fs:allow-remove` allow without a scope, by reading the plugin permission definitions and by a controlled test that writes and deletes a file inside a temp folder through the webview.
   - Acceptance: a short statement of what the webview can write or delete, with evidence; the test never touches a path outside its own temp folder.
   - Verify: the test passes and the temp folder is gone afterwards.
   - Dependencies: T1
   - Files: `docs/plans/baseline-results/fs-scope.md`, `scripts/perf/fs-scope.mjs`
 
-- [ ] **T13b: Playback features review** (S)
+- [x] **T13b: Playback features review** (S)
   - Description: Read `PlaybackDialog.tsx` and settle: audio-track and quality selection (what the UI offers), the full list of keyboard shortcuts, playback rate, and Picture-in-Picture.
   - Acceptance: a table of each capability as present, partial or absent, with line references.
   - Verify: references open at the stated lines.
   - Dependencies: none
   - Files: `docs/plans/baseline-results/playback-capabilities.md`
 
-- [ ] **T13c: Credential leak scan** (S)
+- [x] **T13c: Credential leak scan** (S)
   - Description: Add a source with sentinel credentials (M3U with a token in the URL, Xtream), play, favorite, cast-prepare, export diagnostics, create a backup, then search the exports and the profile for the sentinels.
   - Acceptance: a table of places checked (diagnostics export, logs, localStorage, SQLite files, backup file, cast request) and whether the sentinel appears.
   - Verify: the scan script's output matches the table.
@@ -149,12 +149,12 @@ l.tivihub.desktop`, see the spike note)
   - Files: `scripts/perf/credential-scan.mjs`, `docs/plans/baseline-results/credential-scan.md`
 
 ### Checkpoint 3: every "to verify" marker has an answer
-- [ ] fs permissions, audio-track, shortcuts, credential leaks, startup breakdown all resolved
+- [x] fs permissions, audio-track, shortcuts, credential leaks, startup breakdown all resolved
 - [ ] Review with maintainer
 
 ## Phase 4: Findings
 
-- [ ] **T14: Findings note and plan update** (M)
+- [x] **T14: Findings note and plan update** (M)
   - Description: Write `docs/plans/app-improvements-baseline.md` with machine specs, tables for S, M, L, XL, the long-task table, accessibility results and the resolved "to verify" items. Apply the decision rules and reorder the phases in `docs/plans/app-improvements.md`.
   - Acceptance:
     - All six success criteria in the spec are met, or the gap is stated.
@@ -165,6 +165,6 @@ l.tivihub.desktop`, see the spike note)
   - Files: `docs/plans/app-improvements-baseline.md`, `docs/plans/app-improvements.md`
 
 ### Checkpoint: Complete
-- [ ] All acceptance criteria in the spec met
-- [ ] `npm run perf:baseline` reproduces the numbers on a clean checkout, two runs within 15 percent
+- [ ] All acceptance criteria in the spec met (gaps: repeatability within 15 percent not met; T12 screen reader pass is the maintainer's and not done; cast and backup files not exercised)
+- [ ] `npm run perf:baseline` reproduces the numbers on a clean checkout, two runs within 15 percent (not met, see findings)
 - [ ] Ready for review and for choosing the next module

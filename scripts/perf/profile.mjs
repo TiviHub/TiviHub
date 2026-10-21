@@ -14,7 +14,8 @@ function assertPerfDir(dir) {
 export function resetProfile() {
   for (const dir of Object.values(perfDataDirs())) {
     assertPerfDir(dir);
-    rmSync(dir, { recursive: true, force: true });
+    // WebView2 child processes can hold files for a moment after the app is stopped, so retry.
+    rmSync(dir, { recursive: true, force: true, maxRetries: 120, retryDelay: 250 });
   }
 }
 

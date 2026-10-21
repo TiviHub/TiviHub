@@ -1,0 +1,98 @@
+{
+  "name": "run1-startup-XL",
+  "at": "2026-10-21T19:14:37.377Z",
+  "commit": "d84133e",
+  "dirty": true,
+  "machine": {
+    "os": "Windows_NT 10.0.26200",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+    "logicalCores": 20,
+    "ramGb": 31.7,
+    "node": "v24.19.0"
+  },
+  "build": "perf build of the packaged release executable",
+  "size": "XL",
+  "runs": [
+    {
+      "readyMs": 6688.666599999997,
+      "attachedMs": 286.6724000000395,
+      "sawDialog": true,
+      "processes": 7,
+      "workingSetMb": 872.6,
+      "privateMb": 790.1,
+      "jsUsedMb": 382,
+      "jsTotalMb": 448
+    },
+    {
+      "readyMs": 6883.7729999999865,
+      "attachedMs": 295.05219999997644,
+      "sawDialog": true,
+      "processes": 7,
+      "workingSetMb": 932,
+      "privateMb": 859.6,
+      "jsUsedMb": 430,
+      "jsTotalMb": 481
+    },
+    {
+      "readyMs": 6856.571799999976,
+      "attachedMs": 273.9797999999719,
+      "sawDialog": true,
+      "processes": 7,
+      "workingSetMb": 867.1,
+      "privateMb": 785.4,
+      "jsUsedMb": 382,
+      "jsTotalMb": 448
+    },
+    {
+      "readyMs": 6752.794300000009,
+      "attachedMs": 263.79019999998854,
+      "sawDialog": true,
+      "processes": 7,
+      "workingSetMb": 931,
+      "privateMb": 859.3,
+      "jsUsedMb": 430,
+      "jsTotalMb": 481
+    },
+    {
+      "readyMs": 6416.306700000016,
+      "attachedMs": 268.6271999999881,
+      "sawDialog": true,
+      "processes": 7,
+      "workingSetMb": 942,
+      "privateMb": 856.9,
+      "jsUsedMb": 382,
+      "jsTotalMb": 449
+    }
+  ],
+  "summary": {
+    "readyMs": {
+      "n": 5,
+      "median": 6752.8,
+      "min": 6416.3,
+      "max": 6883.8,
+      "spreadPct": 6.9
+    },
+    "workingSetMb": {
+      "n": 5,
+      "median": 931,
+      "min": 867.1,
+      "max": 942,
+      "spreadPct": 8
+    },
+    "privateMb": {
+      "n": 5,
+      "median": 856.9,
+      "min": 785.4,
+      "max": 859.6,
+      "spreadPct": 8.7
+    },
+    "jsUsedMb": {
+      "n": 5,
+      "median": 382,
+      "min": 382,
+      "max": 430,
+      "spreadPct": 12.6
+    },
+    "dialogSeenInAllRuns": true
+  }
+}

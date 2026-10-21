@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { SIZES } from "./dataset.mjs";
 import { launchApp, waitForReady } from "./launch.mjs";
-import { MOCK_PASSWORD, MOCK_USERNAME, startMockXtream } from "./mockXtream.mjs";
+import { MOCK_PASSWORD, MOCK_PORT, MOCK_USERNAME, startMockXtream } from "./mockXtream.mjs";
 import { resetProfile, saveProfile } from "./profile.mjs";
 
 export async function addMockSource(page, mockUrl) {
@@ -31,7 +31,8 @@ export async function seed(size) {
   const counts = SIZES[size];
   if (!counts) throw new Error(`Unknown size ${size}`);
   resetProfile();
-  const mock = await startMockXtream({ size });
+  // A fixed port keeps the saved source URL valid for later refresh runs.
+  const mock = await startMockXtream({ size, port: MOCK_PORT });
   const app = await launchApp();
   try {
     await waitForReady(app.page, app.startedAt);

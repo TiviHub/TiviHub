@@ -1,0 +1,36 @@
+{
+  "name": "keyboard",
+  "at": "2026-10-21T19:22:26.861Z",
+  "commit": "d84133e",
+  "dirty": true,
+  "machine": {
+    "os": "Windows_NT 10.0.26200",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+    "logicalCores": 20,
+    "ramGb": 31.7,
+    "node": "v24.19.0"
+  },
+  "build": "perf build of the packaged release executable",
+  "results": [
+    {
+      "flow": "Tab reaches Home, Movies and Open settings",
+      "pass": true,
+      "failure": null
+    },
+    {
+      "flow": "Ctrl+K opens search and Escape closes it, returning focus",
+      "pass": true,
+      "failure": null
+    },
+    {
+      "flow": "Add source dialog: Tab stays inside, Escape closes it",
+      "pass": true,
+      "failure": null
+    },
+    {
+      "flow": "Playback dialog: Tab stays inside, Escape closes it",
+      "pass": true,
+      "failure": null
+    }
+  ]
+}

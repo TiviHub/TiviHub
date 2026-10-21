@@ -7,6 +7,7 @@ import {
 
 export const MOCK_USERNAME = "sentinel-user";
 export const MOCK_PASSWORD = "sentinel-pass";
+export const MOCK_PORT = 8765;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -34,6 +35,17 @@ export async function startMockXtream({ size = "S", port = 0 } = {}) {
     if (request.method === "OPTIONS") {
       response.writeHead(204, { ...CORS, "Access-Control-Allow-Methods": "GET" });
       response.end();
+      return;
+    }
+    if (url.pathname === "/playlist.m3u") {
+      // M3U with a token in every stream URL, to check where such tokens end up on disk.
+      const token = url.searchParams.get("token") ?? "none";
+      const lines = ["#EXTM3U"];
+      for (let index = 1; index <= 5; index += 1) {
+        lines.push(`#EXTINF:-1 group-title="M3U",M3U Channel ${index}`, `http://127.0.0.1:${server.address().port}/m3u/${index}.m3u8?token=${token}`);
+      }
+      response.writeHead(200, { ...CORS, "Content-Type": "audio/x-mpegurl" });
+      response.end(lines.join("\n"));
       return;
     }
     if (url.pathname !== "/player_api.php") {
@@ -75,7 +87,7 @@ if (process.argv[1]?.endsWith("mockXtream.mjs")) {
   const portArg = process.argv.indexOf("--port");
   const mock = await startMockXtream({
     size: sizeArg >= 0 ? process.argv[sizeArg + 1] : "S",
-    port: portArg >= 0 ? Number(process.argv[portArg + 1]) : 8765,
+    port: portArg >= 0 ? Number(process.argv[portArg + 1]) : MOCK_PORT,
   });
   console.log(`Mock Xtream on ${mock.url} (user ${MOCK_USERNAME}, password ${MOCK_PASSWORD}). Ctrl+C to stop.`);
 }

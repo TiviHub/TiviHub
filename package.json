@@ -20,7 +20,12 @@
     "package:unix": "node scripts/package-unix.mjs",
     "perf:build": "node scripts/perf/build-perf.mjs",
     "perf:data": "node scripts/perf/dataset.mjs",
-    "perf:seed": "node scripts/perf/seed.mjs"
+    "perf:seed": "node scripts/perf/seed.mjs",
+    "perf:baseline": "node scripts/perf/baseline.mjs",
+    "perf:all": "node scripts/perf/all.mjs",
+    "perf:a11y": "node scripts/perf/a11y.mjs",
+    "perf:keyboard": "node scripts/perf/keyboard.mjs",
+    "perf:credentials": "node scripts/perf/credential-scan.mjs"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",
@@ -36,6 +41,7 @@
     "shaka-player": "^5.3.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.64.1",
     "@tauri-apps/cli": "^2.12.3",
     "@testing-library/react": "^16.3.3",

@@ -1,0 +1,116 @@
+{
+  "name": "startup-profile-L",
+  "at": "2026-10-21T19:02:57.692Z",
+  "commit": "d84133e",
+  "dirty": true,
+  "machine": {
+    "os": "Windows_NT 10.0.26200",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+    "logicalCores": 20,
+    "ramGb": 31.7,
+    "node": "v24.19.0"
+  },
+  "build": "perf build of the packaged release executable",
+  "size": "L",
+  "readyAfterAttachMs": 4878,
+  "summary": {
+    "totalMs": 4895,
+    "top": [
+      {
+        "name": "(idle) :-1",
+        "selfMs": 3408,
+        "sharePct": 69.6
+      },
+      {
+        "name": "(program) :-1",
+        "selfMs": 515,
+        "sharePct": 10.5
+      },
+      {
+        "name": "t assets/app-C6zN9SUN.js:9",
+        "selfMs": 286,
+        "sharePct": 5.8
+      },
+      {
+        "name": "(anonymous) assets/app-C6zN9SUN.js:8",
+        "selfMs": 245,
+        "sharePct": 5
+      },
+      {
+        "name": "(garbage collector) :-1",
+        "selfMs": 164,
+        "sharePct": 3.4
+      },
+      {
+        "name": "lr assets/app-C6zN9SUN.js:9",
+        "selfMs": 51,
+        "sharePct": 1
+      },
+      {
+        "name": "RegExp: (?:^|[^0-9])18\\s*(?:\\+|plus\\b)(?=$|[^0-9]) :-1",
+        "selfMs": 38,
+        "sharePct": 0.8
+      },
+      {
+        "name": "(anonymous) assets/app-C6zN9SUN.js:9",
+        "selfMs": 35,
+        "sharePct": 0.7
+      },
+      {
+        "name": "(anonymous) assets/app-C6zN9SUN.js:12",
+        "selfMs": 27,
+        "sharePct": 0.5
+      },
+      {
+        "name": "RegExp: \\b(?:adults?|xxx|porn(?:ography)?|erotic(?:a)?|erotiek)\\b :-1",
+        "selfMs": 25,
+        "sharePct": 0.5
+      },
+      {
+        "name": "i assets/app-C6zN9SUN.js:9",
+        "selfMs": 18,
+        "sharePct": 0.4
+      },
+      {
+        "name": "dr assets/app-C6zN9SUN.js:9",
+        "selfMs": 17,
+        "sharePct": 0.4
+      },
+      {
+        "name": "a assets/app-C6zN9SUN.js:9",
+        "selfMs": 14,
+        "sharePct": 0.3
+      },
+      {
+        "name": "de assets/app-C6zN9SUN.js:8",
+        "selfMs": 9,
+        "sharePct": 0.2
+      },
+      {
+        "name": "(anonymous) assets/app-C6zN9SUN.js:0",
+        "selfMs": 5,
+        "sharePct": 0.1
+      }
+    ]
+  },
+  "rustReads": {
+    "channels": {
+      "rows": 54000,
+      "megabytes": 18,
+      "rustAndPipeMs": 232,
+      "jsonParseMs": 37
+    },
+    "movies": {
+      "rows": 214000,
+      "megabytes": 100,
+      "rustAndPipeMs": 1983,
+      "jsonParseMs": 370
+    },
+    "series": {
+      "rows": 46000,
+      "megabytes": 18,
+      "rustAndPipeMs": 610,
+      "jsonParseMs": 64
+    }
+  }
+}

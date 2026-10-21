@@ -16,7 +16,7 @@ Every item says what the evidence is. **Verified** means I read the code or conf
 - CI (`ci.yml`) runs on Windows only. Linux and macOS are first built and tested by the Release workflow.
 - No ESLint or Prettier config. Dependabot covers npm only. 39 test files (238 tests, one benchmark skipped), 1 Playwright spec, and Rust tests for storage only (none for `chromecast.rs`).
 - Installers are unsigned (no signing or checksum step in the scripts or workflows). Updates are a manual download.
-- Playback has text-track support and a single `playbackRate` reference. I found no Picture-in-Picture, sleep timer, or next-episode logic. Audio-track code exists but I have not checked how far it goes (to verify).
+- Playback already has text tracks, audio-track selection, quality selection and playback speed (verified in the baseline: `docs/plans/baseline-results/playback-capabilities.md`). It has no custom keyboard shortcuts beyond Escape and Tab, no sleep timer, no next-episode logic and no custom Picture-in-Picture button.
 - No i18n layer. Strings are hard-coded English.
 
 ## A. Security and trust
@@ -59,10 +59,10 @@ B2 is the biggest change and touches most pages. It should be done behind the ex
 All of these are small, user-visible, and contained in `PlaybackDialog.tsx`, which needs to be split first (see F).
 
 - D1 Picture-in-Picture and a mini player.
-- D2 Playback speed, and a sleep timer.
+- D2 A sleep timer. (Playback speed already exists.)
 - D3 "Next episode" prompt and autoplay for series, using the library progress data that already exists.
 - D4 Keyboard shortcuts (seek, volume, fullscreen, next/previous channel). `PlaybackDialog` references keyboard handling only a few times (to verify what is covered).
-- D5 Audio-track and quality selection in the UI (check what exists first).
+- D5 Removed: audio-track and quality selection already exist.
 - D6 Channel zapping: last channel, number entry, and channel-list overlay while watching live TV.
 - D7 Better error messages: map the common failure causes (expired account, CORS, unsupported codec, DRM) to specific text. `playbackErrorMessage` exists and can be extended.
 
@@ -109,16 +109,16 @@ Product direction matters here. Pick two or three after B and D, based on what u
 
 | Phase | Work | Gate |
 |-------|------|------|
-| 0 | Measure and audit: B1, H1, A2, check D5 and I1 | A short findings note replaces the "to verify" markers; reorder this plan from data |
-| 1 | Quick wins: A3, A6, F3, F5, G1 to G3, D7 | CI green on three platforms; checksums on a release |
-| 2 | Security: A1, A5, then A4 | CSP passes manual run of add source, play, cast, download, update check |
-| 3 | Code health for what comes next: F2 (PlaybackDialog), then F1 in slices | `appFlow` and `userActions` untouched and green after every slice |
-| 4 | Playback features: D1 to D6 | Component tests plus a manual playback run |
-| 5 | Performance: B2, B3, B4 (then B5 and C1/C2 together) | Re-run the 270k-row measurements; no regression in the contract suite; startup and memory better than Phase 0 baseline |
+| 0 | Measure and audit: B1, H1, A2, check D5 and I1 | **Done.** Findings in `docs/plans/app-improvements-baseline.md`; the order below is updated from them |
+| 1 | Quick wins: A3, A6, F3, F5, G1 to G3, plus the two cheap security fixes from the baseline (no HTTP cache for calls that carry the login; autofill off on the add-source form) and A2 narrowing | CI green on three platforms; checksums on a release; the credential scan shows no login in the WebView cache or autofill data |
+| 2 | Code health that the next phase needs: F1 (`App.tsx`) in slices | `appFlow` and `userActions` untouched and green after every slice |
+| 3 | Performance, triggered by the baseline: B2, B3, B4 (`query-engine`), then B5 with C1/C2 for refresh | Re-run the baseline: L cold start under 3 s, no long task over 200 ms in the six interactions, refresh without a UI freeze over 200 ms; contract suite green |
+| 4 | Accessibility fixes (`a11y-fixes`) and security A1, A5, A4 | Axe shows no critical or serious violations on the 8 screens; CSP passes a manual run of add source, play, cast, download and update check |
+| 5 | F2 (`PlaybackDialog` and `ContentPages` split), then playback features D1, D2, D3, D4, D6, D7 | Component tests plus a manual playback run |
 | 6 | Product features from E, chosen with you | n/a |
 | Later | H2, C4, A4 signing, B6 | n/a |
 
-Why this order: Phase 0 prevents building on guesses. Phases 1 and 2 are cheap and reduce risk for every later release. F2/F1 come before D and B because both touch the same large files, and splitting them first keeps those later changes reviewable. B is the largest payoff for big libraries but the largest risk, so it comes after the safety nets are better.
+Why this order (revised after the baseline): the baseline showed a 4.6 s cold start and 265 to 545 ms UI stalls on a large library, so performance moves ahead of playback features, and the app split moves up with it because both change the same large files. Original rationale: Phase 0 prevents building on guesses. Phases 1 and 2 are cheap and reduce risk for every later release. F2/F1 come before D and B because both touch the same large files, and splitting them first keeps those later changes reviewable. B is the largest payoff for big libraries but the largest risk, so it comes after the safety nets are better.
 
 ## Risks
 

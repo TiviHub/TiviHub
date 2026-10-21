@@ -2,7 +2,7 @@
 // The perf build is the normal app with the identifier nl.tivihub.perf (see scripts/perf/build-perf.mjs),
 // so its data lives in its own folders and a real TiviHub library is never touched.
 // WebView2 reads extra browser arguments from WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS.
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,6 +32,19 @@ async function waitForCdp(port, timeoutMs) {
     await new Promise((done) => setTimeout(done, 50));
   }
   throw new Error(`The app did not open a debugging port within ${timeoutMs} ms.`);
+}
+
+/** WebView2 helper processes outlive the app for a while and keep the data folder locked. */
+async function waitForWebViewExit(timeoutMs = 60_000) {
+  const script = `@(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Where-Object { $_.CommandLine -like '*${PERF_IDENTIFIER}*' }).Count`;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const count = await new Promise((done) => {
+      execFile("powershell", ["-NoProfile", "-Command", script], (error, stdout) => done(error ? 0 : Number(stdout.trim())));
+    });
+    if (count === 0) return;
+    await new Promise((done) => setTimeout(done, 250));
+  }
 }
 
 /**
@@ -68,6 +81,7 @@ export async function launchApp({ exe = DEFAULT_EXE, port = 9222, timeoutMs = 60
             kill(); // /T also ends the msedgewebview2 children
           });
         }
+        await waitForWebViewExit();
       },
     };
   } catch (error) {

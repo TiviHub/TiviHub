@@ -1,0 +1,383 @@
+{
+  "name": "run1-interactions-M",
+  "at": "2026-10-21T19:07:48.260Z",
+  "commit": "d84133e",
+  "dirty": true,
+  "machine": {
+    "os": "Windows_NT 10.0.26200",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+    "logicalCores": 20,
+    "ramGb": 31.7,
+    "node": "v24.19.0"
+  },
+  "build": "perf build of the packaged release executable",
+  "size": "M",
+  "runs": [
+    [
+      {
+        "name": "Open Movies",
+        "wallMs": 91,
+        "count": 1,
+        "maxMs": 58,
+        "totalMs": 58
+      },
+      {
+        "name": "Sort movies by year",
+        "wallMs": 179,
+        "count": 1,
+        "maxMs": 50,
+        "totalMs": 50
+      },
+      {
+        "name": "Filter movies by category",
+        "wallMs": 62,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Global search, type 3 characters",
+        "wallMs": 744,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Live TV",
+        "wallMs": 98,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Home",
+        "wallMs": 153,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      }
+    ],
+    [
+      {
+        "name": "Open Movies",
+        "wallMs": 76,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Sort movies by year",
+        "wallMs": 97,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Filter movies by category",
+        "wallMs": 56,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Global search, type 3 characters",
+        "wallMs": 689,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Live TV",
+        "wallMs": 66,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Home",
+        "wallMs": 138,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      }
+    ],
+    [
+      {
+        "name": "Open Movies",
+        "wallMs": 75,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Sort movies by year",
+        "wallMs": 173,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Filter movies by category",
+        "wallMs": 67,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Global search, type 3 characters",
+        "wallMs": 712,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Live TV",
+        "wallMs": 56,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Home",
+        "wallMs": 137,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      }
+    ],
+    [
+      {
+        "name": "Open Movies",
+        "wallMs": 88,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Sort movies by year",
+        "wallMs": 159,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Filter movies by category",
+        "wallMs": 65,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Global search, type 3 characters",
+        "wallMs": 690,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Live TV",
+        "wallMs": 76,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Home",
+        "wallMs": 139,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      }
+    ],
+    [
+      {
+        "name": "Open Movies",
+        "wallMs": 79,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Sort movies by year",
+        "wallMs": 173,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Filter movies by category",
+        "wallMs": 60,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Global search, type 3 characters",
+        "wallMs": 691,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Live TV",
+        "wallMs": 65,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      },
+      {
+        "name": "Open Home",
+        "wallMs": 139,
+        "count": 0,
+        "maxMs": 0,
+        "totalMs": 0
+      }
+    ]
+  ],
+  "summary": [
+    {
+      "name": "Open Movies",
+      "wallMs": {
+        "n": 5,
+        "median": 79,
+        "min": 75,
+        "max": 91,
+        "spreadPct": 20.3
+      },
+      "longTaskMaxMs": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 58,
+        "spreadPct": 0
+      },
+      "longTaskCount": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 1,
+        "spreadPct": 0
+      }
+    },
+    {
+      "name": "Sort movies by year",
+      "wallMs": {
+        "n": 5,
+        "median": 173,
+        "min": 97,
+        "max": 179,
+        "spreadPct": 47.4
+      },
+      "longTaskMaxMs": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 50,
+        "spreadPct": 0
+      },
+      "longTaskCount": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 1,
+        "spreadPct": 0
+      }
+    },
+    {
+      "name": "Filter movies by category",
+      "wallMs": {
+        "n": 5,
+        "median": 62,
+        "min": 56,
+        "max": 67,
+        "spreadPct": 17.7
+      },
+      "longTaskMaxMs": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "spreadPct": 0
+      },
+      "longTaskCount": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "spreadPct": 0
+      }
+    },
+    {
+      "name": "Global search, type 3 characters",
+      "wallMs": {
+        "n": 5,
+        "median": 691,
+        "min": 689,
+        "max": 744,
+        "spreadPct": 8
+      },
+      "longTaskMaxMs": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "spreadPct": 0
+      },
+      "longTaskCount": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "spreadPct": 0
+      }
+    },
+    {
+      "name": "Open Live TV",
+      "wallMs": {
+        "n": 5,
+        "median": 66,
+        "min": 56,
+        "max": 98,
+        "spreadPct": 63.6
+      },
+      "longTaskMaxMs": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "spreadPct": 0
+      },
+      "longTaskCount": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "spreadPct": 0
+      }
+    },
+    {
+      "name": "Open Home",
+      "wallMs": {
+        "n": 5,
+        "median": 139,
+        "min": 137,
+        "max": 153,
+        "spreadPct": 11.5
+      },
+      "longTaskMaxMs": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "spreadPct": 0
+      },
+      "longTaskCount": {
+        "n": 5,
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "spreadPct": 0
+      }
+    }
+  ]
+}
