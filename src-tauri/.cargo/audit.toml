@@ -1,0 +1,17 @@
+# Advisories we knowingly accept. Every one comes from the `chromecast` crate (0.18.2, the latest
+# release), which pins old rustls and protobuf versions. Remove an entry as soon as the crate is
+# replaced or patched; a new advisory that is not listed here fails CI.
+#
+# The crate installs a certificate verifier that accepts every certificate (Chromecasts present
+# self-signed certificates), so the certificate-validation advisories below never take effect.
+# `cargo audit` is run without --deny warnings, so the unmaintained/unsound notices only print.
+[advisories]
+ignore = [
+  "RUSTSEC-2026-0346", # rustls 0.21: Debug impls expose TLS secrets (nothing logs these sessions)
+  "RUSTSEC-2026-0349", # rustls 0.21: ServerHello downgrade (connection is not authenticated anyway)
+  "RUSTSEC-2026-0098", # rustls-webpki 0.101: URI name constraints (no certificate validation)
+  "RUSTSEC-2026-0099", # rustls-webpki 0.101: wildcard name constraints (no certificate validation)
+  "RUSTSEC-2026-0104", # rustls-webpki 0.101: CRL parsing panic (no CRLs are processed)
+  "RUSTSEC-2026-0382", # rustls-webpki 0.101: distrusted intermediates (no certificate validation)
+  "RUSTSEC-2026-0381", # webpki-roots 0.22: distrusted root (trust anchors are not used to verify)
+]

@@ -81,6 +81,30 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
+      - name: Audit JavaScript dependencies
+        if: runner.os == 'Linux'
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Install cargo-audit
+        if: runner.os == 'Linux'
+        run: command -v cargo-audit || cargo install cargo-audit --locked
+
+      # Fails on any advisory that is not listed in src-tauri/.cargo/audit.toml. RUSTSEC-2024-0437
+      # (protobuf, from the chromecast crate) is accepted here and reported by the next step.
+      - name: Audit Rust dependencies
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        run: cargo audit --ignore RUSTSEC-2024-0437
+
+      - name: Report known Rust advisory (protobuf, chromecast crate)
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        continue-on-error: true
+        run: |
+          if cargo audit; then exit 0; fi
+          echo "::warning title=Known advisory::RUSTSEC-2024-0437 (protobuf recursion crash) comes from the chromecast crate and has no fix available yet. See src-tauri/.cargo/audit.toml."
+          exit 1
+
       - name: Build desktop frontend
         run: npm run build:desktop
 
