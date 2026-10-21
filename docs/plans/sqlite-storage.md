@@ -45,21 +45,27 @@ src-tauri/src/storage.rs     rusqlite, WAL, PRAGMA user_version migrations
 
 Transactions: every command is one self-contained transaction. There is no begin/commit split across `invoke` calls, because a webview reload between them would leave a transaction open and let unrelated commands join it.
 
-Catalog writes: `saveCatalog` already writes in 1000-row batches. Send one `invoke` per batch, each row tagged with a new generation id. A final `storage_finish_catalog(playlist, generation)` swaps the new rows in and deletes the old ones in one transaction. A crash before it leaves the old catalog intact; stray new rows are deleted on the next start. Measure batch size against gate G3.
+Catalog writes: `saveCatalog` already writes in 1000-row batches. Send one `invoke` per batch into a staging table per store (for example `channels_staging(generation, id, json)`), never into the live tables, because `id` is the live primary key and a same-id row would overwrite the old one in place. A final `storage_finish_catalog(playlist, generation, sourceUpdate?, includeEpisodes)` does everything `saveCatalog` does today, in one transaction:
+- fail if the playlist no longer exists ("source was deleted before its refreshed catalog could be saved"),
+- write `sourceUpdate` if given,
+- replace the live rows from staging and delete live rows not in staging,
+- leave episodes alone unless `includeEpisodes`.
+
+A crash before it leaves the old catalog fully intact. Leftover staging rows are deleted at startup. Measure batch size against gate G3.
 
 ## Migration (IDB -> SQLite), first launch after update
 
 0. **Runs at startup, before the app reads or writes any storage.** `database.ts` waits for it, so the background catalog refresh cannot write to IDB mid-copy. Show `StartupScreen` with `ProgressIndicator`, one step per store.
-1. Skip if SQLite `meta.migrated_from_idb = 1`. Skip if no IDB db exists (fresh install).
+1. Skip if SQLite `meta.migrated_from_idb = 1`. Skip if no IDB db exists (fresh install), checked with `indexedDB.databases()` before opening anything.
 2. **No plaintext backup.** `createSnapshot()` decrypts credentials, so its output must never be written unencrypted. IDB itself stays untouched (D5) and is the backup. If a file backup is wanted, write it through `encryptBackup`, and delete it once step 5 passes.
 3. Read each IDB store. Decrypt playlists with the old key and send plaintext to Rust, which re-encrypts with the keychain key (D3). Copy everything else as is. A playlist that cannot be decrypted (missing or mismatched key) is copied with its metadata and empty credentials, flagged "needs re-entry", and counted as expected in step 5. It must not block the migration.
-4. One SQLite transaction per store. The last transaction also sets `meta.migrated_from_idb = 1`. A crash before then means the next launch redoes it; inserts are `INSERT OR REPLACE`, so re-running is safe.
-5. **Verify before flipping.** For every store, compare contents read directly from IDB and SQLite (not `createSnapshot()`, which skips the MDBList key, `secrets`, and the ratings/popular/rate-limit/subtitle caches). Row counts must match, and every playlist plus the OpenSubtitles and MDBList API keys must decrypt to the same values as the IDB copy. On any mismatch: roll back, leave the flag unset, keep using IDB, log a diagnostic event.
+4. One SQLite transaction per store. Do not set the flag yet. A crash here means the next launch redoes the copy; inserts are `INSERT OR REPLACE`, so re-running is safe.
+5. **Verify, then flip.** For every store, compare contents read directly from IDB and SQLite (not `createSnapshot()`, which skips the MDBList key, `secrets`, and the ratings/popular/rate-limit/subtitle caches). Row counts must match, and every playlist plus the OpenSubtitles and MDBList API keys must decrypt to the same values as the IDB copy. On any mismatch: wipe the SQLite data tables (they are only copies), leave the flag unset, keep using IDB, log a diagnostic event. Only after verification passes, a separate final transaction sets `meta.migrated_from_idb = 1`.
 6. Leave the IDB db in place. A later release deletes it, only if `migrated_from_idb = 1` and the app has run on SQLite cleanly at least once.
 
 Failure behavior:
 - Not yet migrated and SQLite cannot open: use IDB for that session and show a diagnostic.
-- Already migrated and SQLite cannot open: do not fall back to IDB (it is a stale copy, and writes there would be lost). Show an error with retry and read-only access.
+- Already migrated and SQLite cannot open: do not fall back to IDB (it is a stale copy, and writes there would be lost). Show an error with retry only, plus one explicit button, "Open old copy (read-only, may be out of date)", that opens IDB read-only.
 - Either way the app never starts empty over existing data.
 
 ## Test plan
@@ -79,7 +85,10 @@ Failure behavior:
 - Inject a count mismatch; assert the flag stays unset and the app stays on IDB.
 - Empty IDB, and IDB with only some stores.
 - Delete the IDB encryption key, then migrate; assert the playlists arrive flagged "needs re-entry" and the migration still completes.
-- Crash between catalog batches and `storage_finish_catalog`; assert the old catalog is intact and stray rows are removed on restart.
+- Crash between catalog batches and `storage_finish_catalog`; assert the old catalog is intact (no mix of old and new rows) and staging rows are removed on restart.
+- Delete the playlist while a catalog refresh is staged; assert `storage_finish_catalog` fails and the deleted playlist's rows do not return.
+- Inject a verification mismatch; assert the SQLite tables are wiped, the flag stays unset, and the app still reads IDB.
+- After migration, import the storage module and assert IndexedDB is never opened.
 - No plaintext credentials on disk: after migration, grep the app data dir (including any backup file) for the test password.
 
 **T5. Failure injection.** Unreadable SQLite file, read-only dir, full disk, corrupt header. Expected: the fallback rules in "Failure behavior" and a visible diagnostic. Never an empty app. Includes the already-migrated case, which must not fall back to IDB.
@@ -92,7 +101,7 @@ Failure behavior:
 
 | Phase | Work | Gate to continue |
 |-------|------|------------------|
-| 0 | Extract `Backend` interface, move IDB code to `idbBackend.ts`, build the T1 contract suite | All existing tests green, zero behavior change |
+| 0 | Extract `Backend` interface, move IDB code to `idbBackend.ts` and make it open lazily (today `openDB` runs at import, `database.ts:93`, which creates an empty IDB on fresh installs), build the T1 contract suite | All existing tests green, zero behavior change |
 | 1 | `storage.rs`: schema, commands, T2, `cargo test` step in `ci.yml` | `cargo test` green in CI |
 | 2 | `sqliteBackend.ts` plus backend switch on `isTauri()`; T1 and T3 against SQLite | Parity green, G3 performance met |
 | 3 | Keychain encryption (D3) | Credential tests and raw-file plaintext check pass |
