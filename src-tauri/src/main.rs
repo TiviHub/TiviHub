@@ -7,8 +7,8 @@ mod storage;
 use diagnostics::{BackendDiagnosticEvent, BackendDiagnostics};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
 use tauri::State;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_fs::FsExt;
 
@@ -54,7 +54,9 @@ fn allow_download_directory(app: &AppHandle, path: &Path) -> Result<DownloadDire
 }
 
 #[tauri::command]
-async fn choose_download_directory(app: AppHandle) -> Result<Option<DownloadDirectoryInfo>, String> {
+async fn choose_download_directory(
+    app: AppHandle,
+) -> Result<Option<DownloadDirectoryInfo>, String> {
     let Some(picked) = app.dialog().file().blocking_pick_folder() else {
         return Ok(None);
     };

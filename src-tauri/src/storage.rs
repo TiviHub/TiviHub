@@ -32,20 +32,39 @@ const STORES: &[(&str, &str)] = &[
     ("secrets", "id"),
 ];
 const CATALOG_STORES: &[&str] = &["channels", "movies", "series"];
-const PLAYLIST_SCOPED_STORES: &[&str] =
-    &["channels", "movies", "series", "episodes", "favorites", "library"];
+const PLAYLIST_SCOPED_STORES: &[&str] = &[
+    "channels",
+    "movies",
+    "series",
+    "episodes",
+    "favorites",
+    "library",
+];
 const KEY_SERVICE: &str = "TiviHub";
 const KEY_NAME: &str = "local-encryption-key";
 const KEY_FILE: &str = "storage.key";
-const DECRYPT_ERROR: &str = "Local encrypted data could not be opened in this TiviHub installation.";
+const DECRYPT_ERROR: &str =
+    "Local encrypted data could not be opened in this TiviHub installation.";
 
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
 pub enum Op {
-    Put { store: String, record: Value },
-    Delete { store: String, key: String },
-    Clear { store: String },
-    DeleteByIndex { store: String, index: String, value: String },
+    Put {
+        store: String,
+        record: Value,
+    },
+    Delete {
+        store: String,
+        key: String,
+    },
+    Clear {
+        store: String,
+    },
+    DeleteByIndex {
+        store: String,
+        index: String,
+        value: String,
+    },
 }
 
 pub struct Store {
@@ -152,7 +171,10 @@ impl Store {
         // A crash between staged batches and storage_finish_catalog leaves unreferenced rows.
         conn.execute("DELETE FROM catalog_staging", [])
             .map_err(|e| e.to_string())?;
-        Ok(Self { conn: Mutex::new(conn), key })
+        Ok(Self {
+            conn: Mutex::new(conn),
+            key,
+        })
     }
 
     pub fn open(path: &Path, key: [u8; 32]) -> Result<Self, String> {
@@ -160,7 +182,9 @@ impl Store {
     }
 
     fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
-        self.conn.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.conn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     pub fn get(&self, store: &str, key: &str) -> Result<Option<String>, String> {
@@ -197,7 +221,12 @@ impl Store {
         self.collect(&format!("SELECT json FROM \"{store}\" ORDER BY key"), &[])
     }
 
-    pub fn get_all_by_index(&self, store: &str, index: &str, value: &str) -> Result<String, String> {
+    pub fn get_all_by_index(
+        &self,
+        store: &str,
+        index: &str,
+        value: &str,
+    ) -> Result<String, String> {
         store_key_field(store)?;
         let column = index_column(index)?;
         self.collect(
@@ -225,7 +254,11 @@ impl Store {
                     tx.execute(&format!("DELETE FROM \"{store}\""), [])
                         .map_err(|e| e.to_string())?;
                 }
-                Op::DeleteByIndex { store, index, value } => {
+                Op::DeleteByIndex {
+                    store,
+                    index,
+                    value,
+                } => {
                     store_key_field(store)?;
                     let column = index_column(index)?;
                     tx.execute(
@@ -241,7 +274,9 @@ impl Store {
 
     /// Stage catalog rows outside the live tables so a crash cannot leave a half-old, half-new catalog.
     pub fn stage(&self, generation: &str, store: &str, records: Vec<Value>) -> Result<(), String> {
-        if store_key_field(store)? != "id" || !(CATALOG_STORES.contains(&store) || store == "episodes") {
+        if store_key_field(store)? != "id"
+            || !(CATALOG_STORES.contains(&store) || store == "episodes")
+        {
             return Err(format!("{store} cannot be staged."));
         }
         let mut conn = self.conn();
@@ -275,12 +310,17 @@ impl Store {
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         if source_update.is_some() {
             let exists = tx
-                .query_row("SELECT 1 FROM playlists WHERE key = ?1", [playlist_id], |_| Ok(()))
+                .query_row(
+                    "SELECT 1 FROM playlists WHERE key = ?1",
+                    [playlist_id],
+                    |_| Ok(()),
+                )
                 .optional()
                 .map_err(|e| e.to_string())?;
             if exists.is_none() {
                 return Err(
-                    "This source was deleted before its refreshed catalog could be saved.".to_string(),
+                    "This source was deleted before its refreshed catalog could be saved."
+                        .to_string(),
                 );
             }
         }
@@ -307,8 +347,11 @@ impl Store {
         if let Some(source) = &source_update {
             put_row(&tx, "playlists", source)?;
         }
-        tx.execute("DELETE FROM catalog_staging WHERE generation = ?1", [generation])
-            .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM catalog_staging WHERE generation = ?1",
+            [generation],
+        )
+        .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())
     }
 
@@ -319,7 +362,10 @@ impl Store {
         let mut removed = 0;
         for store in PLAYLIST_SCOPED_STORES {
             removed += tx
-                .execute(&format!("DELETE FROM \"{store}\" WHERE playlist_id = ?1"), [id])
+                .execute(
+                    &format!("DELETE FROM \"{store}\" WHERE playlist_id = ?1"),
+                    [id],
+                )
                 .map_err(|e| e.to_string())?;
         }
         removed += tx
@@ -336,7 +382,9 @@ impl Store {
 
     pub fn meta_get(&self, key: &str) -> Result<Option<String>, String> {
         self.conn()
-            .query_row("SELECT value FROM meta WHERE key = ?1", [key], |row| row.get(0))
+            .query_row("SELECT value FROM meta WHERE key = ?1", [key], |row| {
+                row.get(0)
+            })
             .optional()
             .map_err(|e| e.to_string())
     }
@@ -400,7 +448,10 @@ fn decode_key(encoded: &str) -> Result<[u8; 32], String> {
 
 /// The OS keychain holds the key. Where there is none (for example Linux without a secret
 /// service) a key file next to the database is used instead, and a diagnostic is recorded.
-pub fn load_or_create_key(dir: &Path, diagnostics: &BackendDiagnostics) -> Result<[u8; 32], String> {
+pub fn load_or_create_key(
+    dir: &Path,
+    diagnostics: &BackendDiagnostics,
+) -> Result<[u8; 32], String> {
     let file = dir.join(KEY_FILE);
     if let Ok(existing) = std::fs::read_to_string(&file) {
         return decode_key(&existing);
@@ -547,7 +598,12 @@ mod tests {
     }
 
     fn put(store: &Store, name: &str, record: Value) {
-        store.tx(vec![Op::Put { store: name.into(), record }]).unwrap();
+        store
+            .tx(vec![Op::Put {
+                store: name.into(),
+                record,
+            }])
+            .unwrap();
     }
 
     fn rows(json: String) -> Vec<Value> {
@@ -557,8 +613,16 @@ mod tests {
     #[test]
     fn round_trips_and_upserts_records() {
         let s = store();
-        put(&s, "favorites", json!({"id": "a", "playlistId": "p", "title": "one"}));
-        put(&s, "favorites", json!({"id": "a", "playlistId": "p", "title": "two"}));
+        put(
+            &s,
+            "favorites",
+            json!({"id": "a", "playlistId": "p", "title": "one"}),
+        );
+        put(
+            &s,
+            "favorites",
+            json!({"id": "a", "playlistId": "p", "title": "two"}),
+        );
         let all = rows(s.get_all("favorites").unwrap());
         assert_eq!(all.len(), 1);
         assert_eq!(all[0]["title"], "two");
@@ -588,11 +652,15 @@ mod tests {
             s.stage("g", "channels", batch).unwrap();
         }
         let staged = started.elapsed();
-        s.finish_catalog("p", "g", Some(json!({"id": "p"})), false).unwrap();
+        s.finish_catalog("p", "g", Some(json!({"id": "p"})), false)
+            .unwrap();
         let total = started.elapsed();
         let read = std::time::Instant::now();
         let all = rows(s.get_all_by_index("channels", "byPlaylist", "p").unwrap());
-        println!("200k channels: stage {staged:?}, total import {total:?}, cold read {:?}", read.elapsed());
+        println!(
+            "200k channels: stage {staged:?}, total import {total:?}, cold read {:?}",
+            read.elapsed()
+        );
         assert_eq!(all.len(), 200_000);
     }
 
@@ -622,10 +690,19 @@ mod tests {
         read_only.set_readonly(true);
         std::fs::set_permissions(&path, read_only).unwrap();
         let opened = Store::open(&path, [7; 32]);
-        let writable = opened.as_ref().map(|s| s.tx(vec![Op::Put { store: "favorites".into(), record: json!({"id": "a"}) }]).is_ok());
+        let writable = opened.as_ref().map(|s| {
+            s.tx(vec![Op::Put {
+                store: "favorites".into(),
+                record: json!({"id": "a"}),
+            }])
+            .is_ok()
+        });
         std::fs::set_permissions(&path, original).unwrap();
         // Either opening fails (then the app falls back or shows an error) or writes fail loudly; never silently succeed.
-        assert!(opened.is_err() || writable == Ok(false), "read-only database accepted a write");
+        assert!(
+            opened.is_err() || writable == Ok(false),
+            "read-only database accepted a write"
+        );
     }
 
     #[test]
@@ -637,7 +714,10 @@ mod tests {
         drop(s);
         for suffix in ["", "-wal"] {
             let bytes = std::fs::read(format!("{}{suffix}", path.display())).unwrap_or_default();
-            assert!(!bytes.windows(7).any(|w| w == b"hunter2"), "plaintext found in {suffix:?} file");
+            assert!(
+                !bytes.windows(7).any(|w| w == b"hunter2"),
+                "plaintext found in {suffix:?} file"
+            );
         }
     }
 
@@ -646,11 +726,19 @@ mod tests {
         let path = temp_db("full");
         let s = Store::open(&path, [7; 32]).unwrap();
         put(&s, "favorites", json!({"id": "kept", "playlistId": "p"}));
-        let pages: i64 = s.conn().query_row("PRAGMA page_count", [], |r| r.get(0)).unwrap();
+        let pages: i64 = s
+            .conn()
+            .query_row("PRAGMA page_count", [], |r| r.get(0))
+            .unwrap();
         // SQLite reports the same "database or disk is full" error once the page limit is reached.
-        s.conn().pragma_update(None, "max_page_count", pages).unwrap();
+        s.conn()
+            .pragma_update(None, "max_page_count", pages)
+            .unwrap();
         let big = "x".repeat(100_000);
-        let result = s.tx(vec![Op::Put { store: "favorites".into(), record: json!({"id": "big", "playlistId": "p", "blob": big}) }]);
+        let result = s.tx(vec![Op::Put {
+            store: "favorites".into(),
+            record: json!({"id": "big", "playlistId": "p", "blob": big}),
+        }]);
         assert!(result.unwrap_err().contains("full"));
         let all = rows(s.get_all("favorites").unwrap());
         assert_eq!(all.len(), 1);
@@ -679,10 +767,24 @@ mod tests {
     #[test]
     fn queries_by_index() {
         let s = store();
-        put(&s, "episodes", json!({"id": "e1", "playlistId": "p", "seriesId": "s1"}));
-        put(&s, "episodes", json!({"id": "e2", "playlistId": "p", "seriesId": "s2"}));
-        assert_eq!(rows(s.get_all_by_index("episodes", "bySeries", "s1").unwrap()).len(), 1);
-        assert_eq!(rows(s.get_all_by_index("episodes", "byPlaylist", "p").unwrap()).len(), 2);
+        put(
+            &s,
+            "episodes",
+            json!({"id": "e1", "playlistId": "p", "seriesId": "s1"}),
+        );
+        put(
+            &s,
+            "episodes",
+            json!({"id": "e2", "playlistId": "p", "seriesId": "s2"}),
+        );
+        assert_eq!(
+            rows(s.get_all_by_index("episodes", "bySeries", "s1").unwrap()).len(),
+            1
+        );
+        assert_eq!(
+            rows(s.get_all_by_index("episodes", "byPlaylist", "p").unwrap()).len(),
+            2
+        );
     }
 
     #[test]
@@ -690,8 +792,14 @@ mod tests {
         let s = store();
         assert!(s.get_all("sqlite_master; DROP TABLE playlists").is_err());
         let result = s.tx(vec![
-            Op::Put { store: "favorites".into(), record: json!({"id": "a"}) },
-            Op::Put { store: "favorites".into(), record: json!({"noKey": true}) },
+            Op::Put {
+                store: "favorites".into(),
+                record: json!({"id": "a"}),
+            },
+            Op::Put {
+                store: "favorites".into(),
+                record: json!({"noKey": true}),
+            },
         ]);
         assert!(result.is_err());
         assert_eq!(rows(s.get_all("favorites").unwrap()).len(), 0);
@@ -703,13 +811,35 @@ mod tests {
         put(&s, "playlists", json!({"id": "p"}));
         put(&s, "channels", json!({"id": "old", "playlistId": "p"}));
         put(&s, "channels", json!({"id": "other", "playlistId": "q"}));
-        put(&s, "episodes", json!({"id": "e", "playlistId": "p", "seriesId": "s"}));
-        s.stage("g1", "channels", vec![json!({"id": "new", "playlistId": "p"})]).unwrap();
-        s.finish_catalog("p", "g1", Some(json!({"id": "p", "name": "updated"})), false).unwrap();
-        let ids: Vec<_> = rows(s.get_all("channels").unwrap()).iter().map(|r| r["id"].clone()).collect();
+        put(
+            &s,
+            "episodes",
+            json!({"id": "e", "playlistId": "p", "seriesId": "s"}),
+        );
+        s.stage(
+            "g1",
+            "channels",
+            vec![json!({"id": "new", "playlistId": "p"})],
+        )
+        .unwrap();
+        s.finish_catalog(
+            "p",
+            "g1",
+            Some(json!({"id": "p", "name": "updated"})),
+            false,
+        )
+        .unwrap();
+        let ids: Vec<_> = rows(s.get_all("channels").unwrap())
+            .iter()
+            .map(|r| r["id"].clone())
+            .collect();
         assert_eq!(ids, vec![json!("new"), json!("other")]);
         assert_eq!(rows(s.get_all("episodes").unwrap()).len(), 1);
-        assert!(s.get("playlists", "p").unwrap().unwrap().contains("updated"));
+        assert!(s
+            .get("playlists", "p")
+            .unwrap()
+            .unwrap()
+            .contains("updated"));
     }
 
     #[test]
@@ -718,7 +848,12 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let s = Store::open(&path, [7; 32]).unwrap();
         put(&s, "channels", json!({"id": "old", "playlistId": "p"}));
-        s.stage("g1", "channels", vec![json!({"id": "old", "playlistId": "p", "title": "half"})]).unwrap();
+        s.stage(
+            "g1",
+            "channels",
+            vec![json!({"id": "old", "playlistId": "p", "title": "half"})],
+        )
+        .unwrap();
         drop(s);
         let reopened = Store::open(&path, [7; 32]).unwrap();
         let all = rows(reopened.get_all("channels").unwrap());
@@ -736,7 +871,12 @@ mod tests {
     #[test]
     fn finish_catalog_fails_when_the_playlist_was_deleted() {
         let s = store();
-        s.stage("g1", "channels", vec![json!({"id": "c", "playlistId": "gone"})]).unwrap();
+        s.stage(
+            "g1",
+            "channels",
+            vec![json!({"id": "c", "playlistId": "gone"})],
+        )
+        .unwrap();
         let error = s
             .finish_catalog("gone", "g1", Some(json!({"id": "gone"})), false)
             .unwrap_err();
@@ -750,7 +890,11 @@ mod tests {
         put(&s, "playlists", json!({"id": "p"}));
         put(&s, "documents", json!({"playlistId": "p"}));
         put(&s, "channels", json!({"id": "c", "playlistId": "p"}));
-        put(&s, "epg", json!({"id": "x", "source": "p", "channelId": "c"}));
+        put(
+            &s,
+            "epg",
+            json!({"id": "x", "source": "p", "channelId": "c"}),
+        );
         put(&s, "channels", json!({"id": "keep", "playlistId": "q"}));
         assert_eq!(s.delete_playlist("p").unwrap(), 4);
         assert_eq!(rows(s.get_all("channels").unwrap()).len(), 1);
