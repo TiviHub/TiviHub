@@ -614,6 +614,34 @@ mod tests {
     }
 
     #[test]
+    fn refuses_a_read_only_database_instead_of_losing_writes() {
+        let path = temp_db("readonly");
+        drop(Store::open(&path, [7; 32]).unwrap());
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&path, permissions.clone()).unwrap();
+        let opened = Store::open(&path, [7; 32]);
+        let writable = opened.as_ref().map(|s| s.tx(vec![Op::Put { store: "favorites".into(), record: json!({"id": "a"}) }]).is_ok());
+        permissions.set_readonly(false);
+        std::fs::set_permissions(&path, permissions).unwrap();
+        // Either opening fails (then the app falls back or shows an error) or writes fail loudly; never silently succeed.
+        assert!(opened.is_err() || writable == Ok(false), "read-only database accepted a write");
+    }
+
+    #[test]
+    fn sealed_credentials_are_not_readable_in_the_database_files() {
+        let path = temp_db("plaintext");
+        let s = Store::open(&path, [7; 32]).unwrap();
+        let sealed = s.encrypt("hunter2-secret-password").unwrap();
+        put(&s, "playlists", json!({"id": "p", "privateData": sealed}));
+        drop(s);
+        for suffix in ["", "-wal"] {
+            let bytes = std::fs::read(format!("{}{suffix}", path.display())).unwrap_or_default();
+            assert!(!bytes.windows(7).any(|w| w == b"hunter2"), "plaintext found in {suffix:?} file");
+        }
+    }
+
+    #[test]
     fn numeric_keys_are_stored_as_text() {
         let s = store();
         put(&s, "subtitleFiles", json!({"fileId": 42, "data": "x"}));

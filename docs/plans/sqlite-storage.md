@@ -5,12 +5,12 @@ Branch: `feature/sqlite-storage`. Status: Phases 0-4 implemented (`ba7384b`); op
 Decided: D3 keychain accepted, D4 web build keeps IDB, T3 parity binary dropped (T2 plus the migration tests cover Rust and the JS side separately).
 
 Still open before merge:
-- T1 contract suite: `storage.test.ts` only runs against `idbBackend`.
-- T4: IDB seeds at schema v1/v3/v5, write during migration, and the raw-file plaintext check are not covered. Mid-migration crash and partial-store cases are.
-- T5: only the corrupt-file case is covered (Rust test); read-only dir and full disk are not.
-- T6: Rust side measured (`catalog_import_speed`, release): 200k channels import 1.4s, cold read 0.19s. Not measured: invoke/JSON transfer from the webview and an IDB baseline, so the "no more than 20% slower" comparison is still open.
+- T1 contract suite: `storage.test.ts` only runs against `idbBackend`. Needs the Rust stand-in (T3), which was dropped.
+- T4: covered now except a real `CryptoKey` round trip (the tests use the in-memory sealer; raw-file plaintext is checked in Rust).
+- T5: corrupt and read-only files are covered; a full disk is not.
+- T6: Rust side measured (`catalog_import_speed`, release): 200k channels import 1.4s, cold read 0.19s. Webview invoke transfer and an IDB baseline are not measured, so the "no more than 20% slower" comparison is open.
 - T7 manual Windows upgrade/downgrade run has not been done.
-- Keychain-unavailable fallback (Linux) is undecided.
+- Keychain: `load_or_create_key` falls back to a key file with a diagnostic. If the keychain later becomes unavailable, a new key is generated and old sealed data cannot be opened (sources then need re-entry).
 
 ## Goal and scope
 
