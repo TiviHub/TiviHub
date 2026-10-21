@@ -17,7 +17,10 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "package:windows": "node scripts/package-windows.mjs",
-    "package:unix": "node scripts/package-unix.mjs"
+    "package:unix": "node scripts/package-unix.mjs",
+    "perf:build": "node scripts/perf/build-perf.mjs",
+    "perf:data": "node scripts/perf/dataset.mjs",
+    "perf:seed": "node scripts/perf/seed.mjs"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",

@@ -26,3 +26,8 @@ secrets.properties
 *.iml
 .DS_Store
 Thumbs.db
+
+# Performance baseline harness output
+/src-tauri/target-perf/
+/scripts/perf/seeded/
+/scripts/perf/data/

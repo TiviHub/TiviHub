@@ -4,17 +4,17 @@ Plan: `tasks/plan.md`. Spec: `docs/specs/SPEC-baseline.md`. Sizes: XS 1 file, S 
 
 ## Phase 1: Harness
 
-- [ ] **T1: CDP feasibility spike** (S, risk first)
+- [x] **T1: CDP feasibility spike** (S, risk first)
   - Description: Launch the desktop app with an isolated profile and `--remote-debugging-port`, attach with Playwright `connectOverCDP`, and read the page.
   - Acceptance:
-    - A script starts the app with `APPDATA`/`LOCALAPPDATA` set to a temp folder and the maintainer's real data untouched.
+    - A script starts the perf build (identifier `nl.tivihub.perf`, separate data folders) and the maintainer's real data is untouched. (Changed from overriding `APPDATA`, which Tauri ignores; see `docs/plans/baseline-results/cdp-spike.md`.)
     - It attaches over CDP and detects that the "Opening your library" dialog appeared and went away.
     - It records which launch mode worked (`tauri:dev` or the installed exe) in `docs/plans/baseline-results/cdp-spike.md`.
   - Verify: run `node scripts/perf/launch.mjs --check`; it prints the time to ready and exits 0. Confirm `%APPDATA%\nl.tivihub.desktop` modified time did not change.
   - Dependencies: none
   - Files: `scripts/perf/launch.mjs`, `docs/plans/baseline-results/cdp-spike.md`
 
-- [ ] **T2: Seeded dataset generator** (S)
+- [x] **T2: Seeded dataset generator** (S)
   - Description: Deterministic catalogs for sizes S, M, L, XL, shaped like the Xtream responses the importer reads.
   - Acceptance:
     - Same seed gives identical output; counts match the spec table; ids are unique.
@@ -24,7 +24,7 @@ Plan: `tasks/plan.md`. Spec: `docs/specs/SPEC-baseline.md`. Sizes: XS 1 file, S 
   - Dependencies: none
   - Files: `scripts/perf/dataset.mjs`, `src/__tests__/perfDataset.test.ts`, `package.json`
 
-- [ ] **T3: Mock Xtream server** (S)
+- [x] **T3: Mock Xtream server** (S)
   - Description: Local HTTP server answering the six `player_api.php` actions plus the account info call, with CORS headers, serving a chosen dataset.
   - Acceptance:
     - `loadXtreamCatalog` pointed at the server returns the full dataset S (unit test).
@@ -34,7 +34,7 @@ Plan: `tasks/plan.md`. Spec: `docs/specs/SPEC-baseline.md`. Sizes: XS 1 file, S 
   - Dependencies: T2
   - Files: `scripts/perf/mockXtream.mjs`, `src/__tests__/mockXtream.test.ts`
 
-- [ ] **T4: Seed an isolated profile through the app** (M)
+- [x] **T4: Seed an isolated profile through the app** (M)
   - Description: Using T1's launcher and T3's server, add the mock source through the UI over CDP, wait for the import to finish, close the app, and copy the profile to `seeded/<size>/`.
   - Acceptance:
     - Seeding S and M succeeds and the app shows the expected counts.
@@ -46,9 +46,10 @@ Plan: `tasks/plan.md`. Spec: `docs/specs/SPEC-baseline.md`. Sizes: XS 1 file, S 
   - Files: `scripts/perf/seed.mjs`, `scripts/perf/profile.mjs`, `.gitignore`, `package.json`
 
 ### Checkpoint 1: harness works
-- [ ] An isolated app launches, imports S and M, and relaunches from a copy
-- [ ] `npm test`, `npm run typecheck` and `cargo test` pass
-- [ ] Real app data folder unchanged
+- [x] An isolated app launches, imports S, M and L (L in 15.8 s), and seeded copies are saved
+- [x] `npm test`, `npm run typecheck` and `cargo test` pass
+- [x] Real app data folder unchanged (the first spike left an empty database in `%APPDATA%
+l.tivihub.desktop`, see the spike note)
 - [ ] Review with maintainer before measuring
 
 ## Phase 2: Measurements

@@ -19,7 +19,9 @@ No application code under `src/` changes. All new code is in `scripts/perf/`, pl
 ## Architecture decisions
 
 1. **Drive the real app over CDP.** WebView2 accepts `--remote-debugging-port` through the `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` environment variable, and Playwright's `chromium.connectOverCDP` attaches to it. This measures the actual SQLite path, which the web build cannot. It is the riskiest assumption, so it is Task 1.
-2. **Isolate the profile.** The harness launches the app with `APPDATA` and `LOCALAPPDATA` pointed at a temp folder, so the SQLite file and WebView2's data never touch the maintainer's real library. The OS keychain entry is shared and only read, which is harmless.
+2. **Isolate the profile with a perf build.** Overriding `APPDATA` does not work (Tauri asks Windows for the known folder). Instead `npm run perf:build` builds the same app with identifier `nl.tivihub.perf` into `src-tauri/target-perf`, so its SQLite file and WebView2 data live in `%APPDATA%
+l.tivihub.perf` and `%LOCALAPPDATA%
+l.tivihub.perf` and never touch a real library. The OS keychain entry is shared and only read, which is harmless.
 3. **Seed through the app's own importer.** A local mock Xtream server (with CORS headers) serves the generated catalog and the harness adds it as a source over CDP. This exercises real import code, gives the refresh measurement for free, and avoids writing SQLite rows by hand. After a seed, the profile folder is copied to `seeded/<size>/` so cold-start runs restore a copy instead of re-importing.
 4. **No source changes for timing.** The breakdown of "where startup goes" uses CDP's CPU profiler and the Performance timeline, so the spec's "ask first" boundary on touching `src/` is never triggered.
 5. **Keep it out of CI.** `perf:*` are manual scripts. The only CI-visible addition is the generator unit test.
