@@ -14,8 +14,9 @@ Done and tested (all run in `npm test` / `cargo test`):
 - T6 note: after this change a 200k-row read shows a ~100ms event-loop stall (hydration is 12ms; the rest is JSON parsing of the reply). Import stays under 25ms stalls.
 - Keychain: `load_or_create_key` falls back to a key file with a diagnostic. If the keychain later becomes unavailable, a new key is generated and old sealed data cannot be opened (sources then need re-entry).
 
-Open, needs a person on a real build:
-- T7 manual run (checklist at the end of this file).
+T7 manual run on Windows (upgrade from v1.7.0, no plaintext on disk, restart, delete, downgrade, upgrade again): passed.
+
+Not yet run on macOS/Linux builds (CI builds them on release).
 
 ## Goal and scope
 
