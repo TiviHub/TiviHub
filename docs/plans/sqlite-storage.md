@@ -1,6 +1,16 @@
 # Plan: move desktop storage from IndexedDB to SQLite
 
-Branch: `feature/sqlite-storage`. Status: plan, no code yet.
+Branch: `feature/sqlite-storage`. Status: Phases 0-4 implemented (`ba7384b`); open gates below.
+
+Decided: D3 keychain accepted, D4 web build keeps IDB, T3 parity binary dropped (T2 plus the migration tests cover Rust and the JS side separately).
+
+Still open before merge:
+- T1 contract suite: `storage.test.ts` only runs against `idbBackend`.
+- T4: IDB seeds at schema v1/v3/v5, write during migration, and the raw-file plaintext check are not covered. Mid-migration crash and partial-store cases are.
+- T5: only the corrupt-file case is covered (Rust test); read-only dir and full disk are not.
+- T6 performance gate (200k channels, SQLite vs IDB) has not been run.
+- T7 manual Windows upgrade/downgrade run has not been done.
+- Keychain-unavailable fallback (Linux) is undecided.
 
 ## Goal and scope
 

@@ -565,6 +565,31 @@ mod tests {
         assert!(s.get("favorites", "missing").unwrap().is_none());
     }
 
+    fn temp_db(name: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("tivihub-{name}-{}.db", std::process::id()));
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
+        path
+    }
+
+    #[test]
+    fn data_survives_reopening_the_file() {
+        let path = temp_db("reopen");
+        let s = Store::open(&path, [7; 32]).unwrap();
+        put(&s, "favorites", json!({"id": "a", "playlistId": "p"}));
+        drop(s);
+        let s = Store::open(&path, [7; 32]).unwrap();
+        assert_eq!(rows(s.get_all("favorites").unwrap()).len(), 1);
+    }
+
+    #[test]
+    fn refuses_a_corrupt_database_file() {
+        let path = temp_db("corrupt");
+        std::fs::write(&path, vec![0xAB; 4096]).unwrap();
+        assert!(Store::open(&path, [7; 32]).is_err());
+    }
+
     #[test]
     fn numeric_keys_are_stored_as_text() {
         let s = store();

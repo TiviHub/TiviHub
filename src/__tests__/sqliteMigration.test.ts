@@ -152,6 +152,37 @@ describe("IndexedDB to SQLite migration", () => {
     expect(getAll).not.toHaveBeenCalled();
   });
 
+  it("completes without duplicates when relaunched after a crash mid-copy", async () => {
+    await seedIdb("m6");
+    const sqlite = memorySqlite();
+    const realTx = sqlite.tx;
+    let puts = 0;
+    sqlite.tx = async (ops) => {
+      if (ops.some((op) => op.op === "put") && ++puts === 3) throw new Error("crash");
+      return realTx(ops);
+    };
+
+    await expect(migrateToSqlite(idbBackend, sqlite)).rejects.toThrow("crash");
+    expect(sqlite.meta.has("migrated_from_idb")).toBe(false);
+
+    sqlite.tx = realTx;
+    expect(await migrateToSqlite(idbBackend, sqlite)).toBe(true);
+    const ids = (await sqlite.getAll("channels")).map((c) => c.id);
+    expect(ids.filter((id) => id === "m6-c")).toHaveLength(1);
+    expect(sqlite.meta.get("migrated_from_idb")).toBe("1");
+  });
+
+  it("migrates an IndexedDB that has only some stores populated", async () => {
+    await idbBackend.tx([{ op: "put", store: "favorites", record: { id: "only-f", playlistId: "x" } as unknown as StoreValues["favorites"] }]);
+    await idbBackend.tx([{ op: "clear", store: "channels" }, { op: "clear", store: "playlists" }, { op: "clear", store: "secrets" }]);
+    const sqlite = memorySqlite();
+
+    expect(await migrateToSqlite(idbBackend, sqlite)).toBe(true);
+
+    expect((await sqlite.getAll("favorites")).map((f) => f.id)).toContain("only-f");
+    expect(await sqlite.getAll("channels")).toEqual([]);
+  });
+
   it("starts over from an empty copy after an interrupted attempt", async () => {
     await seedIdb("m5");
     const sqlite = memorySqlite();
