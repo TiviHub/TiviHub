@@ -8,7 +8,7 @@ Still open before merge:
 - T1 contract suite: `storage.test.ts` only runs against `idbBackend`.
 - T4: IDB seeds at schema v1/v3/v5, write during migration, and the raw-file plaintext check are not covered. Mid-migration crash and partial-store cases are.
 - T5: only the corrupt-file case is covered (Rust test); read-only dir and full disk are not.
-- T6 performance gate (200k channels, SQLite vs IDB) has not been run.
+- T6: Rust side measured (`catalog_import_speed`, release): 200k channels import 1.4s, cold read 0.19s. Not measured: invoke/JSON transfer from the webview and an IDB baseline, so the "no more than 20% slower" comparison is still open.
 - T7 manual Windows upgrade/downgrade run has not been done.
 - Keychain-unavailable fallback (Linux) is undecided.
 

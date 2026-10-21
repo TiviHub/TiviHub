@@ -573,6 +573,29 @@ mod tests {
         path
     }
 
+    // Gate G3: run with `cargo test --release -- --ignored --nocapture catalog_import_speed`.
+    #[test]
+    #[ignore]
+    fn catalog_import_speed() {
+        let path = temp_db("perf");
+        let s = Store::open(&path, [7; 32]).unwrap();
+        put(&s, "playlists", json!({"id": "p"}));
+        let started = std::time::Instant::now();
+        for start in (0..200_000).step_by(1000) {
+            let batch = (start..start + 1000)
+                .map(|i| json!({"id": format!("c{i}"), "playlistId": "p", "name": format!("Channel {i}"), "group": "News"}))
+                .collect();
+            s.stage("g", "channels", batch).unwrap();
+        }
+        let staged = started.elapsed();
+        s.finish_catalog("p", "g", Some(json!({"id": "p"})), false).unwrap();
+        let total = started.elapsed();
+        let read = std::time::Instant::now();
+        let all = rows(s.get_all_by_index("channels", "byPlaylist", "p").unwrap());
+        println!("200k channels: stage {staged:?}, total import {total:?}, cold read {:?}", read.elapsed());
+        assert_eq!(all.len(), 200_000);
+    }
+
     #[test]
     fn data_survives_reopening_the_file() {
         let path = temp_db("reopen");

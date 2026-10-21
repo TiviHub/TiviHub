@@ -64,6 +64,24 @@ describe("backend selection", () => {
     await expect(database.getFavorites()).resolves.toEqual([]);
   });
 
+  it("holds storage calls until the migration check has finished", async () => {
+    let release!: (value: string) => void;
+    const commands: string[] = [];
+    const database = await loadDatabase(async (command) => {
+      commands.push(command);
+      if (command === "storage_meta_get") return new Promise((resolve) => (release = resolve as (value: string) => void));
+      return command === "storage_get_all" ? "[]" : undefined;
+    });
+
+    const pending = database.getFavorites();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(commands).not.toContain("storage_get_all");
+
+    release("1");
+    await expect(pending).resolves.toEqual([]);
+    expect(commands).toContain("storage_get_all");
+  });
+
   it("refuses the stale IndexedDB copy once the data has been migrated", async () => {
     window.localStorage.setItem("tivihub.storage.sqlite", "1");
     const database = await loadDatabase(async () => {
