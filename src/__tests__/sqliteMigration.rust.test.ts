@@ -32,11 +32,15 @@ describe("IndexedDB to the Rust SQLite store", () => {
     expect((await sqlite.getAll("channels")).map((c) => c.id)).toContain("r1-c");
     const stored = (await sqlite.getAll("playlists")).find((p) => p.id === "r1")!;
     expect(stored.privateData).toBeTruthy();
+    expect((await sqlite.getAll("channels")).find((c) => c.id === "r1-c")?.streamUrl).toBe(
+      "https://provider.example/live/user-r1/pw-r1/1.m3u8",
+    );
     expect(await sqlite.decrypt((await sqlite.get("secrets", "mdblist-api-key"))!.payload)).toBe("mdb-secret");
     await harness.close();
     // The WAL holds recent writes until a checkpoint, so every file in the data dir is checked.
     expect(plaintextInFiles("r1-c").length).toBeGreaterThan(0); // control: the search can see stored data
-    expect(plaintextInFiles("pw-r1")).toEqual([]);
+    expect(plaintextInFiles("pw-r1")).toEqual([]); // also covers the password inside stream URLs
+    expect(plaintextInFiles("user-r1")).toEqual([]);
     expect(plaintextInFiles("mdb-secret")).toEqual([]);
     rmSync(dir, { recursive: true, force: true });
   });

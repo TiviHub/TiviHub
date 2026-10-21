@@ -1,3 +1,4 @@
+import { withoutCredentialUrls } from "./credentialUrls";
 import type { CatalogWrite, IndexName, StorageBackend, StorageOp, StoreName, StoreValues } from "./backend";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -31,7 +32,7 @@ export function createSqliteBackend(invoke: Invoke): SqliteBackend {
     }
   }
 
-  return {
+  return withoutCredentialUrls({
     kind: "sqlite",
     status: () => invoke<void>("storage_status"),
     metaGet: (key) => invoke<string | null>("storage_meta_get", { key }),
@@ -74,5 +75,5 @@ export function createSqliteBackend(invoke: Invoke): SqliteBackend {
       const removed = await invoke<number>("storage_delete_playlist", { id });
       onProgress?.(removed, removed);
     },
-  };
+  });
 }

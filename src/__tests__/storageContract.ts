@@ -8,6 +8,8 @@ export type StorageContractTarget = {
   database: Database;
   /** The playlist record exactly as the backend stores it. */
   rawPlaylist: (id: string) => Promise<Record<string, unknown>>;
+  /** A stored record exactly as the backend keeps it; only backends that keep logins out of URLs need it. */
+  rawRecord?: (store: "channels" | "favorites" | "library" | "episodes", id: string) => Promise<Record<string, unknown>>;
   /** IndexedDB reports delete progress in chunks; the Rust store deletes in one transaction. */
   incrementalDeleteProgress: boolean;
   close?: () => void;
@@ -48,6 +50,42 @@ describe(name, () => {
     expect(rawRecord).not.toHaveProperty("username");
     expect(rawRecord).not.toHaveProperty("password");
     expect(rawRecord).toHaveProperty("privateData");
+  });
+
+  it("returns Xtream stream URLs whole and keeps the login out of the stored copy where supported", async () => {
+    const source: Playlist = { ...playlist("storage-test-url-login"), username: "a@b c", password: "p/w?:1" };
+    const login = `${encodeURIComponent(source.username)}/${encodeURIComponent(source.password)}`;
+    const url = (type: string, file: string) => `https://provider.example/${type}/${login}/${file}`;
+    const channel: LiveChannel = {
+      id: `${source.id}:c`, playlistId: source.id, name: "C", group: "News", streamUrl: url("live", "1.m3u8"),
+    };
+    const episode: Episode = {
+      id: `${source.id}:e`, playlistId: source.id, seriesId: "s", season: 1, number: 1, name: "E", streamUrl: url("series", "2.mkv"),
+    };
+    const favorite: Favorite = {
+      id: `${source.id}:f`, contentId: channel.id, contentType: "LIVE", title: "C", playlistId: source.id, streamUrl: channel.streamUrl, addedAt: 1,
+    };
+    await db.savePlaylist(source);
+    await db.saveCatalog({ playlistId: source.id, channels: [channel], movies: [], series: [], episodes: [episode] });
+    await db.toggleFavorite(favorite);
+
+    await expect(db.getChannels(source.id)).resolves.toEqual([channel]);
+    await expect(db.getEpisodes(source.id, "s")).resolves.toEqual([episode]);
+    await expect(db.getFavorites()).resolves.toContainEqual(favorite);
+    if (target.rawRecord) {
+      for (const [store, id] of [["channels", channel.id], ["episodes", episode.id], ["favorites", favorite.id]] as const) {
+        const raw = JSON.stringify(await target.rawRecord(store, id));
+        expect(raw).not.toContain(login);
+        expect(raw).toContain("{username}/{password}");
+      }
+    }
+
+    // Where URLs hold no login, changing the password updates every stored URL without rewriting the catalog.
+    if (!target.rawRecord) return;
+    await db.savePlaylist({ ...source, password: "new-pass" });
+    await expect(db.getChannels(source.id)).resolves.toEqual([
+      { ...channel, streamUrl: `https://provider.example/live/${encodeURIComponent(source.username)}/new-pass/1.m3u8` },
+    ]);
   });
 
   it("keeps episode replacement scoped to the matching source and series", async () => {

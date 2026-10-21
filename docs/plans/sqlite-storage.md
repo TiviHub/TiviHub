@@ -10,6 +10,8 @@ Done and tested (all run in `npm test` / `cargo test`):
 - T4: legacy IDB v1/v3/v5, mid-copy crash and relaunch, partial stores, count mismatch, undecryptable key, migration against real Rust encryption, and no plaintext credentials in the database files (control search included).
 - T5: corrupt file, read-only file, full disk (`max_page_count`), damaged key file. SQLite-cannot-open fallback rules are in `sqliteBackend.test.ts`.
 - T6 (`TIVIHUB_PERF=1 TIVIHUB_HARNESS_PROFILE=release npx vitest run storagePerformance`): 200k channels + 50k movies, over a pipe: SQLite import 1.5s, read 0.38s, longest event-loop stall 6ms. fake-indexeddb for reference: import 3.7s, read 1.5s, stall 355ms. fake-indexeddb is not a real browser IDB and a pipe is not Tauri's invoke, so confirm in T7.
+- Account login in stream URLs: Xtream stream URLs embed the username and password. `credentialUrls.ts` (applied inside `createSqliteBackend`) stores them as `/{username}/{password}/` placeholders and fills them in on read from the encrypted playlist record, so the database files hold no login. M3U sources are not covered (their URLs are whatever the provider supplies). IndexedDB (web build) still stores full URLs. Migration copies playlists first so the login is known when catalog rows are written.
+- T6 note: after this change a 200k-row read shows a ~100ms event-loop stall (hydration is 12ms; the rest is JSON parsing of the reply). Import stays under 25ms stalls.
 - Keychain: `load_or_create_key` falls back to a key file with a diagnostic. If the keychain later becomes unavailable, a new key is generated and old sealed data cannot be opened (sources then need re-entry).
 
 Open, needs a person on a real build:

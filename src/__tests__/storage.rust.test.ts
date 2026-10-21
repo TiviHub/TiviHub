@@ -13,6 +13,7 @@ describeStorageContract("SQLite storage (Rust)", async () => {
     database,
     incrementalDeleteProgress: false,
     rawPlaylist: async (id) => JSON.parse((await harness.invoke<string>("storage_get", { storeName: "playlists", key: id }))),
+    rawRecord: async (store, id) => JSON.parse((await harness.invoke<string>("storage_get", { storeName: store, key: id }))),
     close: harness.close,
   };
 });

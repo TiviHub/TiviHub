@@ -101,6 +101,8 @@ export async function migrateToSqlite(idb: StorageBackend, sqlite: SqliteBackend
   }
   // A previous attempt may have left a partial copy; without the flag it is not authoritative.
   await sqlite.wipe();
+  // Playlists first: catalog rows are stored without their account login, which comes from the playlist.
+  const playlists = await copyPlaylists(idb, sqlite);
   for (const store of PLAIN_STORES) {
     const records = await idb.getAll(store);
     for (let start = 0; start < records.length; start += COPY_BATCH_SIZE) {
@@ -109,7 +111,6 @@ export async function migrateToSqlite(idb: StorageBackend, sqlite: SqliteBackend
       );
     }
   }
-  const playlists = await copyPlaylists(idb, sqlite);
   const secrets = await copySecrets(idb, sqlite);
   const problem = await verify(idb, sqlite, playlists, secrets);
   if (problem) {
