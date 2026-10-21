@@ -260,7 +260,7 @@ function App() {
     phase: "preparing" | "deleting" | "updating";
   } | null>(null);
   const [ready, setReady] = useState(false);
-  const [introVisible, setIntroVisible] = useState(
+  const [animateStartup] = useState(
     () => isDesktopApp && !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const [error, setError] = useState<string | null>(null);
@@ -355,14 +355,8 @@ function App() {
   }, [activeSource?.expiresAtMillis, activeSource?.id, expiryCheckTime]);
 
   useEffect(() => {
-    if (!introVisible) return;
-    const timer = window.setTimeout(() => setIntroVisible(false), 1450);
-    return () => window.clearTimeout(timer);
-  }, [introVisible]);
-
-  useEffect(() => {
-    if (!ready || introVisible) startupOverlayRef.current?.focus();
-  }, [introVisible, ready]);
+    if (!ready) startupOverlayRef.current?.focus();
+  }, [ready]);
 
   const checkUpdates = useCallback(async () => {
     updateCheckController.current?.abort();
@@ -1693,7 +1687,7 @@ function App() {
     <>
     <div
       className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${isDesktopApp ? " desktop-app" : ""}`}
-      inert={introVisible || !ready}
+      inert={!ready}
     >
       <TooltipLayer />
       <aside
@@ -2250,9 +2244,9 @@ function App() {
         />
       )}
     </div>
-    {(!ready || introVisible) && (
+    {!ready && (
       <StartupScreen
-        animate={introVisible}
+        animate={animateStartup}
         logoSrc={`${ASSET_BASE_URL}icons/tivihub.svg`}
         screenRef={startupOverlayRef}
       />

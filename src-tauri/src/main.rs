@@ -2,6 +2,7 @@
 
 mod chromecast;
 mod diagnostics;
+mod storage;
 
 use diagnostics::{BackendDiagnosticEvent, BackendDiagnostics};
 use serde::Serialize;
@@ -147,6 +148,24 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let diagnostics = app.state::<BackendDiagnostics>();
+            let opened = app
+                .path()
+                .app_data_dir()
+                .map_err(|_| "Could not find TiviHub's data folder.".to_string())
+                .and_then(|dir| {
+                    std::fs::create_dir_all(&dir)
+                        .map_err(|_| "Could not create TiviHub's data folder.".to_string())?;
+                    let key = storage::load_or_create_key(&dir, &diagnostics)?;
+                    storage::Store::open(&dir.join("tivihub.sqlite3"), key)
+                });
+            if opened.is_err() {
+                diagnostics.record("storage", "SQLITE_OPEN_FAILED");
+            }
+            app.manage(storage::StorageState(opened));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             choose_download_directory,
             saved_download_directory,
@@ -154,6 +173,19 @@ fn main() {
             cast_media,
             stop_cast,
             get_backend_diagnostics,
+            storage::storage_status,
+            storage::storage_get,
+            storage::storage_get_all,
+            storage::storage_get_all_by_index,
+            storage::storage_tx,
+            storage::storage_stage,
+            storage::storage_finish_catalog,
+            storage::storage_delete_playlist,
+            storage::storage_meta_get,
+            storage::storage_meta_set,
+            storage::storage_wipe,
+            storage::storage_encrypt,
+            storage::storage_decrypt,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run TiviHub");
