@@ -4,7 +4,7 @@ Plan: `tasks/ci-quality/plan.md`. Spec: `docs/specs/SPEC-ci-quality.md`. No task
 
 ## Phase 1: clean slate
 
-- [ ] **T1: Format Rust and fix the clippy warning** (S)
+- [x] **T1: Format Rust and fix the clippy warning** (S)
   - Description: Run `cargo fmt` once as its own commit, then fix the single clippy warning (my `set_readonly(false)` test).
   - Acceptance:
     - `cargo fmt --check` passes; the fmt commit contains only `.rs` files and no logic change.
@@ -14,7 +14,7 @@ Plan: `tasks/ci-quality/plan.md`. Spec: `docs/specs/SPEC-ci-quality.md`. No task
   - Dependencies: none
   - Files: `src-tauri/src/main.rs`, `src-tauri/src/storage.rs`, `src-tauri/src/chromecast.rs`, `src-tauri/src/diagnostics.rs`, `src-tauri/examples/storage_harness.rs`
 
-- [ ] **T2: ESLint with a lint script** (M)
+- [x] **T2: ESLint with a lint script** (M)
   - Description: Add ESLint (flat config, `typescript-eslint` recommended, `eslint-plugin-react-hooks`) and `npm run lint`. Rules that currently error are lowered to warnings.
   - Acceptance:
     - `npm run lint` exits 0 on the current code; the number of warnings per rule is recorded in the commit message.
@@ -25,7 +25,7 @@ Plan: `tasks/ci-quality/plan.md`. Spec: `docs/specs/SPEC-ci-quality.md`. No task
   - Files: `eslint.config.js`, `package.json`, `package-lock.json`
 
 ### Checkpoint 1: local gates are clean
-- [ ] `cargo fmt --check`, `cargo clippy -D warnings`, `npm run lint`, `npm run typecheck`, `npm test`, `cargo test` all pass
+- [x] `cargo fmt --check`, `cargo clippy -D warnings`, `npm run lint` (0 errors, 51 warnings), `npm run typecheck`, `npm test`, `cargo test` all pass
 - [ ] Review with maintainer
 
 ## Phase 2: the matrix
