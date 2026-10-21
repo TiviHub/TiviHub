@@ -14,11 +14,17 @@ import type {
   PlayableItem,
   Series,
 } from "../types";
+import {
+  canDownloadMedia,
+  downloadIdFor,
+  type DownloadableMedia,
+} from "../downloads";
 import { rankLocalCatalogByPopularity } from "../catalogPopularity";
 import type { PopularCatalogService } from "../popularCatalogService";
 import { sortCatalogItems, topCatalogItems, type CatalogSort } from "../catalogSorting";
-import { LiveGuide } from "./LiveGuide";
 import { CustomSelect, Icon, type CustomSelectOption } from "./common";
+import { HomeEmptyState } from "./HomeEmptyState";
+import { NoSourceEmptyState } from "./NoSourceEmptyState";
 
 type CatalogSection = "Live TV" | "Movies" | "Series";
 type CatalogItem = LiveChannel | Movie | Series;
@@ -62,7 +68,7 @@ function artworkOf(item: CatalogItem): string | undefined {
   return "group" in item ? item.logoUrl : item.posterUrl;
 }
 
-function playableChannel(channel: LiveChannel): PlayableItem {
+export function playableChannel(channel: LiveChannel): PlayableItem {
   return {
     id: channel.id,
     playlistId: channel.playlistId,
@@ -107,6 +113,7 @@ function CatalogCard({
       <button
         aria-label={isLive ? `Play ${item.name}` : `View details for ${item.name}`}
         className="catalog-card-main"
+        data-tooltip={isLive ? `Play ${item.name}` : `View details for ${item.name}`}
         onClick={onOpen}
         type="button"
       >
@@ -127,8 +134,8 @@ function CatalogCard({
           )}
         </span>
         <span className="catalog-card-copy">
-          <strong title={titleOf(item)}>{titleOf(item)}</strong>
-          <small title={subtitle}>{subtitle}</small>
+          <strong data-tooltip={titleOf(item)}>{titleOf(item)}</strong>
+          <small data-tooltip={subtitle}>{subtitle}</small>
           {currentProgram && (
             <span className="program-progress">
               <span style={{ width: `${Math.max(0, Math.min(100, ((Date.now() - currentProgram.startMillis) / (currentProgram.endMillis - currentProgram.startMillis)) * 100))}%` }} />
@@ -140,6 +147,7 @@ function CatalogCard({
         aria-label={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
         aria-pressed={isFavorite}
         className={`favorite-button${isFavorite ? " selected" : ""}`}
+        data-tooltip={`${isFavorite ? "Remove" : "Add"} ${isLive ? "TV Channel" : section === "Movies" ? "Movie" : "Series"} ${isFavorite ? "from" : "to"} favorites`}
         onClick={onFavorite}
         type="button"
       >
@@ -150,6 +158,7 @@ function CatalogCard({
           aria-label={inLibrary ? `${item.name} is saved in your library` : `Add ${item.name} to your watchlist`}
           aria-pressed={inLibrary}
           className={`catalog-library-button${inLibrary ? " selected" : ""}`}
+          data-tooltip={inLibrary ? "Already in your library" : "Add to watchlist"}
           disabled={inLibrary}
           onClick={onAddToLibrary}
           type="button"
@@ -170,7 +179,6 @@ export function CatalogPage({
   favorites,
   library,
   loading,
-  guideLoading,
   onLoadGuideForChannels,
   onPlay,
   onOpenMovie,
@@ -192,7 +200,6 @@ export function CatalogPage({
   favorites: Favorite[];
   library: LibraryItem[];
   loading: boolean;
-  guideLoading: boolean;
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (item: PlayableItem) => void;
   onOpenMovie: (movie: Movie) => void;
@@ -211,8 +218,6 @@ export function CatalogPage({
   const [sort, setSort] = useState<CatalogSort>("added");
   const [isSorting, startSortTransition] = useTransition();
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
-  const [showFullGuide, setShowFullGuide] = useState(false);
-  const [guidePlayerCollapsed, setGuidePlayerCollapsed] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(24);
   const [popularState, setPopularState] = useState<
@@ -236,13 +241,17 @@ export function CatalogPage({
     });
     return () => { active = false; };
   }, [deferredQuery, featuredMediaType, items.length, mdblistApiKey, popularCatalogService]);
-  useEffect(() => {
-    if (livePlayerMini) setShowFullGuide(false);
-  }, [livePlayerMini]);
   const selectedGroupChannels = section === "Live TV" && category !== "All"
     ? channels.filter((channel) => channel.group === category)
     : [];
   const favoriteIds = useMemo(() => new Set(favorites.map((favorite) => favorite.contentId)), [favorites]);
+  const liveFavorites = useMemo(() => {
+    if (section !== "Live TV") return [];
+    const byId = new Map(channels.map((channel) => [channel.id, channel]));
+    return favorites
+      .filter((favorite) => favorite.contentType === "LIVE" && byId.has(favorite.contentId))
+      .map((favorite) => ({ favorite, channel: byId.get(favorite.contentId)! }));
+  }, [channels, favorites, section]);
   const libraryIds = useMemo(
     () => new Set(library.map((entry) => `${entry.contentType}:${entry.contentId}`)),
     [library],
@@ -324,9 +333,6 @@ export function CatalogPage({
   const selectedChannel = guideChannels.find((channel) => channel.id === selectedChannelId)
     ?? channels.find((channel) => channel.id === livePlaybackItemId)
     ?? guideChannels[0];
-  const selectedChannelPrograms = selectedChannel
-    ? guideByChannel.get(selectedChannel.tvgId || selectedChannel.id) ?? []
-    : [];
   const guideChannelsToLoad = selectedChannel && !guideChannels.some((channel) => channel.id === selectedChannel.id)
     ? [...guideChannels, selectedChannel]
     : guideChannels;
@@ -393,25 +399,12 @@ export function CatalogPage({
               value={query}
             />
           </label>
-          <div className="category-select">
-            <Icon name="filter_list" />
-            <CustomSelect
-              ariaLabel="Filter by category"
-              onValueChange={(value) => {
-                setCategory(value);
-                setPage(1);
-              }}
-              options={categories.map((value) => ({ label: value, value }))}
-              value={category}
-              variant="embedded"
-            />
-          </div>
           {selectedGroupChannels.length > 0 && onCheckStreamGroup && (
             <button
               aria-label={`Check all ${selectedGroupChannels.length} channels in ${category}`}
               className="secondary-button catalog-group-check"
               onClick={() => onCheckStreamGroup(selectedGroupChannels, category)}
-              title={`Check all ${selectedGroupChannels.length} channels in this group`}
+              data-tooltip={`Check all ${selectedGroupChannels.length} channels in this group`}
               type="button"
             >
               <Icon name="check_circle" />
@@ -433,17 +426,19 @@ export function CatalogPage({
               />
             </div>
           )}
-          {section === "Live TV" && channels.length > 0 && (
-            <button
-              aria-expanded={showFullGuide}
-              className="secondary-button live-guide-open-button"
-              onClick={() => setShowFullGuide((open) => !open)}
-              type="button"
-            >
-              <Icon name="schedule" />
-              {showFullGuide ? "Close guide" : "Full TV guide"}
-            </button>
-          )}
+          <div className="category-select">
+            <Icon name="filter_list" />
+            <CustomSelect
+              ariaLabel="Filter by category"
+              onValueChange={(value) => {
+                setCategory(value);
+                setPage(1);
+              }}
+              options={categories.map((value) => ({ label: value, value }))}
+              value={category}
+              variant="embedded"
+            />
+          </div>
         </div>
       </header>
 
@@ -498,7 +493,8 @@ export function CatalogPage({
           </button>
         </div>
       ) : section === "Live TV" ? (
-        <div className={`live-tv-layout${showFullGuide ? ` is-full-guide${guidePlayerCollapsed ? " player-collapsed" : ""}` : ""}`}>
+        <div className="live-tv-layout">
+          <div className="live-channel-columns">
           <aside aria-label="Live TV channels" className="live-channel-sidebar">
             <div className="live-channel-sidebar-heading">
               <h2>Channels</h2>
@@ -515,6 +511,7 @@ export function CatalogPage({
                       aria-label={`Play ${channel.name}`}
                       aria-pressed={isSelected}
                       className="live-channel-select"
+                      data-tooltip={`${channel.name} · ${channel.group}${current ? ` · ${current.title}` : ""}`}
                       onClick={() => {
                         setSelectedChannelId(channel.id);
                         onPlay(playableChannel(channel));
@@ -527,9 +524,9 @@ export function CatalogPage({
                         ) : <Icon name="live_tv" />}
                       </span>
                       <span className="live-channel-list-copy">
-                        <strong title={channel.name}>{channel.name}</strong>
-                        <small title={channel.group}>{channel.group}</small>
-                        {current && <small className="live-channel-current-program" title={current.title}>{current.title}</small>}
+                        <strong>{channel.name}</strong>
+                        <small>{channel.group}</small>
+                        {current && <small className="live-channel-current-program">{current.title}</small>}
                       </span>
                       {livePlaybackItemId === channel.id && <span aria-label="Playing" className="live-channel-playing"><Icon name="play_arrow" /></span>}
                     </button>
@@ -537,6 +534,7 @@ export function CatalogPage({
                       aria-label={isFavorite ? `Remove ${channel.name} from favorites` : `Add ${channel.name} to favorites`}
                       aria-pressed={isFavorite}
                       className={`live-channel-favorite${isFavorite ? " selected" : ""}`}
+                      data-tooltip={isFavorite ? "Remove TV Channel from favorites" : "Add TV Channel to favorites"}
                       onClick={() => onToggleFavorite(channel, "LIVE")}
                       type="button"
                     >
@@ -562,7 +560,7 @@ export function CatalogPage({
                   />
                 </div>
                 <span>Page <strong>{currentPage}</strong> / <strong>{pageCount}</strong></span>
-                <div>
+                <div className="live-channel-pagination-buttons">
                   <button
                     aria-label="Previous channel page"
                     disabled={currentPage === 1}
@@ -583,6 +581,56 @@ export function CatalogPage({
               </nav>
             )}
           </aside>
+          <aside aria-label="Favorite live TV channels" className="live-channel-sidebar live-favorites-sidebar">
+            <div className="live-channel-sidebar-heading">
+              <h2>Favorites</h2>
+              <span>{liveFavorites.length.toLocaleString()}</span>
+            </div>
+            <div className="live-channel-list" role="list">
+              {liveFavorites.length === 0 && (
+                <div className="live-guide-empty">Tap the heart on a channel to add it here.</div>
+              )}
+              {liveFavorites.map(({ favorite, channel }) => {
+                const isSelected = livePlaybackItemId === channel.id;
+                return (
+                  <article className={`live-channel-list-item${isSelected ? " selected" : ""}`} key={favorite.id} role="listitem">
+                    <button
+                      aria-label={`Play ${favorite.title}`}
+                      aria-pressed={isSelected}
+                      className="live-channel-select"
+                      data-tooltip={`Play ${channel.name}`}
+                      onClick={() => {
+                        setSelectedChannelId(channel.id);
+                        onPlay(playableChannel(channel));
+                      }}
+                      type="button"
+                    >
+                      <span className="live-channel-list-art">
+                        {channel.logoUrl ? (
+                          <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={channel.logoUrl} />
+                        ) : <Icon name="live_tv" />}
+                      </span>
+                      <span className="live-channel-list-copy">
+                        <strong>{channel.name}</strong>
+                      </span>
+                      {isSelected && <span aria-label="Playing" className="live-channel-playing"><Icon name="play_arrow" /></span>}
+                    </button>
+                    <button
+                      aria-label={`Remove ${channel.name} from favorites`}
+                      aria-pressed
+                      className="live-channel-favorite selected"
+                      data-tooltip="Remove TV Channel from favorites"
+                      onClick={() => onToggleFavorite(channel, "LIVE")}
+                      type="button"
+                    >
+                      <Icon name="favorite" />
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          </aside>
+          </div>
           <div className="live-tv-main">
             <section aria-label="Live player" className={`live-tv-player${livePlayer ? " has-live-player" : ""}`}>
               {livePlayer ?? (
@@ -603,72 +651,7 @@ export function CatalogPage({
                 </div>
               )}
             </section>
-            {!showFullGuide && (
-              <section
-                aria-label={`TV guide${selectedChannel ? ` for ${selectedChannel.name}` : ""}`}
-                className="live-tv-guide"
-              >
-                <header className="live-tv-guide-heading">
-                  <div>
-                    <p className="eyebrow">WHAT'S ON</p>
-                    <h2>TV Guide</h2>
-                  </div>
-                  {selectedChannel && <span title={selectedChannel.name}>{selectedChannel.name}</span>}
-                </header>
-                {!selectedChannel ? (
-                  <div className="live-guide-empty">Select a channel to see its listings.</div>
-                ) : selectedChannelPrograms.length === 0 ? (
-                  <div aria-live="polite" className="live-guide-empty">
-                    {guideLoading ? "Loading guide for this channel…" : "No TV guide listings are available for this channel."}
-                  </div>
-                ) : (
-                  <div className="live-tv-program-list">
-                    {selectedChannelPrograms.slice(0, 8).map((program) => {
-                      const isCurrent = currentByChannel.get(selectedChannel.tvgId || selectedChannel.id)?.id === program.id;
-                      const progress = isCurrent
-                        ? Math.max(0, Math.min(100, ((Date.now() - program.startMillis) / (program.endMillis - program.startMillis)) * 100))
-                        : 0;
-                      return (
-                        <article className={`live-tv-program${isCurrent ? " current" : ""}`} key={program.id}>
-                          <time dateTime={new Date(program.startMillis).toISOString()}>
-                            {new Date(program.startMillis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </time>
-                          <div>
-                            <strong title={program.title}>{program.title}</strong>
-                            {program.synopsis && <small title={program.synopsis}>{program.synopsis}</small>}
-                            {isCurrent && (
-                              <span aria-label={`${Math.round(progress)}% complete`} className="live-tv-program-progress">
-                                <span style={{ width: `${progress}%` }} />
-                              </span>
-                            )}
-                          </div>
-                          {isCurrent && <span className="live-tv-program-on-air">ON AIR</span>}
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            )}
           </div>
-          {showFullGuide && (
-            <LiveGuide
-              activeChannelId={livePlaybackItemId}
-              channels={channels}
-              epg={epg}
-              favoriteIds={favoriteIds}
-              loading={guideLoading}
-              onClose={() => setShowFullGuide(false)}
-              onLoadGuideForChannels={onLoadGuideForChannels}
-              onPlay={(channel) => {
-                setSelectedChannelId(channel.id);
-                onPlay(playableChannel(channel));
-              }}
-              onTogglePlayer={() => setGuidePlayerCollapsed((collapsed) => !collapsed)}
-              playerCollapsed={guidePlayerCollapsed}
-              selectedChannelId={selectedChannel?.id}
-            />
-          )}
         </div>
       ) : (
         <div className="catalog-grid">
@@ -733,10 +716,18 @@ function MoreFromPlaylist<T extends Movie | Series>({
   items,
   section,
   onSelect,
+  favoriteIds = new Set(),
+  libraryIds = new Set(),
+  onToggleFavorite,
+  onAddToLibrary,
 }: {
   items: T[];
   section: "Movies" | "Series";
   onSelect: (item: T) => void;
+  favoriteIds?: ReadonlySet<string>;
+  libraryIds?: ReadonlySet<string>;
+  onToggleFavorite?: (item: T) => void;
+  onAddToLibrary?: (item: T) => void;
 }) {
   if (items.length === 0) return null;
   return (
@@ -753,6 +744,7 @@ function MoreFromPlaylist<T extends Movie | Series>({
             <button
               aria-label={`View details for ${item.name}`}
               className="catalog-card-main"
+              data-tooltip={`View details for ${item.name}`}
               onClick={() => onSelect(item)}
               type="button"
             >
@@ -770,7 +762,7 @@ function MoreFromPlaylist<T extends Movie | Series>({
                 )}
               </span>
               <span className="catalog-card-copy">
-                <strong title={item.name}>{item.name}</strong>
+                <strong data-tooltip={item.name}>{item.name}</strong>
                 <small>
                   {[item.year, item.rating !== undefined ? `★ ${item.rating.toFixed(1)}` : undefined]
                     .filter((value) => value !== undefined)
@@ -778,10 +770,73 @@ function MoreFromPlaylist<T extends Movie | Series>({
                 </small>
               </span>
             </button>
+            {onToggleFavorite && (
+              <button
+                aria-label={favoriteIds.has(item.id) ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+                aria-pressed={favoriteIds.has(item.id)}
+                className={`favorite-button${favoriteIds.has(item.id) ? " selected" : ""}`}
+                data-tooltip={`${favoriteIds.has(item.id) ? "Remove" : "Add"} ${section === "Movies" ? "Movie" : "Series"} ${favoriteIds.has(item.id) ? "from" : "to"} favorites`}
+                data-tooltip-placement="bottom"
+                onClick={() => onToggleFavorite(item)}
+                type="button"
+              >
+                <Icon name={favoriteIds.has(item.id) ? "favorite" : "favorite_border"} />
+              </button>
+            )}
+            {onAddToLibrary && (
+              <button
+                aria-label={libraryIds.has(item.id) ? `${item.name} is saved in your library` : `Add ${item.name} to your watchlist`}
+                aria-pressed={libraryIds.has(item.id)}
+                className={`catalog-library-button${libraryIds.has(item.id) ? " selected" : ""}`}
+                data-tooltip={libraryIds.has(item.id) ? "Already in your library" : "Add to watchlist"}
+                data-tooltip-placement="bottom"
+                disabled={libraryIds.has(item.id)}
+                onClick={() => onAddToLibrary(item)}
+                type="button"
+              >
+                <Icon name={libraryIds.has(item.id) ? "check" : "library_add"} />
+              </button>
+            )}
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+function OfflineDownloadAction({
+  media,
+  downloadedIds,
+  activeDownloadIds,
+  onDownload,
+  compact = false,
+}: {
+  media: DownloadableMedia;
+  downloadedIds: ReadonlySet<string>;
+  activeDownloadIds: ReadonlySet<string>;
+  onDownload: (media: DownloadableMedia) => void;
+  compact?: boolean;
+}) {
+  const id = downloadIdFor(media);
+  const downloaded = downloadedIds.has(id);
+  const downloading = activeDownloadIds.has(id);
+  const supported = canDownloadMedia(media);
+  const label = downloaded ? "Downloaded" : downloading ? "Downloading…" : "Download";
+  return (
+    <button
+      aria-label={`${label} ${media.title}`}
+      className={`${compact ? "icon-button download-action-compact episode-download-action" : "secondary-button download-action"}`}
+      disabled={!supported || downloaded || downloading}
+      onClick={() => onDownload(media)}
+      data-tooltip={!supported
+        ? "Only direct, non-DRM video files can be saved offline."
+        : downloaded ? "Already saved for offline playback" : downloading ? "Download in progress" : "Download for offline playback"}
+      data-tooltip-placement={compact ? "left" : undefined}
+      type="button"
+    >
+      <Icon name={downloaded ? "check" : downloading ? "downloading" : "download"} />
+      {!compact && label}
+    </button>
   );
 }
 
@@ -796,11 +851,22 @@ export function MovieDetail({
   onFavorite,
   onAddToLibrary,
   onRemoveFromLibrary,
+  onDownload,
+  downloadedIds = new Set(),
+  activeDownloadIds = new Set(),
   ratingsService,
   onOpenMovie,
+  relatedFavoriteIds = new Set(),
+  relatedLibraryIds = new Set(),
+  onToggleRelatedFavorite,
+  onAddRelatedToLibrary,
 }: {
   ratingsService?: RatingsService;
   movie: Movie;
+  relatedFavoriteIds?: ReadonlySet<string>;
+  relatedLibraryIds?: ReadonlySet<string>;
+  onToggleRelatedFavorite?: (movie: Movie) => void;
+  onAddRelatedToLibrary?: (movie: Movie) => void;
   playlistMovies?: Movie[];
   favorite: boolean;
   inLibrary: boolean;
@@ -810,12 +876,15 @@ export function MovieDetail({
   onFavorite: () => void;
   onAddToLibrary: () => void;
   onRemoveFromLibrary: () => void;
+  onDownload?: (media: DownloadableMedia) => void;
+  downloadedIds?: ReadonlySet<string>;
+  activeDownloadIds?: ReadonlySet<string>;
   onOpenMovie?: (movie: Movie) => void;
 }) {
   const relatedMovies = relatedPlaylistItems(movie, playlistMovies);
   return (
     <section className="series-detail-page">
-      <button className="back-button" onClick={onBack} type="button"><Icon name="arrow_back" /> Movies</button>
+      <button className="back-button" data-tooltip="Back to Movies overview" onClick={onBack} type="button"><Icon name="arrow_back" /> Movies</button>
       <header className="series-detail-header">
         {movie.posterUrl && <img alt="" aria-hidden="true" className="detail-backdrop" src={movie.posterUrl} />}
         {movie.posterUrl ? <img alt="" src={movie.posterUrl} /> : <div className="movie-detail-poster"><Icon name="movie" /></div>}
@@ -843,21 +912,43 @@ export function MovieDetail({
             </button>
             <button
               aria-pressed={inLibrary}
-              className={`secondary-button${inLibrary ? " selected" : ""}`}
+              className={`secondary-button library-action${inLibrary ? " selected" : ""}`}
+              data-tooltip={inLibrary ? "Remove from library" : "Add to watchlist"}
               onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >
               <Icon name={inLibrary ? "delete" : "library_add"} />
               {inLibrary ? "Remove from library" : "Add to watchlist"}
             </button>
+            {onDownload && (
+              <OfflineDownloadAction
+                activeDownloadIds={activeDownloadIds}
+                downloadedIds={downloadedIds}
+                media={{
+                  id: movie.id,
+                  playlistId: movie.playlistId,
+                  contentType: "MOVIE",
+                  title: movie.name,
+                  streamUrl: movie.streamUrl,
+                  artworkUrl: movie.posterUrl,
+                  drmLicenseUrl: movie.drmLicenseUrl,
+                  drmSystem: movie.drmSystem,
+                }}
+                onDownload={onDownload}
+              />
+            )}
           </div>
         </div>
       </header>
       {onOpenMovie && (
         <MoreFromPlaylist
-          items={relatedMovies}
-          onSelect={onOpenMovie}
-          section="Movies"
+      favoriteIds={relatedFavoriteIds}
+      libraryIds={relatedLibraryIds}
+      items={relatedMovies}
+      onAddToLibrary={onAddRelatedToLibrary}
+      onToggleFavorite={onToggleRelatedFavorite}
+      onSelect={onOpenMovie}
+      section="Movies"
         />
       )}
     </section>
@@ -898,10 +989,24 @@ export function SeriesDetail({
   ratingsService,
   playlistSeries = [],
   onOpenSeries,
+  onDownload,
+  downloadedIds = new Set(),
+  activeDownloadIds = new Set(),
+  relatedFavoriteIds = new Set(),
+  relatedLibraryIds = new Set(),
+  onToggleRelatedFavorite,
+  onAddRelatedToLibrary,
 }: {
   ratingsService?: RatingsService;
   playlistSeries?: Series[];
   onOpenSeries?: (series: Series) => void;
+  onDownload?: (media: DownloadableMedia) => void;
+  downloadedIds?: ReadonlySet<string>;
+  activeDownloadIds?: ReadonlySet<string>;
+  relatedFavoriteIds?: ReadonlySet<string>;
+  relatedLibraryIds?: ReadonlySet<string>;
+  onToggleRelatedFavorite?: (series: Series) => void;
+  onAddRelatedToLibrary?: (series: Series) => void;
   series: Series;
   episodes: Episode[];
   showAdultContent: boolean;
@@ -945,7 +1050,7 @@ export function SeriesDetail({
 
   return (
     <section className="series-detail-page">
-      <button className="back-button" onClick={onBack} type="button"><Icon name="arrow_back" /> Series</button>
+      <button className="back-button" data-tooltip="Back to Series overview" onClick={onBack} type="button"><Icon name="arrow_back" /> Series</button>
       <header className="series-detail-header">
         {series.posterUrl && <img alt="" aria-hidden="true" className="detail-backdrop" src={series.posterUrl} />}
         {series.posterUrl
@@ -984,7 +1089,8 @@ export function SeriesDetail({
             </button>
             <button
               aria-pressed={inLibrary}
-              className={`secondary-button${inLibrary ? " selected" : ""}`}
+              className={`secondary-button library-action${inLibrary ? " selected" : ""}`}
+              data-tooltip={inLibrary ? "Remove from library" : "Add to watchlist"}
               onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >
@@ -1025,24 +1131,50 @@ export function SeriesDetail({
       )}
       <div className="episode-list">
         {visible.map((episode) => (
-          <button
-            className="episode-row"
-            key={episode.id}
-            onClick={() => onPlay(playableEpisode(series, episode))}
-            type="button"
-          >
-            <span className="episode-play"><Icon name="play_arrow" /></span>
-            <span className="episode-copy">
-              <strong> S{String(episode.season).padStart(2, "0")} E{String(episode.number).padStart(2, "0")} · {episode.name}</strong>
-              {episode.overview && <small>{episode.overview}</small>}
-            </span>
-            <Icon name="arrow_forward" />
-          </button>
+          <div className="episode-download-row" key={episode.id}>
+            <button
+              className="episode-row"
+              data-tooltip="Play episode"
+              data-tooltip-placement="bottom"
+              onClick={() => onPlay(playableEpisode(series, episode))}
+              type="button"
+            >
+              <span className="episode-play"><Icon name="play_arrow" /></span>
+              <span className="episode-copy">
+                <strong> S{String(episode.season).padStart(2, "0")} E{String(episode.number).padStart(2, "0")} · {episode.name}</strong>
+                {episode.overview && <small>{episode.overview}</small>}
+              </span>
+              <Icon name="arrow_forward" />
+            </button>
+            {onDownload && (
+              <OfflineDownloadAction
+                activeDownloadIds={activeDownloadIds}
+                compact
+                downloadedIds={downloadedIds}
+                media={{
+                  id: episode.id,
+                  playlistId: episode.playlistId,
+                  contentType: "EPISODE",
+                  title: `${series.name} · S${String(episode.season).padStart(2, "0")} E${String(episode.number).padStart(2, "0")} · ${episode.name}`,
+                  streamUrl: episode.streamUrl,
+                  artworkUrl: episode.posterUrl || series.posterUrl,
+                  parentTitle: series.name,
+                  drmLicenseUrl: episode.drmLicenseUrl,
+                  drmSystem: episode.drmSystem,
+                }}
+                onDownload={onDownload}
+              />
+            )}
+          </div>
         ))}
       </div>
       {onOpenSeries && (
         <MoreFromPlaylist
+          favoriteIds={relatedFavoriteIds}
+          libraryIds={relatedLibraryIds}
           items={relatedSeries}
+          onAddToLibrary={onAddRelatedToLibrary}
+          onToggleFavorite={onToggleRelatedFavorite}
           onSelect={onOpenSeries}
           section="Series"
         />
@@ -1059,6 +1191,9 @@ export function LibraryPage({
   onRemove,
   onRemoveFavorite,
   onOpenFavorite,
+  onBrowseMovies,
+  sourceCount,
+  onAddSource,
 }: {
   library: LibraryItem[];
   favorites: Favorite[];
@@ -1067,14 +1202,19 @@ export function LibraryPage({
   onRemove: (id: string, title: string) => void;
   onRemoveFavorite: (favorite: Favorite) => void;
   onOpenFavorite?: (favorite: Favorite) => void;
+  onBrowseMovies?: () => void;
+  sourceCount: number;
+  onAddSource: () => void;
 }) {
   const [tab, setTab] = useState<"Continue watching" | "Watchlist" | "Watched" | "Favorites">("Continue watching");
   const [contentFilter, setContentFilter] = useState<LibraryGroupKey | "ALL">("ALL");
   const watching = [...library]
-    .filter((item) => item.status === "WATCHING")
+    .filter((item) => item.status === "WATCHING" && item.contentType !== "LIVE")
     .sort((a, b) => b.updatedAt - a.updatedAt);
-  const watchlist = library.filter((item) => item.status === "WATCHLIST");
-  const watched = library.filter((item) => item.status === "WATCHED").sort((a, b) => b.updatedAt - a.updatedAt);
+  const watchlist = library.filter((item) => item.status === "WATCHLIST" && item.contentType !== "LIVE");
+  const watched = library
+    .filter((item) => item.status === "WATCHED" && item.contentType !== "LIVE")
+    .sort((a, b) => b.updatedAt - a.updatedAt);
   const content = tab === "Continue watching" ? watching : tab === "Watchlist" ? watchlist : tab === "Watched" ? watched : [];
   const activeItems = tab === "Favorites" ? favorites : content;
   const visibleContent = contentFilter === "ALL"
@@ -1083,6 +1223,23 @@ export function LibraryPage({
   const visibleFavorites = contentFilter === "ALL"
     ? favorites
     : favorites.filter((favorite) => libraryGroupFor(favorite.contentType) === contentFilter);
+
+  if (sourceCount === 0) {
+    return <NoSourceEmptyState onAddSource={onAddSource} />;
+  }
+
+  if (library.length === 0 && favorites.length === 0) {
+    return (
+      <HomeEmptyState
+        actionIcon="play_arrow"
+        actionLabel="Start watching"
+        description="Start watching a movie, series, or live channel and it will appear here."
+        eyebrow="YOUR LIBRARY"
+        onAction={() => onBrowseMovies?.()}
+        title="Your library is empty"
+      />
+    );
+  }
 
   function playLibraryItem(item: LibraryItem) {
     if (!item.streamUrl) return;
@@ -1136,6 +1293,7 @@ export function LibraryPage({
           </button>
           {LIBRARY_CONTENT_GROUPS.map((group) => {
             const count = activeItems.filter((item) => libraryGroupFor(item.contentType) === group.key).length;
+            if (count === 0) return null;
             return (
               <button
                 aria-pressed={contentFilter === group.key}
@@ -1197,6 +1355,7 @@ export function LibraryPage({
                   <button
                     aria-label={`Play ${favorite.title}`}
                     className="icon-button"
+                    data-tooltip="Play"
                     onClick={() => onPlay({
                       id: favorite.contentId,
                       playlistId: favorite.playlistId,
@@ -1213,7 +1372,7 @@ export function LibraryPage({
                     <Icon name="play_arrow" />
                   </button>
                 )}
-                <button aria-label={`Remove ${favorite.title} from favorites`} className="icon-button" onClick={() => onRemoveFavorite(favorite)} type="button">
+                <button aria-label={`Remove ${favorite.title} from favorites`} className="icon-button" data-tooltip="Remove from favorites" onClick={() => onRemoveFavorite(favorite)} type="button">
                   <Icon name="favorite" />
                 </button>
               </article>
@@ -1271,7 +1430,7 @@ export function LibraryPage({
                         variant="compact"
                       />
                     </div>
-                    <button aria-label={`Remove ${item.title} from library`} className="icon-button" onClick={() => onRemove(item.id, item.title)} type="button">
+                    <button aria-label={`Remove ${item.title} from library`} className="icon-button" data-tooltip="Remove from library" onClick={() => onRemove(item.id, item.title)} type="button">
                       <Icon name="delete" />
                     </button>
             </article>

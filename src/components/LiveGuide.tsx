@@ -27,11 +27,8 @@ export function LiveGuide({
   activeChannelId,
   selectedChannelId,
   loading,
-  playerCollapsed,
   onLoadGuideForChannels,
   onPlay,
-  onClose,
-  onTogglePlayer,
 }: {
   channels: LiveChannel[];
   epg: EpgProgram[];
@@ -39,16 +36,13 @@ export function LiveGuide({
   activeChannelId?: string;
   selectedChannelId?: string;
   loading: boolean;
-  playerCollapsed: boolean;
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (channel: LiveChannel) => void;
-  onClose: () => void;
-  onTogglePlayer: () => void;
 }) {
   const [date, setDate] = useState(() => startOfLocalDay(new Date()));
   const [now, setNow] = useState(Date.now());
   const [scope, setScope] = useState("all");
-  const [onlyWithEpg, setOnlyWithEpg] = useState(false);
+  const [onlyWithEpg, setOnlyWithEpg] = useState(true);
   const [compact, setCompact] = useState(false);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [channelQuery, setChannelQuery] = useState("");
@@ -162,20 +156,37 @@ export function LiveGuide({
 
   return (
     <section aria-label="Full TV guide" className="live-guide-workspace">
-      <header className="live-guide-heading">
+      <header className="page-intro catalog-intro live-guide-page-heading">
         <div>
           <p className="eyebrow">CHANNELS · PROGRAMME TIMES</p>
-          <h2>TV Guide</h2>
+          <h1>TV Guide</h1>
           <p>{rows.length.toLocaleString()} of {channels.length.toLocaleString()} channels{loading ? " · Loading listings…" : ""}</p>
         </div>
-        <div className="live-guide-heading-actions">
-          <button className="secondary-button" onClick={onTogglePlayer} type="button">
-            <Icon name={playerCollapsed ? "fullscreen" : "horizontal_rule"} />
-            {playerCollapsed ? "Show player" : "Collapse player"}
-          </button>
-          <button aria-label="Close guide" className="icon-button" onClick={onClose} type="button">
-            <Icon name="close" />
-          </button>
+        <div className="catalog-controls live-guide-page-controls">
+          <label className="search-field">
+            <Icon name="search" />
+            <span className="sr-only">Filter channels</span>
+            <input onChange={(event) => setChannelQuery(event.target.value)} placeholder="Filter channels…" value={channelQuery} />
+          </label>
+          <label className="search-field">
+            <Icon name="search" />
+            <span className="sr-only">Search programmes</span>
+            <input onChange={(event) => setProgramQuery(event.target.value)} placeholder="Search programmes…" value={programQuery} />
+          </label>
+          <div className="live-guide-select">
+            <Icon name="filter_list" />
+            <CustomSelect
+              ariaLabel="Channel group"
+              onValueChange={setScope}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Favorites", value: "favorites" },
+                ...groups.map((group) => ({ label: group, value: group })),
+              ]}
+              value={scope}
+              variant="embedded"
+            />
+          </div>
         </div>
       </header>
 
@@ -190,20 +201,6 @@ export function LiveGuide({
           </button>
           <button className="secondary-button" onClick={jumpToNow} type="button">Now</button>
         </div>
-        <div className="live-guide-select">
-          <Icon name="filter_list" />
-          <CustomSelect
-            ariaLabel="Channel group"
-            onValueChange={setScope}
-            options={[
-              { label: "All channels", value: "all" },
-              { label: "Favorites", value: "favorites" },
-              ...groups.map((group) => ({ label: group, value: group })),
-            ]}
-            value={scope}
-            variant="embedded"
-          />
-        </div>
         <label className="live-guide-only-epg">
           <input checked={onlyWithEpg} onChange={(event) => setOnlyWithEpg(event.target.checked)} type="checkbox" />
           <span>Only with EPG</span>
@@ -212,7 +209,7 @@ export function LiveGuide({
           aria-pressed={compact}
           className={`icon-button${compact ? " selected" : ""}`}
           onClick={() => setCompact((value) => !value)}
-          title={compact ? "Comfortable row height" : "Compact row height"}
+          data-tooltip={compact ? "Comfortable row height" : "Compact row height"}
           type="button"
         >
           <Icon name="view_list" />
@@ -228,18 +225,8 @@ export function LiveGuide({
             step="5"
             type="range"
             value={zoomPercent}
-            title={`${zoomPercent}%`}
+            data-tooltip={`${zoomPercent}%`}
           />
-        </label>
-        <label className="live-guide-search">
-          <Icon name="search" />
-          <span className="sr-only">Filter channels</span>
-          <input onChange={(event) => setChannelQuery(event.target.value)} placeholder="Filter channels…" value={channelQuery} />
-        </label>
-        <label className="live-guide-search">
-          <Icon name="search" />
-          <span className="sr-only">Search programmes</span>
-          <input onChange={(event) => setProgramQuery(event.target.value)} placeholder="Search programmes…" value={programQuery} />
         </label>
       </div>
 
@@ -288,7 +275,7 @@ export function LiveGuide({
                     className={`live-guide-channel${channel.id === activeChannelId ? " is-playing" : ""}`}
                     onClick={() => onPlay(channel)}
                     role="rowheader"
-                    title={`${channel.name} · ${channel.group}`}
+                    data-tooltip={`${channel.name} · ${channel.group}`}
                     type="button"
                   >
                     <span className="live-guide-channel-logo">
@@ -316,7 +303,7 @@ export function LiveGuide({
                           key={program.id}
                           onClick={() => onPlay(channel)}
                           style={{ left: `${block.left}px`, width: `${block.width}px` }}
-                          title={`${program.title} · ${formatTime(program.startMillis)}–${formatTime(program.endMillis)}`}
+                          data-tooltip={`${program.title} · ${formatTime(program.startMillis)}–${formatTime(program.endMillis)}`}
                           type="button"
                         >
                           <small>{formatTime(program.startMillis)} – {formatTime(program.endMillis)}</small>

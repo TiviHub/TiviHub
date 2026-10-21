@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/dom";
 
 type HorizontalDragTrackProps = Omit<
   HTMLAttributes<HTMLDivElement>,
@@ -92,8 +93,10 @@ export type IconName =
   | "home"
   | "live_tv"
   | "movie"
+  | "theaters"
   | "tv"
   | "bookmark"
+  | "bookmark_border"
   | "settings"
   | "play_arrow"
   | "arrow_forward"
@@ -106,6 +109,10 @@ export type IconName =
   | "brightness_auto"
   | "check"
   | "download"
+  | "downloading"
+  | "folder"
+  | "folder_open"
+  | "delete_sweep"
   | "close"
   | "playlist_play"
   | "dns"
@@ -150,17 +157,122 @@ export function Icon({ name }: { name: IconName }) {
   const iconRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const button = iconRef.current?.closest("button");
-    if (!button || (button.title && button.dataset.iconTooltip !== "true")) return;
+    if (!button) return;
+    if (button.title) {
+      button.dataset.tooltip ??= button.title;
+      button.removeAttribute("title");
+      return;
+    }
+    if (button.dataset.tooltip) return;
     const clone = button.cloneNode(true) as HTMLButtonElement;
     clone.querySelectorAll(".material-icons").forEach((icon) => icon.remove());
     const label = button.getAttribute("aria-label")?.trim() || clone.textContent?.trim() || "";
-    if (label) {
-      button.title = label;
-      button.dataset.iconTooltip = "true";
-    }
+    if (label) button.dataset.tooltip = label;
   }, [name]);
 
   return <span aria-hidden="true" className="material-icons" ref={iconRef}>{name}</span>;
+}
+
+type TooltipState = {
+  text: string;
+  target: HTMLElement;
+};
+
+export function TooltipLayer() {
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const activeTargetRef = useRef<HTMLElement | null>(null);
+  const activeTextRef = useRef("");
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!tooltip || !tooltipRef.current) return;
+    const floatingElement = tooltipRef.current;
+    const referenceElement = tooltip.target.matches(".episode-row")
+      ? tooltip.target.querySelector<HTMLElement>(".episode-play") ?? tooltip.target
+      : tooltip.target;
+    const updatePosition = () => {
+      const placement = tooltip.target.dataset.tooltipPlacement;
+      void computePosition(referenceElement, floatingElement, {
+        placement: placement === "bottom" || placement === "left"
+          ? placement
+          : tooltip.target.closest(".sidebar")
+            ? "right"
+            : "top",
+        strategy: "fixed",
+        middleware: [offset(8), flip(), shift({ padding: 8 })],
+      }).then(({ x, y }) => setPosition({ x, y }));
+    };
+    return autoUpdate(referenceElement, floatingElement, updatePosition);
+  }, [tooltip]);
+
+  useEffect(() => {
+    const clearTooltip = () => {
+      activeTargetRef.current = null;
+      activeTextRef.current = "";
+      setPosition(null);
+      setTooltip(null);
+    };
+    const showTooltip = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return;
+      const element = target.closest<HTMLElement>("button:not(.global-search-button)");
+      const text = element?.dataset.tooltip?.trim() || element?.getAttribute("aria-label")?.trim();
+      const isNavigationButton = Boolean(element?.closest(".sidebar, .topbar"));
+      const isEpisodeAction = Boolean(element?.matches(".episode-row, .episode-download-action"));
+      const isLibraryAction = Boolean(element?.matches(".catalog-library-button, .library-action"));
+      const isSourceAction = Boolean(element?.matches(".settings-source-action"));
+      const isIconAction = Boolean(element?.matches(".icon-button, .favorite-button, .live-channel-favorite, .catalog-library-button"));
+      if (
+        !element ||
+        element.closest(".global-search-dialog") ||
+        !text ||
+        (!isNavigationButton && !isIconAction && !isEpisodeAction && !isLibraryAction && !isSourceAction)
+      ) return;
+      if (activeTargetRef.current === element && activeTextRef.current === text) return;
+
+      activeTargetRef.current = element;
+      activeTextRef.current = text;
+      setPosition(null);
+      setTooltip({ text, target: element });
+    };
+    const handlePointerOut = (event: PointerEvent) => {
+      const activeTarget = activeTargetRef.current;
+      if (!activeTarget || (event.relatedTarget instanceof Node && activeTarget.contains(event.relatedTarget))) return;
+      clearTooltip();
+    };
+    const handleFocusOut = (event: FocusEvent) => {
+      const activeTarget = activeTargetRef.current;
+      if (!activeTarget || (event.relatedTarget instanceof Node && activeTarget.contains(event.relatedTarget))) return;
+      if (activeTarget.matches(":hover")) return;
+      clearTooltip();
+    };
+    const handlePointerOver = (event: PointerEvent) => showTooltip(event.target);
+    const handleFocusIn = (event: FocusEvent) => showTooltip(event.target);
+
+    document.addEventListener("pointerover", handlePointerOver, true);
+    document.addEventListener("pointerout", handlePointerOut, true);
+    document.addEventListener("focusin", handleFocusIn, true);
+    document.addEventListener("focusout", handleFocusOut, true);
+    return () => {
+      document.removeEventListener("pointerover", handlePointerOver, true);
+      document.removeEventListener("pointerout", handlePointerOut, true);
+      document.removeEventListener("focusin", handleFocusIn, true);
+      document.removeEventListener("focusout", handleFocusOut, true);
+    };
+  }, []);
+
+  if (!tooltip) return null;
+  return createPortal(
+    <div
+      className="app-tooltip"
+      ref={tooltipRef}
+      role="tooltip"
+      style={position ? { position: "fixed", left: position.x, top: position.y } : { position: "fixed" }}
+    >
+      {tooltip.text}
+    </div>,
+    document.body,
+  );
 }
 
 export type CustomSelectOption<Value extends string = string> = {
@@ -384,7 +496,7 @@ export function CustomSelect<Value extends string = string>({
         onKeyDown={onTriggerKeyDown}
         ref={triggerRef}
         role="combobox"
-        title={title}
+        data-tooltip={title}
         type="button"
       >
         <span className="custom-select-value">{selectedOption?.label ?? placeholder}</span>

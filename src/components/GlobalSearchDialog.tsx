@@ -40,9 +40,11 @@ export function GlobalSearchDialog({
   const commands: CommandOption[] = useMemo(() => [
     { command: { kind: "navigate", section: "Home" }, icon: "home", label: "Go to Home", keywords: "home start" },
     { command: { kind: "navigate", section: "Live TV" }, icon: "live_tv", label: "Go to Live TV", keywords: "channels live" },
+    { command: { kind: "navigate", section: "TV Guide" }, icon: "schedule", label: "Go to TV Guide", keywords: "epg guide programmes listings" },
     { command: { kind: "navigate", section: "Movies" }, icon: "movie", label: "Go to Movies", keywords: "films cinema" },
     { command: { kind: "navigate", section: "Series" }, icon: "tv", label: "Go to Series", keywords: "shows tv" },
     { command: { kind: "navigate", section: "Library" }, icon: "bookmark", label: "Go to Library", keywords: "watchlist favorites" },
+    { command: { kind: "navigate", section: "Downloads" }, icon: "download", label: "Go to Downloads", keywords: "offline saved videos" },
     { command: { kind: "navigate", section: "Settings" }, icon: "settings", label: "Go to Settings", keywords: "preferences theme" },
     { command: { kind: "add-source" }, icon: "add", label: "Add a source", keywords: "playlist connect" },
     ...(canRefresh

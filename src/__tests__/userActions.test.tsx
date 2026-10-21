@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { LibraryPage } from "../components/ContentPages";
+import { TooltipLayer } from "../components/common";
 import { PlaylistDeletionProgress } from "../components/PlaylistDeletionProgress";
 import { PlaylistDialog, type PlaylistDraft } from "../components/PlaylistDialog";
 import { SettingsPage } from "../components/SettingsPage";
@@ -30,6 +31,10 @@ const settingsProps: ComponentProps<typeof SettingsPage> = {
   onSetShowAdultContent: vi.fn(),
   sources: [source, { ...source, id: "other-source", name: "Bedroom", active: false }],
   activeSourceId: source.id,
+  downloadDirectoryPath: null,
+  completedDownloadCount: 0,
+  onChangeDownloadDirectory: vi.fn(),
+  onClearCompletedDownloads: vi.fn(),
   onAddSource: vi.fn(),
   onActivate: vi.fn(),
   onEdit: vi.fn(),
@@ -77,6 +82,70 @@ afterEach(() => {
 });
 
 describe("settings user actions", () => {
+  it("exposes download-folder configuration in its own settings section", async () => {
+    const user = userEvent.setup();
+    const onChangeDownloadDirectory = vi.fn();
+    const onClearCompletedDownloads = vi.fn();
+    render(
+      <>
+        <TooltipLayer />
+        <SettingsPage
+          {...settingsProps}
+          completedDownloadCount={2}
+          onChangeDownloadDirectory={onChangeDownloadDirectory}
+          onClearCompletedDownloads={onClearCompletedDownloads}
+        />
+      </>,
+    );
+
+    const downloadsLink = screen.getByRole("link", { name: "Downloads" });
+    expect(downloadsLink.getAttribute("href")).toBe("#settings-downloads");
+    expect(document.getElementById("settings-downloads")).toBeTruthy();
+    expect(screen.getByText("No additional folder selected")).toBeTruthy();
+    const editButton = screen.getByRole("button", { name: "Edit Living room" });
+    const removeButton = screen.getByRole("button", { name: "Delete Living room" });
+    expect(editButton.getAttribute("data-tooltip")).toBe("Edit playlist");
+    expect(removeButton.getAttribute("data-tooltip")).toBe("Remove playlist");
+    await user.hover(editButton);
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Edit playlist");
+    await user.unhover(editButton);
+    await user.hover(removeButton);
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Remove playlist");
+    await user.unhover(removeButton);
+    const navSectionIds = within(screen.getByRole("navigation", { name: "Settings sections" }))
+      .getAllByRole("link")
+      .slice(0, 4)
+      .map((link) => link.getAttribute("href")?.slice(1));
+    const contentSectionIds = Array.from(document.querySelectorAll(".settings-content > .settings-group"))
+      .slice(0, 4)
+      .map((section) => section.id);
+    expect(navSectionIds).toEqual(contentSectionIds);
+
+    await user.click(screen.getByRole("button", { name: "Change folder" }));
+    expect(onChangeDownloadDirectory).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Clear completed downloads" }));
+    expect(onClearCompletedDownloads).toHaveBeenCalledOnce();
+  });
+
+  it("shows the selected download folder path", () => {
+    const downloadDirectoryPath = "C:\\Users\\Amir\\Downloads";
+    render(<SettingsPage {...settingsProps} downloadDirectoryPath={downloadDirectoryPath} />);
+    expect(screen.getByText(downloadDirectoryPath)).toBeTruthy();
+  });
+
+  it("shows playlist expiry as a date and time", () => {
+    const expiresAtMillis = Date.now() - 60_000;
+    const formattedExpiry = new Date(expiresAtMillis).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    render(
+      <SettingsPage
+        {...settingsProps}
+        sources={[{ ...source, expiresAtMillis }]}
+      />,
+    );
+
+    expect(screen.getByText(`M3U · Expired ${formattedExpiry}`)).toBeTruthy();
+  });
+
   it("links to both API key pages and opens them through the desktop handler", async () => {
     const user = userEvent.setup();
     const onOpenExternalUrl = vi.fn(async () => undefined);
@@ -153,6 +222,28 @@ describe("settings user actions", () => {
     expect(props.onSetShowAdultContent).toHaveBeenCalledWith(true);
     expect(props.onSaveApiKey).toHaveBeenCalledWith("test-api-key");
     expect((await screen.findByRole("status")).textContent).toContain("OpenSubtitles API key saved on this device.");
+  });
+});
+
+describe("shared tooltip behavior", () => {
+  it("hides a sidebar tooltip on pointer exit even when its button remains focused", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <TooltipLayer />
+        <aside className="sidebar">
+          <button aria-label="Home" data-tooltip="Home" type="button">Home</button>
+        </aside>
+      </>,
+    );
+    const homeButton = screen.getByRole("button", { name: "Home" });
+
+    await user.hover(homeButton);
+    expect(await screen.findByRole("tooltip")).toBeTruthy();
+    await user.click(homeButton);
+    await user.unhover(homeButton);
+
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
   });
 });
 
@@ -245,7 +336,7 @@ describe("library user actions", () => {
   it("filters content, changes status, plays, and removes a saved item", async () => {
     const user = userEvent.setup();
     const items = [
-      makeLibraryItem("News", "LIVE"),
+      makeLibraryItem("News", "LIVE", "WATCHED"),
       makeLibraryItem("Movie", "MOVIE"),
       { ...makeLibraryItem("Episode", "EPISODE"), parentTitle: "Series" },
     ];
@@ -263,18 +354,24 @@ describe("library user actions", () => {
     const onRemoveFavorite = vi.fn();
     const onOpenFavorite = vi.fn();
     render(
-      <LibraryPage
-        favorites={favorites}
-        library={items}
-        onChangeStatus={onChangeStatus}
-        onOpenFavorite={onOpenFavorite}
-        onPlay={onPlay}
-        onRemove={onRemove}
-        onRemoveFavorite={onRemoveFavorite}
-      />,
+      <>
+        <TooltipLayer />
+        <LibraryPage
+          favorites={favorites}
+          library={items}
+          sourceCount={1}
+          onAddSource={vi.fn()}
+          onChangeStatus={onChangeStatus}
+          onOpenFavorite={onOpenFavorite}
+          onPlay={onPlay}
+          onRemove={onRemove}
+          onRemoveFavorite={onRemoveFavorite}
+        />
+      </>,
     );
 
     let contentFilters = screen.getByRole("group", { name: "Filter Continue watching by content type" });
+    expect(screen.queryByText("News")).toBeNull();
     await user.click(within(contentFilters).getByRole("button", { name: /Movies/ }));
     expect(screen.getByText("Movie")).toBeTruthy();
     expect(screen.queryByText("News")).toBeNull();
@@ -289,16 +386,124 @@ describe("library user actions", () => {
     contentFilters = screen.getByRole("group", { name: "Filter Favorites by content type" });
     await user.click(within(contentFilters).getByRole("button", { name: /Series/ }));
     expect(screen.getByText("Favorite series")).toBeTruthy();
+    const removeFavoriteButton = screen.getByRole("button", { name: "Remove Favorite series from favorites" });
+    expect(removeFavoriteButton.getAttribute("data-tooltip")).toBe("Remove from favorites");
+    await user.hover(removeFavoriteButton);
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Remove from favorites");
+    await user.unhover(removeFavoriteButton);
     const favoriteThumb = screen.getByRole("button", { name: "View details for Favorite series" });
     expect(favoriteThumb.querySelector(".library-item-art-play")?.textContent).toContain("See details");
     await user.click(favoriteThumb);
     expect(onOpenFavorite).toHaveBeenCalledWith(favorites[0]);
 
     await user.click(screen.getByRole("button", { name: /Continue watching/ }));
-    await user.click(screen.getByRole("button", { name: "Resume News" }));
-    expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ title: "News", live: true }), 30_000);
-    await user.click(screen.getByRole("button", { name: "Remove News from library" }));
-    expect(onRemove).toHaveBeenCalledWith("News", "News");
+    await user.click(screen.getByRole("button", { name: "Resume Movie" }));
+    expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ title: "Movie", live: false }), 30_000);
+    const removeLibraryButton = screen.getByRole("button", { name: "Remove Movie from library" });
+    expect(removeLibraryButton.getAttribute("data-tooltip")).toBe("Remove from library");
+    await user.hover(removeLibraryButton);
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Remove from library");
+    await user.click(removeLibraryButton);
+    expect(onRemove).toHaveBeenCalledWith("Movie", "Movie");
     expect(onRemoveFavorite).not.toHaveBeenCalled();
+  });
+
+  it("shows the add-source panel when no playlist exists", async () => {
+    const user = userEvent.setup();
+    const onAddSource = vi.fn();
+    render(
+      <LibraryPage
+        favorites={[]}
+        library={[]}
+        sourceCount={0}
+        onAddSource={onAddSource}
+        onChangeStatus={vi.fn()}
+        onPlay={vi.fn()}
+        onRemove={vi.fn()}
+        onRemoveFavorite={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Add your first source" })).toBeTruthy();
+    expect(document.querySelector(".home-empty .home-empty-panel")).toBeTruthy();
+    expect(document.querySelector(".library-page")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Add source/ }));
+    expect(onAddSource).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the library-specific empty state when a playlist exists", () => {
+    render(
+      <LibraryPage
+        favorites={[]}
+        library={[]}
+        sourceCount={1}
+        onAddSource={vi.fn()}
+        onChangeStatus={vi.fn()}
+        onPlay={vi.fn()}
+        onRemove={vi.fn()}
+        onRemoveFavorite={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Your library is empty" })).toBeTruthy();
+  });
+
+  it("keeps live channels only in favorites, not watch-progress tabs", async () => {
+    const user = userEvent.setup();
+    const liveFavorite: Favorite = {
+      id: "news-favorite",
+      contentId: "News",
+      contentType: "LIVE",
+      title: "News",
+      playlistId: source.id,
+      streamUrl: "https://provider.example/News.m3u8",
+      addedAt: 1,
+    };
+    render(
+      <LibraryPage
+        favorites={[liveFavorite]}
+        library={[
+          makeLibraryItem("Movie", "MOVIE"),
+          makeLibraryItem("Watchlist movie", "MOVIE", "WATCHLIST"),
+          makeLibraryItem("Watched movie", "MOVIE", "WATCHED"),
+          makeLibraryItem("Continue news", "LIVE", "WATCHING"),
+          makeLibraryItem("Watchlist news", "LIVE", "WATCHLIST"),
+          makeLibraryItem("Watched news", "LIVE", "WATCHED"),
+        ]}
+        sourceCount={1}
+        onAddSource={vi.fn()}
+        onChangeStatus={vi.fn()}
+        onPlay={vi.fn()}
+        onRemove={vi.fn()}
+        onRemoveFavorite={vi.fn()}
+      />,
+    );
+
+    expect(
+      within(screen.getByRole("group", { name: "Filter Continue watching by content type" }))
+        .queryByRole("button", { name: /Live TV/ }),
+    ).toBeNull();
+    expect(screen.queryByText("Continue news")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Watchlist/ }));
+    expect(screen.queryByText("Watchlist news")).toBeNull();
+    expect(
+      within(screen.getByRole("group", { name: "Filter Watchlist by content type" }))
+        .queryByRole("button", { name: /Live TV/ }),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Watched/ }));
+    expect(screen.queryByText("Watched news")).toBeNull();
+    expect(
+      within(screen.getByRole("group", { name: "Filter Watched by content type" }))
+        .queryByRole("button", { name: /Live TV/ }),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Favorites/ }));
+    expect(screen.getByText("News")).toBeTruthy();
+    expect(
+      within(screen.getByRole("group", { name: "Filter Favorites by content type" }))
+        .getByRole("button", { name: /Live TV/ }),
+    ).toBeTruthy();
   });
 });

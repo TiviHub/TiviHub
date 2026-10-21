@@ -10,6 +10,7 @@ import { parseXmltvDate } from "../providers/xmltv";
 import {
   loadXtreamCatalog,
   loadXtreamShortEpg,
+  XtreamAccountExpiredError,
   xtreamStreamUrl,
   xtreamXmltvUrl,
 } from "../providers/xtream";
@@ -286,6 +287,16 @@ describe("Xtream URL construction", () => {
     })));
 
     await expect(loadXtreamCatalog(playlist)).rejects.toThrow(/200 MB limit/);
+  });
+
+  it("identifies expired Xtream accounts without requesting catalog endpoints", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      user_info: { auth: 0, status: "Expired" },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(loadXtreamCatalog(playlist)).rejects.toBeInstanceOf(XtreamAccountExpiredError);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("suggests next steps when Xtream denies access or is temporarily unavailable", async () => {

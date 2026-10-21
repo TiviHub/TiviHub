@@ -504,6 +504,7 @@ export function PlaybackDialog({
     async function load() {
       try {
         if (
+          item.offline ||
           !item.drmLicenseUrl &&
           (directMediaUrl(item.streamUrl) || nativeHlsUrl(item.streamUrl, video))
         ) {
@@ -597,8 +598,13 @@ export function PlaybackDialog({
         void player.destroy().catch((cause: unknown) => console.error("Could not close media player", cause));
       }
       playerRef.current = null;
+      if (item.offline) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      }
     };
-  }, [item.id, item.streamUrl, item.drmLicenseUrl, item.drmSystem, item.drmCertificateUrl, item.live, resumePositionMillis, castingDevice]);
+  }, [item.id, item.streamUrl, item.drmLicenseUrl, item.drmSystem, item.drmCertificateUrl, item.live, item.offline, resumePositionMillis, castingDevice]);
 
   function selectQuality(value: string) {
     const player = playerRef.current;
@@ -1009,7 +1015,7 @@ export function PlaybackDialog({
               </button>
             </>
           )}
-          {isTauri() && (
+          {isTauri() && !item.offline && (
             <button
               aria-expanded={castOpen}
               className="secondary-button"

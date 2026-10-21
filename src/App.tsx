@@ -1,16 +1,16 @@
-import { Children, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
 import { checkForUpdate, type AvailableUpdate } from "./updates";
 import { isAdultContent } from "./adultContent";
-import { sortCatalogItems } from "./catalogSorting";
 import { getCatalogImportLogSnapshot, recordCatalogImportSummary } from "./catalogImportLog";
 import { getDiagnosticLogSnapshot } from "./diagnosticLog";
 import {
   canAutoRefreshCatalog,
   catalogRefreshDueAt,
   isCatalogRefreshDue,
+  isPlaylistExpired,
 } from "./catalogCache";
 import {
   formatCatalogChangeSummary,
@@ -20,12 +20,28 @@ import {
   type CatalogCandidate,
 } from "./catalogRefresh";
 import type { GlobalSearchCommand, GlobalSearchMatch, SearchSection } from "./globalSearch";
+import {
+  canDownloadMedia,
+  chooseDownloadDirectory,
+  clearCompletedDownloads,
+  downloadIdFor,
+  downloadMedia,
+  getDownloadedBlob,
+  getDownloadDirectoryPath,
+  getDownloads,
+  removeDownload,
+  type DownloadableMedia,
+  type DownloadProgress,
+  type DownloadRecord,
+  type DownloadTask,
+} from "./downloads";
 import { fetchM3u, parseM3uCatalog, parseM3uCatalogAsync } from "./providers/m3u";
 import { fetchXmltv } from "./providers/xmltv";
 import {
   loadXtreamCatalog,
   loadXtreamEpisodes,
   loadXtreamShortEpg,
+  XtreamAccountExpiredError,
   XTREAM_SHORT_EPG_CHANNEL_BATCH_SIZE,
 } from "./providers/xtream";
 import {
@@ -78,9 +94,13 @@ import type {
 import { createRatingsService } from "./ratingsService";
 import { createPopularCatalogService } from "./popularCatalogService";
 import { configureMdblistRateLimiter } from "./mdblistRateLimit";
-import { CatalogPage, LibraryPage, MovieDetail, SeriesDetail } from "./components/ContentPages";
-import { CustomSelect, Icon, type IconName } from "./components/common";
+import { CatalogPage, LibraryPage, MovieDetail, playableChannel, SeriesDetail } from "./components/ContentPages";
+import { Icon, TooltipLayer, type IconName } from "./components/common";
 import { DesktopWindowControls } from "./components/DesktopWindowControls";
+import { DownloadsPage } from "./components/DownloadsPage";
+import { HomeEmptyState } from "./components/HomeEmptyState";
+import { LiveGuide } from "./components/LiveGuide";
+import { NoSourceEmptyState } from "./components/NoSourceEmptyState";
 import { GlobalSearchDialog } from "./components/GlobalSearchDialog";
 import { PlaybackDialog } from "./components/PlaybackDialog";
 import { PlaylistDeletionProgress } from "./components/PlaylistDeletionProgress";
@@ -92,6 +112,55 @@ import { StreamHealthCheckDialog } from "./components/StreamHealthCheckDialog";
 
 type Section = SearchSection;
 type ThemePreference = "system" | "light" | "dark";
+const HOME_LAYOUT_STORAGE_KEY = "tivihub.home.layout";
+const HOME_SHELF_KEYS = [
+  "continueWatching",
+  "watchedChannels",
+  "recentlyWatched",
+  "favoriteMovies",
+  "favoriteSeries",
+  "favoriteChannels",
+  "watchlist",
+] as const;
+type HomeShelfKey = (typeof HOME_SHELF_KEYS)[number];
+type HomeLayoutPreference = { order: HomeShelfKey[]; hidden: HomeShelfKey[] };
+
+const DEFAULT_HOME_SHELF_ORDER: HomeShelfKey[] = [...HOME_SHELF_KEYS];
+const HOME_SHELF_LABELS: Record<HomeShelfKey, string> = {
+  continueWatching: "Continue watching",
+  watchedChannels: "Recently watched channels",
+  recentlyWatched: "Recently watched movies and series",
+  favoriteMovies: "Favorite movies",
+  favoriteSeries: "Favorite series",
+  favoriteChannels: "Favorite TV channels",
+  watchlist: "Your watchlist",
+};
+
+function isHomeShelfKey(value: unknown): value is HomeShelfKey {
+  return typeof value === "string" && (HOME_SHELF_KEYS as readonly string[]).includes(value);
+}
+
+function readHomeLayoutPreference(): HomeLayoutPreference {
+  try {
+    const stored = window.localStorage.getItem(HOME_LAYOUT_STORAGE_KEY);
+    if (!stored) return { order: [...DEFAULT_HOME_SHELF_ORDER], hidden: [] };
+    const parsed: unknown = JSON.parse(stored);
+    if (typeof parsed !== "object" || parsed === null) {
+      return { order: [...DEFAULT_HOME_SHELF_ORDER], hidden: [] };
+    }
+    const record = parsed as Record<string, unknown>;
+    const storedOrder = Array.isArray(record.order) ? [...new Set(record.order.filter(isHomeShelfKey))] : [];
+    const storedHidden = Array.isArray(record.hidden) ? [...new Set(record.hidden.filter(isHomeShelfKey))] : [];
+    return {
+      order: [...storedOrder, ...DEFAULT_HOME_SHELF_ORDER.filter((key) => !storedOrder.includes(key))],
+      hidden: storedHidden,
+    };
+  } catch (cause) {
+    console.error("Could not read the local Home layout preference", cause);
+    return { order: [...DEFAULT_HOME_SHELF_ORDER], hidden: [] };
+  }
+}
+
 type NavigationEntry = {
   section: Section;
   movieId: string | null;
@@ -115,9 +184,11 @@ const ASSET_BASE_URL = import.meta.env.BASE_URL;
 const sections: { label: Section; icon: IconName }[] = [
   { label: "Home", icon: "home" },
   { label: "Live TV", icon: "live_tv" },
-  { label: "Movies", icon: "movie" },
+  { label: "TV Guide", icon: "schedule" },
+  { label: "Movies", icon: "theaters" },
   { label: "Series", icon: "tv" },
-  { label: "Library", icon: "bookmark" },
+  { label: "Library", icon: "bookmark_border" },
+  { label: "Downloads", icon: "download" },
   { label: "Settings", icon: "settings" },
 ];
 
@@ -159,6 +230,10 @@ function App() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [library, setLibrary] = useState<LibraryItem[]>([]);
+  const [downloads, setDownloads] = useState<DownloadRecord[]>([]);
+  const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
+  const [downloadDirectoryPath, setDownloadDirectoryPath] = useState<string | null>(null);
+  const [downloadsLoaded, setDownloadsLoaded] = useState(false);
   const [epg, setEpg] = useState<EpgProgram[]>([]);
   const [guideLoadCount, setGuideLoadCount] = useState(0);
   const [subtitleApiKey, setSubtitleApiKey] = useState("");
@@ -191,12 +266,15 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [notificationKey, setNotificationKey] = useState(0);
+  const [expiredSourceIds, setExpiredSourceIds] = useState<Set<string>>(() => new Set());
+  const [expiryCheckTime, setExpiryCheckTime] = useState(() => Date.now());
   const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
   const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "current" | "available" | "error">("idle");
   const requestedEpgChannels = useRef(new Set<string>());
   const activeSourceIdRef = useRef(activeSourceId);
   activeSourceIdRef.current = activeSourceId;
   const updateCheckController = useRef<AbortController | null>(null);
+  const downloadControllers = useRef(new Map<string, AbortController>());
   const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const globalSearchReturnFocusRef = useRef<HTMLElement | null>(null);
   const startupOverlayRef = useRef<HTMLDivElement>(null);
@@ -213,6 +291,11 @@ function App() {
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   }, [selectedMovie, selectedSeries]);
+
+  useLayoutEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [section]);
 
   useLayoutEffect(() => {
     if (!ready) return;
@@ -245,9 +328,31 @@ function App() {
   }, []);
 
   const activeSource = sources.find((source) => source.id === activeSourceId) ?? null;
+  const activeSourceExpired = Boolean(activeSource && (
+    isPlaylistExpired(activeSource, expiryCheckTime) || expiredSourceIds.has(activeSource.id)
+  ));
+  const downloadedIds = useMemo(() => new Set(downloads.map((download) => download.id)), [downloads]);
+  const activeDownloadIds = useMemo(
+    () => new Set(downloadTasks.filter((task) => task.status === "downloading").map((task) => task.id)),
+    [downloadTasks],
+  );
   const blockingDialogOpen = sourceDialogOpen ||
     Boolean(playableItem && !(inlineLivePlayback && playableItem.live)) ||
     Boolean(streamHealthRequest);
+  const canOpenGlobalSearch = ready &&
+    !refreshing &&
+    !sourceDialogOpen &&
+    (!playableItem || (inlineLivePlayback && playableItem.live));
+
+  useEffect(() => {
+    const expiresAtMillis = activeSource?.expiresAtMillis;
+    if (expiresAtMillis === undefined || expiresAtMillis <= expiryCheckTime) return;
+    const timer = window.setTimeout(
+      () => setExpiryCheckTime(Date.now()),
+      Math.min(expiresAtMillis - expiryCheckTime, 2_147_000_000),
+    );
+    return () => window.clearTimeout(timer);
+  }, [activeSource?.expiresAtMillis, activeSource?.id, expiryCheckTime]);
 
   useEffect(() => {
     if (!introVisible) return;
@@ -418,16 +523,16 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((!event.ctrlKey && !event.metaKey) || event.key.toLowerCase() !== "k" || event.repeat) return;
-      if (!ready || globalSearchOpen || sourceDialogOpen || refreshing || playableItem) return;
+      if (!canOpenGlobalSearch || globalSearchOpen) return;
       event.preventDefault();
       globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
         ? document.activeElement
-        : visibleButton(".sidebar-search-button, .global-search-button");
+        : visibleButton(".global-search-button");
       setGlobalSearchOpen(true);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [globalSearchOpen, playableItem, ready, refreshing, sourceDialogOpen]);
+  }, [canOpenGlobalSearch, globalSearchOpen]);
 
   async function reloadLocalData(preferredSourceId?: string) {
     const savedSources = await getPlaylists();
@@ -480,6 +585,28 @@ function App() {
       }
     });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([getDownloads(), getDownloadDirectoryPath()]).then(([savedDownloads, directoryPath]) => {
+      if (!active) return;
+      setDownloads(savedDownloads);
+      setDownloadDirectoryPath(directoryPath);
+      setDownloadsLoaded(true);
+    }).catch((cause: unknown) => {
+      if (active) {
+        console.error("Could not load offline downloads", cause);
+        notify(cause instanceof Error ? cause.message : "Could not load offline downloads.", "error");
+        setDownloadsLoaded(true);
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => () => {
+    for (const controller of downloadControllers.current.values()) controller.abort();
+    downloadControllers.current.clear();
   }, []);
 
   useEffect(() => {
@@ -633,9 +760,16 @@ function App() {
       };
       importedEpisodes = importedCatalog.episodes;
     } else {
-      const result = await loadXtreamCatalog(playlist, draft.signal);
-      playlist.expiresAtMillis = result.expiresAtMillis;
-      catalog = result;
+      try {
+        const result = await loadXtreamCatalog(playlist, draft.signal);
+        playlist.expiresAtMillis = result.expiresAtMillis;
+        catalog = result;
+      } catch (cause) {
+        if (cause instanceof XtreamAccountExpiredError) {
+          setExpiredSourceIds((current) => new Set(current).add(playlist.id));
+        }
+        throw cause;
+      }
     }
 
     if (draft.signal?.aborted) {
@@ -678,6 +812,12 @@ function App() {
       episodes: importedEpisodes,
       sourceUpdate: refreshedPlaylist,
       onProgress: draft.onProgress,
+    });
+    setExpiredSourceIds((current) => {
+      if (!current.has(playlist.id)) return current;
+      const next = new Set(current);
+      next.delete(playlist.id);
+      return next;
     });
     await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
     recordCatalogImportSummary({
@@ -723,11 +863,17 @@ function App() {
     setSourceDialogOpen(true);
   }
 
+  function openExpiredPlaylist() {
+    if (!activeSource) return;
+    setEditingSource(activeSource);
+    setSourceDialogOpen(true);
+  }
+
   function openGlobalSearch() {
-    if (!ready || refreshing || sourceDialogOpen || playableItem) return;
+    if (!canOpenGlobalSearch) return;
     globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
       ? document.activeElement
-      : visibleButton(".sidebar-search-button, .global-search-button");
+      : visibleButton(".global-search-button");
     setGlobalSearchOpen(true);
   }
 
@@ -811,6 +957,10 @@ function App() {
 
   async function refreshSource(source: Playlist, options: { background?: boolean } = {}) {
     const background = options.background ?? false;
+    if (isPlaylistExpired(source)) {
+      setExpiredSourceIds((current) => new Set(current).add(source.id));
+      return;
+    }
     if (catalogRefreshInFlight.current.has(source.id)) {
       if (!background) notify("A catalog refresh is already in progress.", "notice");
       return;
@@ -937,6 +1087,12 @@ function App() {
         sourceUpdate: updatedSource,
       });
       catalogCommitted = true;
+      setExpiredSourceIds((current) => {
+        if (!current.has(source.id)) return current;
+        const next = new Set(current);
+        next.delete(source.id);
+        return next;
+      });
       await reloadLocalData(background ? undefined : source.id);
       if (background || source.demo) {
         if (!background) notify("Demo playlist restored from its bundled M3U fixture.", "notice");
@@ -981,6 +1137,10 @@ function App() {
           "The catalog refresh failed, and its status could not be saved locally.",
         );
       }
+      if (cause instanceof XtreamAccountExpiredError) {
+        setExpiredSourceIds((current) => new Set(current).add(source.id));
+        return;
+      }
       throw cause;
     } finally {
       catalogRefreshInFlight.current.delete(source.id);
@@ -991,7 +1151,13 @@ function App() {
   const refreshSourceRef = useRef(refreshSource);
   refreshSourceRef.current = refreshSource;
   useEffect(() => {
-    if (!ready || !activeSource || !canAutoRefreshCatalog(activeSource)) return;
+    if (
+      !ready ||
+      !activeSource ||
+      !canAutoRefreshCatalog(activeSource) ||
+      isPlaylistExpired(activeSource) ||
+      expiredSourceIds.has(activeSource.id)
+    ) return;
     let cancelled = false;
     let timer: number | undefined;
 
@@ -1022,7 +1188,7 @@ function App() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [activeSource, ready]);
+  }, [activeSource, expiredSourceIds, ready]);
 
   async function activateSource(sourceId: string) {
     clearNotifications();
@@ -1047,6 +1213,12 @@ function App() {
         setDeletingSource((current) => current
           ? { ...current, completed, total, phase: "deleting" }
           : current);
+      });
+      setExpiredSourceIds((current) => {
+        if (!current.has(source.id)) return current;
+        const next = new Set(current);
+        next.delete(source.id);
+        return next;
       });
       setDeletingSource((current) => current ? { ...current, phase: "updating" } : current);
       const remaining = await getPlaylists();
@@ -1256,7 +1428,13 @@ function App() {
     }
   }
 
+  // Offline blob URLs are revoked only when the player leaves; the player effect re-runs on seek/resume.
+  function revokeOfflineUrl() {
+    if (playableItem?.offline) URL.revokeObjectURL(playableItem.streamUrl);
+  }
+
   function openPlayback(item: PlayableItem, position = 0) {
+    revokeOfflineUrl();
     setResumePosition(position);
     setInlineLivePlayback(item.live);
     const source = sources.find((entry) => entry.id === item.playlistId);
@@ -1264,6 +1442,117 @@ function App() {
       ...item,
       drmCertificateUrl: item.drmCertificateUrl || source?.drmCertificateUrl,
     });
+  }
+
+  async function startDownload(media: DownloadableMedia) {
+    if (!canDownloadMedia(media)) {
+      notify("Offline downloads support direct, non-DRM movie and episode files only.", "error");
+      return;
+    }
+    const id = downloadIdFor(media);
+    if (downloadedIds.has(id)) return;
+    if (downloadControllers.current.has(id)) return;
+
+    const controller = new AbortController();
+    downloadControllers.current.set(id, controller);
+    setDownloadTasks((tasks) => [
+      ...tasks.filter((task) => task.id !== id),
+      { id, title: media.title, media, receivedBytes: 0, totalBytes: null, status: "downloading" },
+    ]);
+    try {
+      const result = await downloadMedia(media, controller.signal, (progress: DownloadProgress) => {
+        setDownloadTasks((tasks) => tasks.map((task) => task.id === progress.id
+          ? { ...task, ...progress, status: "downloading", error: undefined }
+          : task));
+      });
+      setDownloads((current) => [
+        result.record,
+        ...current.filter((download) => download.id !== result.record.id),
+      ].sort((a, b) => b.completedAt - a.completedAt));
+      setDownloadTasks((tasks) => tasks.filter((task) => task.id !== id));
+      if (result.folderError) {
+        console.error("Offline video was saved, but its folder copy failed", result.folderError);
+        notify(result.folderError.message, "error");
+      } else {
+        notify(`${media.title} is ready for offline playback.`, "notice");
+      }
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") {
+        setDownloadTasks((tasks) => tasks.filter((task) => task.id !== id));
+        return;
+      }
+      const message = cause instanceof Error ? cause.message : "Could not download this video.";
+      console.error("Could not download offline media", cause);
+      setDownloadTasks((tasks) => tasks.map((task) => task.id === id
+        ? { ...task, status: "failed", error: message }
+        : task));
+      notify(message, "error");
+    } finally {
+      downloadControllers.current.delete(id);
+    }
+  }
+
+  function cancelDownload(id: string) {
+    downloadControllers.current.get(id)?.abort();
+  }
+
+  function removeFailedDownload(id: string) {
+    setDownloadTasks((tasks) => tasks.filter((task) => task.id !== id || task.status !== "failed"));
+  }
+
+  async function deleteDownload(id: string, title: string) {
+    try {
+      await removeDownload(id);
+      setDownloads((current) => current.filter((download) => download.id !== id));
+      notify(`Removed ${title} from downloads.`, "notice");
+    } catch (cause) {
+      console.error("Could not remove downloaded media", cause);
+      notify(cause instanceof Error ? cause.message : "Could not remove this download.", "error");
+    }
+  }
+
+  async function clearDownloads() {
+    if (!window.confirm("Delete all completed downloads from this device?")) return;
+    try {
+      await clearCompletedDownloads();
+      setDownloads([]);
+      notify("Completed downloads were removed.", "notice");
+    } catch (cause) {
+      console.error("Could not clear completed downloads", cause);
+      notify(cause instanceof Error ? cause.message : "Could not clear completed downloads.", "error");
+    }
+  }
+
+  async function changeDownloadDirectory() {
+    try {
+      const name = await chooseDownloadDirectory();
+      setDownloadDirectoryPath(name);
+      notify(`New downloads will also be copied to ${name}.`, "notice");
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      console.error("Could not change the download folder", cause);
+      notify(cause instanceof Error ? cause.message : "Could not change the download folder.", "error");
+    }
+  }
+
+  async function playDownload(download: DownloadRecord) {
+    try {
+      const blob = await getDownloadedBlob(download.id);
+      openPlayback({
+        id: download.mediaId,
+        playlistId: download.playlistId,
+        contentType: download.contentType,
+        title: download.title,
+        streamUrl: URL.createObjectURL(blob),
+        artworkUrl: download.artworkUrl,
+        live: false,
+        parentTitle: download.parentTitle,
+        offline: true,
+      });
+    } catch (cause) {
+      console.error("Could not open offline media", cause);
+      notify(cause instanceof Error ? cause.message : "Could not open this offline video.", "error");
+    }
   }
 
   function navigateToSection(next: Section) {
@@ -1302,6 +1591,7 @@ function App() {
   navigationActionRef.current = navigateAppHistory;
 
   function closePlayback() {
+    revokeOfflineUrl();
     setPlayableItem(null);
     setInlineLivePlayback(false);
   }
@@ -1375,7 +1665,7 @@ function App() {
       !isAdultSavedContent(item.contentType, item.contentId, item.title),
     );
   const continueWatching = visibleLibrary
-    .filter((item) => item.status === "WATCHING" && item.playlistId === activeSourceId)
+    .filter((item) => item.status === "WATCHING")
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 12);
   const movieProgress = selectedMovie
@@ -1405,6 +1695,7 @@ function App() {
       className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${isDesktopApp ? " desktop-app" : ""}`}
       inert={introVisible || !ready}
     >
+      <TooltipLayer />
       <aside
         className="sidebar"
         aria-label="Primary navigation"
@@ -1417,20 +1708,15 @@ function App() {
           </button>
         </div>
         <nav className="desktop-nav" id="desktop-navigation">
-          <button
-            aria-keyshortcuts="Control+K Meta+K"
-            aria-label="Search your library"
-            className="nav-item sidebar-search-button"
-            disabled={!ready || refreshing || sourceDialogOpen || Boolean(playableItem)}
-            onClick={openGlobalSearch}
-            title="Search your library (Ctrl+K / ⌘K)"
-            type="button"
-          >
-            <Icon name="search" />
-            <span>Search</span>
-          </button>
           {sections.slice(0, -1).map((item) => (
-            <NavItem key={item.label} icon={item.icon} label={item.label} active={section === item.label} onClick={() => navigateToSection(item.label)} />
+            <NavItem
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              active={section === item.label}
+              downloading={item.label === "Downloads" && activeDownloadIds.size > 0}
+              onClick={() => navigateToSection(item.label)}
+            />
           ))}
         </nav>
         <div className="sidebar-footer">
@@ -1439,7 +1725,7 @@ function App() {
             aria-label="Open settings"
             className={`nav-item sidebar-settings-button${section === "Settings" ? " active" : ""}`}
             onClick={() => navigateToSection("Settings")}
-            title="Settings"
+            data-tooltip="Settings"
             type="button"
           >
             <Icon name="settings" />
@@ -1452,7 +1738,7 @@ function App() {
               aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
               className="sidebar-collapse sidebar-collapse-footer"
               onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-              title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              data-tooltip={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
               type="button"
             >
               <Icon name={sidebarCollapsed ? "chevron_right" : "chevron_left"} />
@@ -1467,33 +1753,69 @@ function App() {
             <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
             <span>TiviHub<span className="brand-period">.</span></span>
           </button>
+          <button
+            aria-keyshortcuts="Control+K Meta+K"
+            aria-label="Search your library"
+            className="topbar-global-search topbar-desktop-only global-search-button"
+            disabled={!canOpenGlobalSearch}
+            onClick={openGlobalSearch}
+            type="button"
+          >
+            <Icon name="search" />
+            <span>Search in your library…</span>
+            <kbd>Ctrl K</kbd>
+          </button>
           <div aria-hidden="true" className="titlebar-drag-region" data-tauri-drag-region />
-          {sources.length > 0 && (
-            <div className="source-switcher topbar-mobile-only">
-              <Icon name="playlist_play" />
-              <CustomSelect
-                ariaLabel="Active source"
-                className="source-switcher-dropdown"
-                disabled={refreshing || sourceDialogOpen || globalSearchOpen}
-                onValueChange={(sourceId) => { if (sourceId) void activateSource(sourceId); }}
-                options={[
-                  ...(!activeSource ? [{ disabled: true, label: "Choose a source", value: "" }] : []),
-                  ...sources.map((source) => ({ label: source.name, value: source.id })),
-                ]}
-                title={activeSource?.name ?? "Choose a source"}
-                value={activeSource?.id ?? ""}
-                variant="embedded"
-              />
-            </div>
-          )}
+          <div className="topbar-desktop-actions topbar-desktop-only">
+            {activeSourceExpired && (
+              <button
+                className="topbar-expiry-warning"
+                onClick={openExpiredPlaylist}
+                type="button"
+              >
+                <Icon name="error_outline" />
+                <span>Playlist expired</span>
+              </button>
+            )}
+            <button
+              aria-label="Add playlist"
+              className="icon-button topbar-action-button"
+              disabled={refreshing || sourceDialogOpen}
+              onClick={openAddSource}
+              data-tooltip="Add playlist"
+              type="button"
+            >
+              <Icon name="add" />
+            </button>
+            <button
+              aria-label="Refresh playlist"
+              className="icon-button topbar-action-button refresh-button"
+              disabled={!activeSource || refreshing || sourceDialogOpen}
+              onClick={() => void refreshCurrentSource()}
+              data-tooltip="Refresh playlist"
+              type="button"
+            >
+              <Icon name="refresh" />
+            </button>
+          </div>
           <div className="topbar-actions topbar-mobile-only">
+            {activeSourceExpired && (
+              <button
+                aria-label={`Playlist expired. Edit ${activeSource?.name ?? "playlist"}`}
+                className="icon-button topbar-expiry-warning topbar-expiry-warning-mobile"
+                data-tooltip="Playlist expired. Edit playlist"
+                onClick={openExpiredPlaylist}
+                type="button"
+              >
+                <Icon name="error_outline" />
+              </button>
+            )}
             <button
               aria-keyshortcuts="Control+K Meta+K"
               aria-label="Search your library"
               className="icon-button global-search-button"
-              disabled={!ready || refreshing || sourceDialogOpen || Boolean(playableItem)}
+              disabled={!canOpenGlobalSearch}
               onClick={openGlobalSearch}
-              title="Search your library (Ctrl+K / ⌘K)"
               type="button"
             >
               <Icon name="search" />
@@ -1513,7 +1835,7 @@ function App() {
 
         {ready && (
           <>
-            {(section === "Live TV" || (inlineLivePlayback && playableItem?.live)) && (
+            {activeSource && (section === "Live TV" || (inlineLivePlayback && playableItem?.live)) && (
               <div
                 key={activeSourceId ?? "no-active-source"}
                 className={`live-tv-persistent${section === "Live TV" ? "" : " is-mini"}`}
@@ -1522,7 +1844,6 @@ function App() {
                   channels={visibleChannels}
                   epg={visibleEpg}
                   favorites={visibleFavorites}
-                  guideLoading={guideLoadCount > 0}
                   library={visibleLibrary}
                   livePlaybackItemId={inlineLivePlayback && playableItem?.live ? playableItem.id : undefined}
                   livePlayer={inlineLivePlayback && playableItem?.live ? (
@@ -1561,14 +1882,14 @@ function App() {
                 />
               </div>
             )}
-            {section === "Live TV" ? null : section === "Home" ? (
+            {section === "Live TV" && !activeSource ? (
+              <NoSourceEmptyState onAddSource={openAddSource} />
+            ) : section === "Live TV" ? null : section === "Home" ? (
               <Home
                 channels={visibleChannels}
                 favorites={visibleFavorites}
-                epg={visibleEpg}
                 library={visibleLibrary}
                 movies={visibleMovies}
-                onLoadGuideForChannels={(requestedChannels) => void loadGuideForChannels(requestedChannels)}
                 series={visibleSeries}
                 source={activeSource}
                 sourceCount={sources.length}
@@ -1582,6 +1903,40 @@ function App() {
                 onOpenSeries={(item) => void openSeries(item)}
                 onNavigate={navigateToSection}
                 onPlay={(item, position) => openPlayback(item, position)}
+                onPreferenceError={(message) => notify(message, "error")}
+              />
+            ) : section === "TV Guide" && !activeSource ? (
+              <NoSourceEmptyState onAddSource={openAddSource} />
+            ) : section === "TV Guide" ? (
+              <LiveGuide
+                activeChannelId={inlineLivePlayback && playableItem?.live ? playableItem.id : undefined}
+                channels={visibleChannels}
+                epg={visibleEpg}
+                favoriteIds={new Set(visibleFavorites
+                  .filter((favorite) => favorite.contentType === "LIVE")
+                  .map((favorite) => favorite.contentId))}
+                loading={guideLoadCount > 0}
+                onLoadGuideForChannels={(guideChannels) => void loadGuideForChannels(guideChannels)}
+                onPlay={(channel) => openPlayback(playableChannel(channel))}
+                selectedChannelId={inlineLivePlayback && playableItem?.live ? playableItem.id : undefined}
+              />
+            ) : section === "Downloads" ? (
+              <DownloadsPage
+                downloads={downloads}
+                tasks={downloadTasks}
+                loading={!downloadsLoaded}
+                sourceCount={sources.length}
+                onDelete={(id, title) => void deleteDownload(id, title)}
+                onCancel={(id) => cancelDownload(id)}
+                onRemoveFailed={removeFailedDownload}
+                onRetry={(task) => void startDownload(task.media)}
+                onPlay={(download) => void playDownload(download)}
+                onAddPlaylist={openAddSource}
+                onBrowseMovies={() => {
+                  setSelectedMovie(null);
+                  setSelectedSeries(null);
+                  navigateToSection("Movies");
+                }}
               />
             ) : section === "Settings" ? (
               <SettingsPage
@@ -1596,6 +1951,10 @@ function App() {
                 onUpdateAction={() => availableUpdate ? void openAvailableUpdate() : void checkUpdates()}
                 version={webPackage.version}
                 apiKey={subtitleApiKey}
+                downloadDirectoryPath={downloadDirectoryPath}
+                completedDownloadCount={downloads.length}
+                onChangeDownloadDirectory={() => void changeDownloadDirectory()}
+                onClearCompletedDownloads={() => void clearDownloads()}
                 onActivate={(id) => void activateSource(id)}
                 onChooseTheme={chooseTheme}
                 onSetShowAdultContent={chooseShowAdultContent}
@@ -1614,6 +1973,8 @@ function App() {
                 theme={theme}
                 showAdultContent={showAdultContent}
               />
+            ) : (section === "Movies" || section === "Series") && !activeSource ? (
+              <NoSourceEmptyState onAddSource={openAddSource} />
             ) : section === "Movies" && selectedMovie && (showAdultContent || !isAdultContent(selectedMovie.name, selectedMovie.category)) ? (
               <MovieDetail
                 favorite={visibleFavorites.some((favorite) => favorite.contentId === selectedMovie.id)}
@@ -1622,9 +1983,20 @@ function App() {
                 movie={selectedMovie}
                 playlistMovies={visibleMovies}
                 ratingsService={ratingsService}
+                onDownload={startDownload}
+                downloadedIds={downloadedIds}
+                activeDownloadIds={activeDownloadIds}
+                relatedFavoriteIds={new Set(visibleFavorites
+                  .filter((favorite) => favorite.contentType === "MOVIE" && favorite.playlistId === selectedMovie.playlistId)
+                  .map((favorite) => favorite.contentId))}
+                relatedLibraryIds={new Set(visibleLibrary
+                  .filter((entry) => entry.contentType === "MOVIE" && entry.playlistId === selectedMovie.playlistId)
+                  .map((entry) => entry.contentId))}
+                onToggleRelatedFavorite={(item) => void toggleFavorite(item, "MOVIE")}
+                onAddRelatedToLibrary={(item) => void addToWatchlist(item, "MOVIE")}
                 onOpenMovie={(item) => setSelectedMovie(item)}
                 onAddToLibrary={() => void addToWatchlist(selectedMovie, "MOVIE")}
-                onBack={() => navigateAppHistory(-1)}
+                onBack={() => setSelectedMovie(null)}
                 onFavorite={() => void toggleFavorite(selectedMovie, "MOVIE")}
                 onRemoveFromLibrary={() => void removeFromLibrary(selectedMovie, "MOVIE")}
                 onPlay={() => {
@@ -1647,7 +2019,6 @@ function App() {
                 channels={visibleChannels}
                 epg={visibleEpg}
                 favorites={visibleFavorites}
-                guideLoading={guideLoadCount > 0}
                 library={visibleLibrary}
                 loading={refreshing}
                 movies={visibleMovies}
@@ -1679,7 +2050,18 @@ function App() {
                   inLibrary={visibleLibrary.some((entry) => entry.contentId === selectedSeries.id && entry.contentType === "SERIES")}
                   continueWatching={Boolean(seriesEpisodeProgress)}
                   loading={episodeLoading}
-                  onBack={() => navigateAppHistory(-1)}
+                  onDownload={startDownload}
+                  downloadedIds={downloadedIds}
+                  activeDownloadIds={activeDownloadIds}
+                  relatedFavoriteIds={new Set(visibleFavorites
+                    .filter((favorite) => favorite.contentType === "SERIES" && favorite.playlistId === selectedSeries.playlistId)
+                    .map((favorite) => favorite.contentId))}
+                  relatedLibraryIds={new Set(visibleLibrary
+                    .filter((entry) => entry.contentType === "SERIES" && entry.playlistId === selectedSeries.playlistId)
+                    .map((entry) => entry.contentId))}
+                  onToggleRelatedFavorite={(item) => void toggleFavorite(item, "SERIES")}
+                  onAddRelatedToLibrary={(item) => void addToWatchlist(item, "SERIES")}
+                  onBack={() => setSelectedSeries(null)}
                   showAdultContent={showAdultContent}
                   onAddToLibrary={() => void addToWatchlist(selectedSeries, "SERIES")}
                   onRemoveFromLibrary={() => void removeFromLibrary(selectedSeries, "SERIES")}
@@ -1712,7 +2094,6 @@ function App() {
                   channels={visibleChannels}
                   epg={visibleEpg}
                   favorites={visibleFavorites}
-                  guideLoading={guideLoadCount > 0}
                   library={visibleLibrary}
                   loading={refreshing}
                   movies={visibleMovies}
@@ -1732,10 +2113,13 @@ function App() {
               <LibraryPage
                 favorites={visibleFavorites}
                 library={visibleLibrary}
+                sourceCount={sources.length}
+                onAddSource={openAddSource}
                 onChangeStatus={(item, status) => void changeLibraryStatus(item, status)}
                 onPlay={(item, position) => openPlayback(item, position)}
                 onRemove={(id, title) => void deleteLibraryItem(id, title)}
                 onRemoveFavorite={(favorite) => void removeFavorite(favorite)}
+                onBrowseMovies={() => navigateToSection("Movies")}
                 onOpenFavorite={(favorite) => {
                   if (favorite.contentType === "MOVIE") {
                     const movie = visibleMovies.find((item) =>
@@ -1782,7 +2166,15 @@ function App() {
         inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}
       >
         {sections.filter((item) => item.label !== "Settings").map((item) => (
-          <NavItem key={item.label} icon={item.icon} label={item.label} active={section === item.label} onClick={() => navigateToSection(item.label)} compact />
+          <NavItem
+        key={item.label}
+        icon={item.icon}
+        label={item.label}
+        active={section === item.label}
+        downloading={item.label === "Downloads" && activeDownloadIds.size > 0}
+        onClick={() => navigateToSection(item.label)}
+        compact
+          />
         ))}
       </nav>
 
@@ -1845,7 +2237,7 @@ function App() {
           total={deletingSource.total}
         />
       )}
-      {globalSearchOpen && !refreshing && !sourceDialogOpen && !playableItem && (
+      {globalSearchOpen && canOpenGlobalSearch && (
         <GlobalSearchDialog
           canRefresh={Boolean(activeSource)}
           channels={channels}
@@ -1873,19 +2265,21 @@ function NavItem({
   icon,
   label,
   active,
+  downloading = false,
   onClick,
   compact = false,
 }: {
   icon: IconName;
   label: Section;
   active: boolean;
+  downloading?: boolean;
   onClick: () => void;
   compact?: boolean;
 }) {
   return (
     <button
       aria-current={active ? "page" : undefined}
-      className={`nav-item${active ? " active" : ""}${compact ? " compact" : ""}`}
+      className={`nav-item${active ? " active" : ""}${compact ? " compact" : ""}${downloading ? " is-downloading" : ""}`}
       onClick={onClick}
       type="button"
     >
@@ -1895,62 +2289,9 @@ function NavItem({
   );
 }
 
-function HomeEmptyState({
-  eyebrow,
-  title,
-  description,
-  actionLabel,
-  actionIcon,
-  onAction,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  actionLabel: string;
-  actionIcon: IconName;
-  onAction: () => void;
-  children?: ReactNode;
-}) {
-  return (
-    <section aria-labelledby="home-empty-title" className="home-empty">
-      <div className="home-empty-panel">
-        <div className="home-empty-prompt">
-          <p className="eyebrow">{eyebrow}</p>
-          <h1 id="home-empty-title">{title}</h1>
-          <p className="home-empty-description">{description}</p>
-          <button className="primary-button home-empty-action" onClick={onAction} type="button">
-            <Icon name={actionIcon} />
-            {actionLabel}
-            <Icon name="arrow_forward" />
-          </button>
-          {children}
-        </div>
-        <div aria-hidden="true" className="home-empty-art">
-          <div className="home-empty-orbit home-empty-orbit-outer" />
-          <div className="home-empty-orbit home-empty-orbit-inner" />
-          <div className="home-empty-logo-core">
-            <img alt="" src={`${ASSET_BASE_URL}icons/tivihub-512.png`} />
-          </div>
-          <span className="home-empty-star home-empty-star-one">✦</span>
-          <span className="home-empty-star home-empty-star-two">✧</span>
-          <span className="home-empty-caption">TIVIHUB / DESKTOP</span>
-          <div className="home-empty-art-card home-empty-art-card-top">
-            <Icon name="movie" /><span>YOUR LIBRARY</span>
-          </div>
-          <div className="home-empty-art-card home-empty-art-card-bottom">
-            <span className="home-empty-art-pulse" /><span>READY WHEN YOU ARE</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function Home({
   channels,
   favorites,
-  epg,
   library,
   movies,
   series,
@@ -1960,13 +2301,12 @@ function Home({
   onAddSource,
   onOpenMovie,
   onOpenSeries,
-  onLoadGuideForChannels,
   onNavigate,
   onPlay,
+  onPreferenceError,
 }: {
   channels: LiveChannel[];
   favorites: Favorite[];
-  epg: EpgProgram[];
   library: LibraryItem[];
   movies: Movie[];
   series: Series[];
@@ -1976,47 +2316,30 @@ function Home({
   onAddSource: () => void;
   onOpenMovie: (movie: Movie) => void;
   onOpenSeries: (series: Series) => void;
-  onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onNavigate: (section: Section) => void;
   onPlay: (item: PlayableItem, position: number) => void;
+  onPreferenceError: (message: string) => void;
 }) {
   if (source) {
     return (
       <MediaHome
         channels={channels}
         continueWatching={continueWatching}
-        epg={epg}
         favorites={favorites}
         library={library}
         movies={movies}
         onNavigate={onNavigate}
-        onLoadGuideForChannels={onLoadGuideForChannels}
         onOpenMovie={onOpenMovie}
         onOpenSeries={onOpenSeries}
         onPlay={onPlay}
+        onPreferenceError={onPreferenceError}
         series={series}
-        sourceId={source.id}
-        sourceName={source.name}
       />
     );
   }
 
   if (sourceCount === 0) {
-    return (
-      <HomeEmptyState
-        actionIcon="add"
-        actionLabel="Add source"
-        description="Connect an M3U playlist or Xtream Codes account to build your library. Your source details are stored on this device; playback requests go directly to your provider."
-        eyebrow="YOUR PRIVATE MEDIA SPACE"
-        onAction={onAddSource}
-        title="Add your first source"
-      >
-        <div aria-label="Supported source types" className="home-empty-source-types">
-          <span><Icon name="playlist_play" /> M3U playlist</span>
-          <span><Icon name="dns" /> Xtream Codes</span>
-        </div>
-      </HomeEmptyState>
-    );
+    return <NoSourceEmptyState onAddSource={onAddSource} />;
   }
 
   const destinations: { label: Section; icon: IconName; detail: string }[] = [
@@ -2122,39 +2445,32 @@ function Home({
 }
 
 function MediaHome({
-  sourceId,
-  sourceName,
   channels,
-  epg,
   movies,
   series,
   continueWatching,
   library,
   favorites,
   onNavigate,
-  onLoadGuideForChannels,
   onOpenMovie,
   onOpenSeries,
   onPlay,
+  onPreferenceError,
 }: {
-  sourceId: string;
-  sourceName: string;
   channels: LiveChannel[];
-  epg: EpgProgram[];
   movies: Movie[];
   series: Series[];
   continueWatching: LibraryItem[];
   library: LibraryItem[];
   favorites: Favorite[];
   onNavigate: (section: Section) => void;
-  onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onOpenMovie: (movie: Movie) => void;
   onOpenSeries: (series: Series) => void;
   onPlay: (item: PlayableItem, position: number) => void;
+  onPreferenceError: (message: string) => void;
 }) {
-  const homeChannels = channels.slice(0, 12);
-  const latestMovies = useMemo(() => sortCatalogItems(movies, "added").slice(0, 10), [movies]);
-  const latestSeries = useMemo(() => sortCatalogItems(series, "added").slice(0, 10), [series]);
+  const [homeLayout, setHomeLayout] = useState(readHomeLayoutPreference);
+  const [homeEditorOpen, setHomeEditorOpen] = useState(false);
   const watchedChannels = useMemo(() => library
     .filter((item) => item.status === "WATCHED" && item.contentType === "LIVE")
     .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -2168,29 +2484,56 @@ function MediaHome({
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 12), [library]);
   const watchingCount = library.filter((item) =>
-    item.status === "WATCHING" && item.playlistId === sourceId,
+    item.status === "WATCHING",
   ).length;
-  const globalFavorites = useMemo(() => [...favorites]
-    .sort((a, b) => b.addedAt - a.addedAt)
-    .slice(0, 12), [favorites]);
-  const homeChannelKey = `${sourceId}:${homeChannels.map((channel) => channel.id).join("|")}`;
-  const onLoadGuideRef = useRef(onLoadGuideForChannels);
-  onLoadGuideRef.current = onLoadGuideForChannels;
-  useEffect(() => {
-    if (homeChannels.length > 0) onLoadGuideRef.current(homeChannels);
-  }, [homeChannelKey]);
-  const currentPrograms = useMemo(() => {
-    const now = Date.now();
-    const byChannel = new Map<string, EpgProgram>();
-    for (const program of epg) {
-      if (program.startMillis > now || program.endMillis <= now) continue;
-      const existing = byChannel.get(program.channelId);
-      if (!existing || program.startMillis < existing.startMillis) {
-        byChannel.set(program.channelId, program);
-      }
+  const globalFavorites = useMemo(
+    () => [...favorites].sort((a, b) => b.addedAt - a.addedAt),
+    [favorites],
+  );
+  const favoriteMovies = useMemo(
+    () => globalFavorites.filter((favorite) => favorite.contentType === "MOVIE").slice(0, 12),
+    [globalFavorites],
+  );
+  const favoriteSeries = useMemo(
+    () => globalFavorites.filter((favorite) => favorite.contentType === "SERIES").slice(0, 12),
+    [globalFavorites],
+  );
+  const favoriteChannels = useMemo(
+    () => globalFavorites.filter((favorite) => favorite.contentType === "LIVE").slice(0, 12),
+    [globalFavorites],
+  );
+  const favoriteMovieCount = favorites.filter((favorite) => favorite.contentType === "MOVIE").length;
+  const favoriteSeriesCount = favorites.filter((favorite) => favorite.contentType === "SERIES").length;
+  const favoriteChannelCount = favorites.filter((favorite) => favorite.contentType === "LIVE").length;
+  function saveHomeLayout(next: HomeLayoutPreference) {
+    setHomeLayout(next);
+    try {
+      window.localStorage.setItem(HOME_LAYOUT_STORAGE_KEY, JSON.stringify(next));
+    } catch (cause) {
+      console.error("Could not save the local Home layout preference", cause);
+      onPreferenceError("Could not save your Home layout on this device.");
     }
-    return byChannel;
-  }, [epg]);
+  }
+
+  function toggleHomeShelf(key: HomeShelfKey) {
+    const hidden = new Set(homeLayout.hidden);
+    if (hidden.has(key)) hidden.delete(key);
+    else hidden.add(key);
+    saveHomeLayout({ ...homeLayout, hidden: [...hidden] });
+  }
+
+  function moveHomeShelf(key: HomeShelfKey, direction: -1 | 1) {
+    const index = homeLayout.order.indexOf(key);
+    const destination = index + direction;
+    if (index < 0 || destination < 0 || destination >= homeLayout.order.length) return;
+    const order = [...homeLayout.order];
+    [order[index], order[destination]] = [order[destination], order[index]];
+    saveHomeLayout({ ...homeLayout, order });
+  }
+
+  function resetHomeLayout() {
+    saveHomeLayout({ order: [...DEFAULT_HOME_SHELF_ORDER], hidden: [] });
+  }
 
   function playLibraryItem(item: LibraryItem, position = item.positionMillis) {
     if (!item.streamUrl) return;
@@ -2305,266 +2648,248 @@ function MediaHome({
     return favorite.streamUrl ? "Play" : "Unavailable";
   }
 
-  if (library.length === 0 && favorites.length === 0 &&
-    (movies.length > 0 || series.length > 0 || channels.length > 0)) {
-    const destination: Section = movies.length > 0 ? "Movies" : series.length > 0 ? "Series" : "Live TV";
+  function renderFavoriteCards(items: Favorite[]) {
+    return items.map((favorite) => (
+      <HomeTitleCard
+        actionLabel={favoriteActionLabel(favorite)}
+        detail={homeContentTypeLabel(favorite.contentType)}
+        disabled={favoriteActionLabel(favorite) === "Unavailable"}
+        icon={favorite.contentType === "LIVE" ? "live_tv" : favorite.contentType === "SERIES" ? "tv" : "movie"}
+        image={favorite.artworkUrl}
+        key={favorite.id}
+        onClick={() => openFavorite(favorite)}
+        title={favorite.title}
+        wide={favorite.contentType === "LIVE"}
+      />
+    ));
+  }
+
+  function renderHomeShelf(key: HomeShelfKey): ReactNode {
+    switch (key) {
+      case "continueWatching":
+        return continueWatching.length > 0 ? (
+          <HomeShelf
+            actionLabel="Manage all"
+            count={watchingCount}
+            eyebrow="PICK UP WHERE YOU LEFT OFF"
+            onMore={() => onNavigate("Library")}
+            title="Continue watching"
+          >
+            {continueWatching.map((item) => (
+              <HomeTitleCard
+                actionLabel={libraryActionLabel(item, "resume")}
+                detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
+                disabled={libraryActionLabel(item, "resume") === "Unavailable"}
+                icon={item.contentType === "LIVE" ? "live_tv" : item.contentType === "SERIES" || item.contentType === "EPISODE" ? "tv" : "movie"}
+                image={item.artworkUrl}
+                key={item.id}
+                onClick={() => playLibraryItem(item)}
+                progress={item.durationMillis > 0
+                  ? Math.max(0, Math.min(100, item.positionMillis / item.durationMillis * 100))
+                  : undefined}
+                title={item.title}
+                wide={item.contentType === "LIVE"}
+              />
+            ))}
+          </HomeShelf>
+        ) : null;
+      case "watchedChannels":
+        return watchedChannels.length > 0 ? (
+          <HomeShelf
+            actionLabel="Manage all"
+            count={library.filter((item) => item.status === "WATCHED" && item.contentType === "LIVE").length}
+            eyebrow="LAST WATCHED TV"
+            onMore={() => onNavigate("Library")}
+            title="Recently watched channels"
+          >
+            {watchedChannels.map((item) => (
+              <HomeTitleCard
+                actionLabel={item.streamUrl ? "Watch live" : "Unavailable"}
+                detail="Live TV"
+                disabled={!item.streamUrl}
+                icon="live_tv"
+                image={item.artworkUrl}
+                key={item.id}
+                onClick={() => playLibraryItem(item, 0)}
+                title={item.title}
+                wide
+              />
+            ))}
+          </HomeShelf>
+        ) : null;
+      case "recentlyWatched":
+        return recentlyWatched.length > 0 ? (
+          <HomeShelf
+            actionLabel="Manage all"
+            count={library.filter((item) => item.status === "WATCHED").length}
+            eyebrow="YOUR RECENT HISTORY"
+            onMore={() => onNavigate("Library")}
+            title="Recently watched"
+          >
+            {recentlyWatched.map((item) => (
+              <HomeTitleCard
+                actionLabel={libraryActionLabel(item, "replay")}
+                detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
+                disabled={libraryActionLabel(item, "replay") === "Unavailable"}
+                icon={item.contentType === "LIVE" ? "live_tv" : item.contentType === "SERIES" || item.contentType === "EPISODE" ? "tv" : "movie"}
+                image={item.artworkUrl}
+                key={item.id}
+                onClick={() => openLibraryItem(item, "replay")}
+                title={item.title}
+                wide={item.contentType === "LIVE"}
+              />
+            ))}
+          </HomeShelf>
+        ) : null;
+      case "favoriteMovies":
+        return favoriteMovies.length > 0 ? (
+          <HomeShelf
+            actionLabel="Manage all"
+            count={favoriteMovieCount}
+            eyebrow="SAVED FOR YOU"
+            onMore={() => onNavigate("Library")}
+            title="Favorite movies"
+          >
+            {renderFavoriteCards(favoriteMovies)}
+          </HomeShelf>
+        ) : null;
+      case "favoriteSeries":
+        return favoriteSeries.length > 0 ? (
+          <HomeShelf
+            actionLabel="Manage all"
+            count={favoriteSeriesCount}
+            eyebrow="SAVED FOR YOU"
+            onMore={() => onNavigate("Library")}
+            title="Favorite series"
+          >
+            {renderFavoriteCards(favoriteSeries)}
+          </HomeShelf>
+        ) : null;
+      case "favoriteChannels":
+        return favoriteChannels.length > 0 ? (
+          <HomeShelf
+            actionLabel="Manage all"
+            count={favoriteChannelCount}
+            eyebrow="SAVED FOR YOU"
+            onMore={() => onNavigate("Library")}
+            title="Favorite TV channels"
+          >
+            {renderFavoriteCards(favoriteChannels)}
+          </HomeShelf>
+        ) : null;
+      case "watchlist":
+        return watchlist.length > 0 ? (
+          <HomeShelf
+            actionLabel="Manage all"
+            count={library.filter((item) => item.status === "WATCHLIST").length}
+            eyebrow="SAVED FOR LATER"
+            onMore={() => onNavigate("Library")}
+            title="Your watchlist"
+          >
+            {watchlist.map((item) => (
+              <HomeTitleCard
+                actionLabel={libraryActionLabel(item, "details")}
+                detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
+                disabled={libraryActionLabel(item, "details") === "Unavailable"}
+                icon={item.contentType === "SERIES" ? "tv" : "movie"}
+                image={item.artworkUrl}
+                key={item.id}
+                onClick={() => openLibraryItem(item, "details")}
+                title={item.title}
+              />
+            ))}
+          </HomeShelf>
+        ) : null;
+    }
+  }
+
+  if (library.length === 0 && favorites.length === 0) {
     return (
       <HomeEmptyState
         actionIcon="play_arrow"
-        actionLabel="Start watching"
-        description="Start watching a movie, series, or live channel and it will appear here."
-        eyebrow="YOUR LIBRARY"
-        onAction={() => onNavigate(destination)}
-        title="Your library is empty"
+        actionLabel="Explore content"
+        description="Start watching or save a favorite to bring your channels, movies, and series together here."
+        eyebrow="YOUR MEDIA / HOME"
+        onAction={() => onNavigate(
+          movies.length > 0 ? "Movies" : series.length > 0 ? "Series" : channels.length > 0 ? "Live TV" : "Movies",
+        )}
+        title="Make Home yours"
       />
     );
   }
 
-  const featuredContinue = library
-    .filter((item) => item.status === "WATCHING")
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .find((item) => item.streamUrl) ?? continueWatching.find((item) => item.streamUrl) ?? continueWatching[0];
-  const featuredFavorite = globalFavorites[0];
-  const featuredMovie = latestMovies[0];
-  const featuredSeries = latestSeries[0];
-  const featuredChannel = homeChannels[0];
-  let featured: {
-    eyebrow: string;
-    title: string;
-    detail: string;
-    image?: string;
-    wide?: boolean;
-    progress?: number;
-    actionLabel: string;
-    onAction: () => void;
-  };
-  if (featuredContinue) {
-    featured = {
-      eyebrow: "CONTINUE WATCHING",
-      title: featuredContinue.title,
-      detail: featuredContinue.parentTitle || homeContentTypeLabel(featuredContinue.contentType),
-      image: featuredContinue.artworkUrl,
-      wide: featuredContinue.contentType === "LIVE",
-      progress: featuredContinue.durationMillis > 0
-        ? Math.max(0, Math.min(100, featuredContinue.positionMillis / featuredContinue.durationMillis * 100))
-        : undefined,
-      actionLabel: "Continue watching",
-      onAction: () => openLibraryItem(featuredContinue, "resume"),
-    };
-  } else if (featuredFavorite) {
-    featured = {
-      eyebrow: "FROM YOUR FAVORITES",
-      title: featuredFavorite.title,
-      detail: homeContentTypeLabel(featuredFavorite.contentType),
-      image: featuredFavorite.artworkUrl,
-      wide: featuredFavorite.contentType === "LIVE",
-      actionLabel: featuredFavorite.contentType === "LIVE" ? "Watch live" : "Open title",
-      onAction: () => openFavorite(featuredFavorite),
-    };
-  } else if (featuredMovie) {
-    featured = {
-      eyebrow: "PICKED FOR YOUR LIBRARY",
-      title: featuredMovie.name,
-      detail: [featuredMovie.year, featuredMovie.category].filter(Boolean).join(" · ") || "Movie",
-      image: featuredMovie.posterUrl,
-      actionLabel: "Explore movie",
-      onAction: () => onOpenMovie(featuredMovie),
-    };
-  } else if (featuredSeries) {
-    featured = {
-      eyebrow: "PICKED FOR YOUR LIBRARY",
-      title: featuredSeries.name,
-      detail: `${featuredSeries.seasons} seasons`,
-      image: featuredSeries.posterUrl,
-      actionLabel: "Explore series",
-      onAction: () => onOpenSeries(featuredSeries),
-    };
-  } else if (featuredChannel) {
-    featured = {
-      eyebrow: "ON AIR NOW",
-      title: featuredChannel.name,
-      detail: currentPrograms.get(featuredChannel.tvgId || featuredChannel.id)?.title || featuredChannel.group,
-      image: featuredChannel.logoUrl,
-      wide: true,
-      actionLabel: "Watch live",
-      onAction: () => onPlay({
-        id: featuredChannel.id,
-        playlistId: featuredChannel.playlistId,
-        contentType: "LIVE",
-        title: featuredChannel.name,
-        streamUrl: featuredChannel.streamUrl,
-        artworkUrl: featuredChannel.logoUrl,
-        drmLicenseUrl: featuredChannel.drmLicenseUrl,
-        drmSystem: featuredChannel.drmSystem,
-        live: true,
-      }, 0),
-    };
-  } else {
-    featured = {
-      eyebrow: "YOUR LIBRARY",
-      title: sourceName,
-      detail: "Refresh your source or add another one to bring your media here.",
-      actionLabel: "Manage sources",
-      onAction: () => onNavigate("Settings"),
-    };
-  }
-
   return (
     <section className="media-home">
-      <section className="personal-home-hero">
-        {featured.image && (
-          <img
-            alt=""
-            className="personal-home-backdrop"
-            onError={(event) => { event.currentTarget.hidden = true; }}
-            src={featured.image}
-          />
-        )}
-        <div aria-hidden="true" className="personal-home-backdrop-overlay" />
-        <div className={`personal-home-poster${featured.wide ? " is-wide" : ""}`}>
-          <Icon name={featured.wide ? "live_tv" : "movie"} />
-          {featured.image && (
-            <img alt="" onError={(event) => { event.currentTarget.hidden = true; }} src={featured.image} />
-          )}
+      <header className="page-intro home-page-intro">
+        <p className="eyebrow">YOUR MEDIA / HOME</p>
+        <h1>Home</h1>
+        <p>Your favorites and watch progress, all in one place.</p>
+      </header>
+      {homeLayout.order.map((key) => (
+        <Fragment key={key}>
+          {homeLayout.hidden.includes(key) ? null : renderHomeShelf(key)}
+        </Fragment>
+      ))}
+      <div className="home-layout-footer">
+        <button
+          aria-controls="home-layout-editor"
+          aria-expanded={homeEditorOpen}
+          className="secondary-button home-layout-toggle"
+          onClick={() => setHomeEditorOpen((open) => !open)}
+          type="button"
+        >
+          <Icon name={homeEditorOpen ? "close" : "edit"} />
+          {homeEditorOpen ? "Done editing" : "Edit Home"}
+        </button>
+      </div>
+      <section
+        aria-labelledby="home-layout-editor-title"
+        className="home-layout-editor"
+        hidden={!homeEditorOpen}
+        id="home-layout-editor"
+      >
+        <div className="home-layout-editor-heading">
+          <div>
+            <h2 id="home-layout-editor-title">Customize Home</h2>
+            <p>Choose which sections to show and set their order. Changes are saved on this device.</p>
+          </div>
+          <button className="text-button" onClick={resetHomeLayout} type="button">Reset to default</button>
         </div>
-        <div className="personal-home-copy">
-          <p className="eyebrow">{featured.eyebrow}</p>
-          <h1>{featured.title}</h1>
-          <p className="personal-home-detail">{featured.detail} · {sourceName}</p>
-          {featured.progress !== undefined && (
-            <div aria-label={`${Math.round(featured.progress)}% watched`} className="personal-home-progress">
-              <span style={{ width: `${featured.progress}%` }} />
-            </div>
-          )}
-          <button className="primary-button" onClick={featured.onAction} type="button">
-            <Icon name={featured.eyebrow === "CONTINUE WATCHING" || featured.eyebrow === "ON AIR NOW" ? "play_arrow" : "arrow_forward"} />
-            {featured.actionLabel}
-          </button>
-        </div>
+        <ol className="home-layout-editor-list">
+          {homeLayout.order.map((key, index) => (
+            <li className="home-layout-editor-row" key={key}>
+              <label>
+                <input
+                  checked={!homeLayout.hidden.includes(key)}
+                  onChange={() => toggleHomeShelf(key)}
+                  type="checkbox"
+                />
+                <span>{HOME_SHELF_LABELS[key]}</span>
+              </label>
+              <div>
+                <button
+                  aria-label={`Move ${HOME_SHELF_LABELS[key]} up`}
+                  className="icon-button home-layout-move-button move-up"
+                  disabled={index === 0}
+                  onClick={() => moveHomeShelf(key, -1)}
+                  type="button"
+                >
+                  <Icon name="chevron_left" />
+                </button>
+                <button
+                  aria-label={`Move ${HOME_SHELF_LABELS[key]} down`}
+                  className="icon-button home-layout-move-button move-down"
+                  disabled={index === homeLayout.order.length - 1}
+                  onClick={() => moveHomeShelf(key, 1)}
+                  type="button"
+                >
+                  <Icon name="chevron_right" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
-
-      {continueWatching.length > 0 && (
-        <HomeShelf
-          actionLabel="Manage all"
-          count={watchingCount}
-          eyebrow="PICK UP WHERE YOU LEFT OFF"
-          onMore={() => onNavigate("Library")}
-          title="Continue watching"
-        >
-          {continueWatching.map((item) => (
-            <HomeTitleCard
-              actionLabel={libraryActionLabel(item, "resume")}
-              detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
-              disabled={libraryActionLabel(item, "resume") === "Unavailable"}
-              icon={item.contentType === "LIVE" ? "live_tv" : item.contentType === "SERIES" || item.contentType === "EPISODE" ? "tv" : "movie"}
-              image={item.artworkUrl}
-              key={item.id}
-              onClick={() => playLibraryItem(item)}
-              progress={item.durationMillis > 0
-                ? Math.max(0, Math.min(100, item.positionMillis / item.durationMillis * 100))
-                : undefined}
-              title={item.title}
-              wide={item.contentType === "LIVE"}
-            />
-          ))}
-        </HomeShelf>
-      )}
-
-      {watchedChannels.length > 0 && (
-        <HomeShelf
-          actionLabel="Manage all"
-          count={library.filter((item) => item.status === "WATCHED" && item.contentType === "LIVE").length}
-          eyebrow="LAST WATCHED TV"
-          onMore={() => onNavigate("Library")}
-          title="Recently watched channels"
-        >
-          {watchedChannels.map((item) => (
-            <HomeTitleCard
-              actionLabel={item.streamUrl ? "Watch live" : "Unavailable"}
-              detail="Live TV"
-              disabled={!item.streamUrl}
-              icon="live_tv"
-              image={item.artworkUrl}
-              key={item.id}
-              onClick={() => playLibraryItem(item, 0)}
-              title={item.title}
-              wide
-            />
-          ))}
-        </HomeShelf>
-      )}
-
-      {recentlyWatched.length > 0 && (
-        <HomeShelf
-          actionLabel="Manage all"
-          count={library.filter((item) => item.status === "WATCHED").length}
-          eyebrow="YOUR RECENT HISTORY"
-          onMore={() => onNavigate("Library")}
-          title="Recently watched"
-        >
-          {recentlyWatched.map((item) => (
-            <HomeTitleCard
-              actionLabel={libraryActionLabel(item, "replay")}
-              detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
-              disabled={libraryActionLabel(item, "replay") === "Unavailable"}
-              icon={item.contentType === "LIVE" ? "live_tv" : item.contentType === "SERIES" || item.contentType === "EPISODE" ? "tv" : "movie"}
-              image={item.artworkUrl}
-              key={item.id}
-              onClick={() => openLibraryItem(item, "replay")}
-              title={item.title}
-              wide={item.contentType === "LIVE"}
-            />
-          ))}
-        </HomeShelf>
-      )}
-
-      {globalFavorites.length > 0 && (
-        <HomeShelf
-          actionLabel="Manage all"
-          count={favorites.length}
-          eyebrow="SAVED FOR YOU"
-          onMore={() => onNavigate("Library")}
-          title="Global favorites"
-        >
-          {globalFavorites.map((favorite) => (
-            <HomeTitleCard
-              actionLabel={favoriteActionLabel(favorite)}
-              detail={homeContentTypeLabel(favorite.contentType)}
-              disabled={favoriteActionLabel(favorite) === "Unavailable"}
-              icon={favorite.contentType === "LIVE" ? "live_tv" : favorite.contentType === "SERIES" ? "tv" : "movie"}
-              image={favorite.artworkUrl}
-              key={favorite.id}
-              onClick={() => openFavorite(favorite)}
-              title={favorite.title}
-              wide={favorite.contentType === "LIVE"}
-            />
-          ))}
-        </HomeShelf>
-      )}
-
-      {watchlist.length > 0 && (
-        <HomeShelf
-          actionLabel="Manage all"
-          count={library.filter((item) => item.status === "WATCHLIST").length}
-          eyebrow="SAVED FOR LATER"
-          onMore={() => onNavigate("Library")}
-          title="Your watchlist"
-        >
-          {watchlist.map((item) => (
-            <HomeTitleCard
-              actionLabel={libraryActionLabel(item, "details")}
-              detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
-              disabled={libraryActionLabel(item, "details") === "Unavailable"}
-              icon={item.contentType === "SERIES" ? "tv" : "movie"}
-              image={item.artworkUrl}
-              key={item.id}
-              onClick={() => openLibraryItem(item, "details")}
-              title={item.title}
-            />
-          ))}
-        </HomeShelf>
-      )}
-
     </section>
   );
 }
@@ -2654,9 +2979,9 @@ function HomeTitleCard({
     <button
       aria-label={`${actionLabel} ${title}`}
       className={`catalog-card home-title-card${wide ? " wide-title-card" : ""}`}
+      data-tooltip={`${actionLabel} ${title}`}
       disabled={disabled}
       onClick={onClick}
-      title={`${actionLabel} ${title}`}
       type="button"
     >
       <span className="home-title-art">
@@ -2673,8 +2998,8 @@ function HomeTitleCard({
         )}
       </span>
         <span className="catalog-card-copy">
-          <strong title={title}>{title}</strong>
-          <small title={detail}>{detail}</small>
+          <strong data-tooltip={title}>{title}</strong>
+          <small data-tooltip={detail}>{detail}</small>
           {disabled && <span className="home-title-action">{actionLabel}</span>}
         </span>
     </button>

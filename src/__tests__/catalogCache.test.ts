@@ -5,6 +5,7 @@ import {
   canAutoRefreshCatalog,
   catalogRefreshDueAt,
   isCatalogRefreshDue,
+  isPlaylistExpired,
 } from "../catalogCache";
 
 function source(overrides: Partial<Playlist> = {}): Playlist {
@@ -40,5 +41,13 @@ describe("catalog cache refresh", () => {
     expect(canAutoRefreshCatalog(source({ type: "M3U" }))).toBe(true);
     expect(canAutoRefreshCatalog(source({ type: "M3U", fileName: "local.m3u" }))).toBe(false);
     expect(canAutoRefreshCatalog(source({ demo: true }))).toBe(false);
+  });
+
+  it("checks playlist expiry against the exact timestamp", () => {
+    const playlist = source({ expiresAtMillis: 10_000 });
+
+    expect(isPlaylistExpired(playlist, 9_999)).toBe(false);
+    expect(isPlaylistExpired(playlist, 10_000)).toBe(true);
+    expect(isPlaylistExpired(source(), 10_000)).toBe(false);
   });
 });

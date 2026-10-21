@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CatalogPage } from "../components/ContentPages";
 import type { PopularCatalogService } from "../popularCatalogService";
 import type { MdblistPopularItem, RatingsMediaType } from "../types";
-import type { Movie, Series } from "../types";
+import type { LiveChannel, Movie, Series } from "../types";
 
 const movie: Movie = {
   id: "local-movie",
@@ -24,7 +24,6 @@ function renderCatalog(mdblistApiKey = "", service?: PopularCatalogService) {
     channels={[]}
     epg={[]}
     favorites={[]}
-    guideLoading={false}
     library={[]}
     loading={false}
     movies={[movie]}
@@ -47,7 +46,6 @@ function renderSeriesCatalog(series: Series[]) {
     channels={[]}
     epg={[]}
     favorites={[]}
-    guideLoading={false}
     library={[]}
     loading={false}
     movies={[]}
@@ -63,6 +61,48 @@ function renderSeriesCatalog(series: Series[]) {
 }
 
 describe("popular catalog UI", () => {
+  it("uses generic favorite tooltip labels for channels, movies, and series", () => {
+    const channel: LiveChannel = {
+      id: "channel-1",
+      playlistId: "playlist",
+      name: "Local News",
+      group: "News",
+      streamUrl: "https://provider.example/live",
+    };
+    render(<CatalogPage
+      channels={[channel]}
+      epg={[]}
+      favorites={[]}
+      library={[]}
+      loading={false}
+      movies={[]}
+      onAddToLibrary={vi.fn()}
+      onLoadGuideForChannels={vi.fn()}
+      onOpenMovie={vi.fn()}
+      onOpenSeries={vi.fn()}
+      onPlay={vi.fn()}
+      onToggleFavorite={vi.fn()}
+      section="Live TV"
+      series={[]}
+    />);
+    expect(screen.getByRole("button", { name: "Add Local News to favorites" }).getAttribute("data-tooltip"))
+      .toBe("Add TV Channel to favorites");
+
+    cleanup();
+    renderCatalog();
+    expect(screen.getAllByRole("button", { name: "Add Local Batman Movie to favorites" })[0].getAttribute("data-tooltip"))
+      .toBe("Add Movie to favorites");
+    expect(screen.getAllByRole("button", { name: "Add Local Batman Movie to your watchlist" })[0].getAttribute("data-tooltip"))
+      .toBe("Add to watchlist");
+
+    cleanup();
+    renderSeriesCatalog([{ id: "series-1", playlistId: "playlist", name: "Local Mystery", seasons: 1 }]);
+    expect(screen.getByRole("button", { name: "Add Local Mystery to favorites" }).getAttribute("data-tooltip"))
+      .toBe("Add Series to favorites");
+    expect(screen.getByRole("button", { name: "Add Local Mystery to your watchlist" }).getAttribute("data-tooltip"))
+      .toBe("Add to watchlist");
+  });
+
   it("hides unknown zero-season counts while preserving known counts", () => {
     renderSeriesCatalog([
       { id: "unknown", playlistId: "playlist", name: "Unknown Seasons", seasons: 0 },

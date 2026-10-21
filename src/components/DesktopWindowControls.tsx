@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import type { Window as TauriWindow } from "@tauri-apps/api/window";
-import { Icon } from "./common";
 
 function logWindowError(action: string, cause: unknown) {
   console.error(`Could not ${action} the TiviHub window.`, cause);
@@ -51,17 +50,17 @@ export function DesktopWindowControls() {
     <div aria-label="Window controls" className="window-controls">
       <button
         aria-label="Minimize window"
-        className="window-control"
+        className="window-control window-control-minimize"
+        data-tooltip="Minimize window"
         onClick={() => {
           void desktopWindow.minimize().catch((cause: unknown) => logWindowError("minimize", cause));
         }}
         type="button"
-      >
-        <Icon name="horizontal_rule" />
-      </button>
+      />
       <button
         aria-label={maximized ? "Restore window" : "Maximize window"}
-        className="window-control"
+        className="window-control window-control-maximize"
+        data-tooltip={maximized ? "Restore window" : "Maximize window"}
         onClick={() => {
           void desktopWindow.toggleMaximize()
             .then(() => desktopWindow.isMaximized())
@@ -69,19 +68,16 @@ export function DesktopWindowControls() {
             .catch((cause: unknown) => logWindowError("toggle maximize for", cause));
         }}
         type="button"
-      >
-        <Icon name={maximized ? "filter_none" : "crop_square"} />
-      </button>
+      />
       <button
         aria-label="Close window"
         className="window-control window-control-close"
+        data-tooltip="Close window"
         onClick={() => {
           void desktopWindow.close().catch((cause: unknown) => logWindowError("close", cause));
         }}
         type="button"
-      >
-        <Icon name="close" />
-      </button>
+      />
     </div>
   );
 }

@@ -67,6 +67,8 @@ describe("detail page external ratings", () => {
       onBack={vi.fn()}
       onFavorite={vi.fn()}
       onOpenMovie={onOpenMovie}
+      onToggleRelatedFavorite={vi.fn()}
+      onAddRelatedToLibrary={vi.fn()}
       onPlay={vi.fn()}
       onRemoveFromLibrary={vi.fn()}
       playlistMovies={[
@@ -86,6 +88,12 @@ describe("detail page external ratings", () => {
     expect(screen.queryByText("Other playlist movie")).toBeNull();
     expect(document.querySelectorAll(".detail-more-card")).toHaveLength(9);
     expect(document.querySelector(".detail-more-artwork.catalog-artwork .catalog-artwork-fallback")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add Arrival to favorites" }).getAttribute("data-tooltip"))
+      .toBe("Add Movie to favorites");
+    expect(screen.getByRole("button", { name: "Add Arrival to your watchlist" }).getAttribute("data-tooltip"))
+      .toBe("Add to watchlist");
+    expect(screen.getByRole("button", { name: "Add to watchlist" }).getAttribute("data-tooltip"))
+      .toBe("Add to watchlist");
     await userEvent.click(screen.getByRole("button", { name: "View details for Arrival" }));
     expect(onOpenMovie).toHaveBeenCalledWith(related);
   });
@@ -105,6 +113,8 @@ describe("detail page external ratings", () => {
       onContinueWatching={vi.fn()}
       onFavorite={vi.fn()}
       onOpenSeries={onOpenSeries}
+      onToggleRelatedFavorite={vi.fn()}
+      onAddRelatedToLibrary={vi.fn()}
       onPlay={vi.fn()}
       onRemoveFromLibrary={vi.fn()}
       playlistSeries={[related]}
@@ -117,6 +127,10 @@ describe("detail page external ratings", () => {
       screen.getByRole("heading", { name: "Episodes" }).compareDocumentPosition(screen.getByText("More from this playlist")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add The Wire to favorites" }).getAttribute("data-tooltip"))
+      .toBe("Add Series to favorites");
+    expect(screen.getByRole("button", { name: "Add The Wire to your watchlist" }).getAttribute("data-tooltip"))
+      .toBe("Add to watchlist");
     await userEvent.click(screen.getByRole("button", { name: "View details for The Wire" }));
     expect(onOpenSeries).toHaveBeenCalledWith(related);
   });
@@ -136,6 +150,7 @@ describe("detail page external ratings", () => {
       onBack={vi.fn()}
       onContinueWatching={vi.fn()}
       onFavorite={vi.fn()}
+      onDownload={vi.fn()}
       onPlay={vi.fn()}
       onRemoveFromLibrary={vi.fn()}
       series={series}
@@ -147,6 +162,10 @@ describe("detail page external ratings", () => {
     expect(screen.queryByText(/S02 E01 · New Chapter/)).toBeNull();
     expect(screen.getByRole("combobox", { name: "Filter season" }).textContent).toContain("Season 1");
     expect(screen.getByText("SERIES DETAILS / 2 SEASONS / 2 EPISODES")).toBeTruthy();
+    expect(document.querySelector(".episode-row")?.getAttribute("data-tooltip-placement")).toBe("bottom");
+    expect(document.querySelector(".episode-download-action")?.getAttribute("data-tooltip"))
+      .toBe("Download for offline playback");
+    expect(document.querySelector(".episode-download-action")?.getAttribute("data-tooltip-placement")).toBe("left");
     await userEvent.click(screen.getByRole("combobox", { name: "Filter season" }));
     await userEvent.click(await screen.findByRole("option", { name: "All seasons" }));
     expect(screen.getByText(/S02 E01 · New Chapter/)).toBeTruthy();

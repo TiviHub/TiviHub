@@ -27,6 +27,13 @@ export interface XtreamCatalog {
   expiresAtMillis?: number;
 }
 
+export class XtreamAccountExpiredError extends Error {
+  constructor() {
+    super("This Xtream playlist has expired.");
+    this.name = "XtreamAccountExpiredError";
+  }
+}
+
 export interface XtreamShortEpgResult {
   programs: EpgProgram[];
   requestedChannels: number;
@@ -235,8 +242,12 @@ export async function authenticateXtream(
   if (!userInfo) throw new Error("Xtream returned an unexpected authentication response.");
   const status = stringValue(userInfo.status ?? payload?.status)?.toLowerCase() ?? "";
   const auth = optionalNumber(userInfo.auth);
-  if (auth === 0 || ["disabled", "expired", "unauthorized"].includes(status)) {
-    throw new Error(stringValue(payload?.message) || `Xtream authentication was rejected (${status || "inactive"}).`);
+  const message = stringValue(payload?.message);
+  if (status === "expired" || message?.toLowerCase().includes("expired")) {
+    throw new XtreamAccountExpiredError();
+  }
+  if (auth === 0 || ["disabled", "unauthorized"].includes(status)) {
+    throw new Error(message || `Xtream authentication was rejected (${status || "inactive"}).`);
   }
   return expiryMillis(userInfo.exp_date);
 }

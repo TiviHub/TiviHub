@@ -178,6 +178,7 @@ export interface PlayableItem {
   drmSystem?: DrmSystem;
   drmCertificateUrl?: string;
   live: boolean;
+  offline?: boolean;
   parentId?: string;
   parentTitle?: string;
 }

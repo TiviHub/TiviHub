@@ -1,7 +1,7 @@
 import { isAdultContent } from "./adultContent";
 import type { LiveChannel, Movie, Series } from "./types";
 
-export type SearchSection = "Home" | "Live TV" | "Movies" | "Series" | "Library" | "Settings";
+export type SearchSection = "Home" | "Live TV" | "TV Guide" | "Movies" | "Series" | "Library" | "Downloads" | "Settings";
 export type GlobalSearchCommand =
   | { kind: "navigate"; section: SearchSection }
   | { kind: "add-source" }

@@ -29,6 +29,10 @@ export function SettingsPage({
   onSetShowAdultContent,
   sources,
   activeSourceId,
+  downloadDirectoryPath,
+  completedDownloadCount,
+  onChangeDownloadDirectory,
+  onClearCompletedDownloads,
   onAddSource,
   onActivate,
   onEdit,
@@ -55,6 +59,10 @@ export function SettingsPage({
   onSetShowAdultContent: (show: boolean) => void;
   sources: Playlist[];
   activeSourceId: string | null;
+  downloadDirectoryPath: string | null;
+  completedDownloadCount: number;
+  onChangeDownloadDirectory: () => void;
+  onClearCompletedDownloads: () => void;
   onAddSource: () => void;
   onActivate: (id: string) => void;
   onEdit: (source: Playlist) => void;
@@ -212,9 +220,10 @@ export function SettingsPage({
       <div className="settings-layout">
         <nav aria-label="Settings sections" className="settings-nav">
           <p>ON THIS PAGE</p>
-          <a href="#settings-sources"><Icon name="playlist_play" /><span>Sources</span></a>
           <a href="#settings-appearance"><Icon name="dark_mode" /><span>Appearance</span></a>
           <a href="#settings-content-visibility"><Icon name="shield" /><span>Adult content</span></a>
+          <a href="#settings-sources"><Icon name="playlist_play" /><span>Sources</span></a>
+          <a href="#settings-downloads"><Icon name="download" /><span>Downloads</span></a>
           <a href="#settings-subtitles"><Icon name="subtitles" /><span>Subtitles</span></a>
           {onSaveMdblistApiKey && (
             <a href="#settings-ratings"><Icon name="high_quality" /><span>External ratings</span></a>
@@ -287,8 +296,10 @@ export function SettingsPage({
                       <span className="source-row-icon"><Icon name={source.type === "M3U" ? "playlist_play" : "dns"} /></span>
                       <div className="source-row-copy">
                         <strong>{source.name}</strong>
-                        <small>{source.type}{source.expiresAtMillis ? ` · Expires ${new Date(source.expiresAtMillis).toLocaleDateString()}` : ""}</small>
-                        <small title={source.lastCatalogRefreshAt
+                        <small>{source.type}{source.expiresAtMillis
+                          ? ` · ${source.expiresAtMillis <= Date.now() ? "Expired" : "Expires"} ${new Date(source.expiresAtMillis).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+                          : ""}</small>
+                        <small data-tooltip={source.lastCatalogRefreshAt
                           ? `Last successful catalog refresh: ${new Date(source.lastCatalogRefreshAt).toLocaleString()}`
                           : "A catalog refresh has not been recorded for this source yet."}>
                           Last successful refresh: {source.lastCatalogRefreshAt
@@ -309,8 +320,8 @@ export function SettingsPage({
                         <button className="secondary-button source-select-button" onClick={() => onActivate(source.id)} type="button">Use</button>
                       )}
                       {source.id === activeSourceId && <span className="active-source-tag"><Icon name="check_circle" /> Active</span>}
-                      <button aria-label={`Edit ${source.name}`} className="icon-button" onClick={() => onEdit(source)} type="button"><Icon name="edit" /></button>
-                      <button aria-label={`Delete ${source.name}`} className="icon-button danger-button" onClick={() => onDelete(source)} type="button"><Icon name="delete" /></button>
+                      <button aria-label={`Edit ${source.name}`} className="icon-button settings-source-action" data-tooltip="Edit playlist" onClick={() => onEdit(source)} type="button"><Icon name="edit" /></button>
+                      <button aria-label={`Delete ${source.name}`} className="icon-button danger-button settings-source-action" data-tooltip="Remove playlist" onClick={() => onDelete(source)} type="button"><Icon name="delete" /></button>
                     </article>
                   ))}
                 </div>
@@ -342,6 +353,45 @@ export function SettingsPage({
                     <Icon name="schedule" /> {epgBusy ? "Updating guide…" : "Refresh TV guide"}
                   </button>
                 )}
+              </div>
+            </div>
+          </section>
+
+          <section aria-labelledby="settings-downloads-heading" className="settings-group" id="settings-downloads">
+            <div className="settings-card">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="download" /></div>
+                <div>
+                  <h2 id="settings-downloads-heading">Downloads</h2>
+                  <p>Choose where downloaded videos are copied and manage completed offline downloads.</p>
+                </div>
+              </div>
+              <div className="settings-download-location">
+                <div>
+                  <span>Download folder</span>
+                  <strong>
+                    {downloadDirectoryPath ?? "No additional folder selected"}
+                  </strong>
+                  <small>New downloads will be copied to this default folder. Offline playback continues using TiviHub’s local copy.</small>
+                </div>
+                <button className="secondary-button" onClick={onChangeDownloadDirectory} type="button">
+                  <Icon name="folder_open" /> Change folder
+                </button>
+              </div>
+              <div className="settings-download-location">
+                <div>
+                  <span>Completed downloads</span>
+                  <strong>{completedDownloadCount.toLocaleString()} saved {completedDownloadCount === 1 ? "video" : "videos"}</strong>
+                  <small>Remove completed offline downloads from this device. Active downloads are not affected.</small>
+                </div>
+                <button
+                  className="secondary-button danger-button"
+                  disabled={completedDownloadCount === 0}
+                  onClick={onClearCompletedDownloads}
+                  type="button"
+                >
+                  <Icon name="delete_sweep" /> Clear completed downloads
+                </button>
               </div>
             </div>
           </section>
