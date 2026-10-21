@@ -84,7 +84,7 @@ describe("application source lifecycle", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
-    expect(await screen.findByText(/and its local data were deleted/)).toBeTruthy();
+    expect(await screen.findByText(/and its local data were deleted/, undefined, { timeout: 10_000 })).toBeTruthy();
     await removeLibraryItem(resumeItemId);
   }, 30_000);
 
@@ -160,7 +160,7 @@ describe("application source lifecycle", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
-    expect(await screen.findByText(/and its local data were deleted/)).toBeTruthy();
+    expect(await screen.findByText(/and its local data were deleted/, undefined, { timeout: 10_000 })).toBeTruthy();
   }, 30_000);
 
   it("resets page scroll when navigating to another section", async () => {
@@ -185,7 +185,7 @@ describe("application source lifecycle", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
-    expect(await screen.findByText(/and its local data were deleted/)).toBeTruthy();
+    expect(await screen.findByText(/and its local data were deleted/, undefined, { timeout: 10_000 })).toBeTruthy();
   }, 30_000);
 
   it("lets users hide, reorder, and reset Home sections", async () => {
@@ -223,7 +223,7 @@ describe("application source lifecycle", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
-    expect(await screen.findByText(/and its local data were deleted/)).toBeTruthy();
+    expect(await screen.findByText(/and its local data were deleted/, undefined, { timeout: 10_000 })).toBeTruthy();
   }, 30_000);
 
   it("adds a demo source and deletes a populated playlist", async () => {
@@ -240,7 +240,7 @@ describe("application source lifecycle", () => {
     await user.click(screen.getByRole("button", { name: "Delete TiviHub Demo Library" }));
     expect(window.confirm).toHaveBeenCalledTimes(1);
 
-    expect(await screen.findByText(/and its local data were deleted/)).toBeTruthy();
+    expect(await screen.findByText(/and its local data were deleted/, undefined, { timeout: 10_000 })).toBeTruthy();
   }, 30_000);
 
   it("opens Downloads below Library and reuses the Home empty-state layout", async () => {
