@@ -30,6 +30,8 @@ export interface Playlist {
   epgUrl?: string;
   fileName?: string;
   demo?: boolean;
+  /** Set by the SQLite migration when saved credentials could not be decrypted and must be entered again. */
+  needsReentry?: boolean;
   expiresAtMillis?: number;
   lastCatalogRefreshAt?: number;
   lastCatalogRefreshAttemptAt?: number;
