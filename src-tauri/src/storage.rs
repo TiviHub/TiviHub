@@ -642,6 +642,34 @@ mod tests {
     }
 
     #[test]
+    fn a_full_disk_fails_the_write_and_keeps_existing_data() {
+        let path = temp_db("full");
+        let s = Store::open(&path, [7; 32]).unwrap();
+        put(&s, "favorites", json!({"id": "kept", "playlistId": "p"}));
+        let pages: i64 = s.conn().query_row("PRAGMA page_count", [], |r| r.get(0)).unwrap();
+        // SQLite reports the same "database or disk is full" error once the page limit is reached.
+        s.conn().pragma_update(None, "max_page_count", pages).unwrap();
+        let big = "x".repeat(100_000);
+        let result = s.tx(vec![Op::Put { store: "favorites".into(), record: json!({"id": "big", "playlistId": "p", "blob": big}) }]);
+        assert!(result.unwrap_err().contains("full"));
+        let all = rows(s.get_all("favorites").unwrap());
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0]["id"], "kept");
+    }
+
+    #[test]
+    fn an_existing_key_file_is_reused_and_a_damaged_one_is_rejected() {
+        let dir = std::env::temp_dir().join(format!("tivihub-keydir-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let diagnostics = BackendDiagnostics::default();
+        std::fs::write(dir.join(KEY_FILE), B64.encode([9u8; 32])).unwrap();
+        assert_eq!(load_or_create_key(&dir, &diagnostics).unwrap(), [9u8; 32]);
+        std::fs::write(dir.join(KEY_FILE), "not a key").unwrap();
+        assert!(load_or_create_key(&dir, &diagnostics).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn numeric_keys_are_stored_as_text() {
         let s = store();
         put(&s, "subtitleFiles", json!({"fileId": 42, "data": "x"}));

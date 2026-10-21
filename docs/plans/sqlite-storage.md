@@ -4,13 +4,16 @@ Branch: `feature/sqlite-storage`. Status: Phases 0-4 implemented (`ba7384b`); op
 
 Decided: D3 keychain accepted, D4 web build keeps IDB, T3 parity binary dropped (T2 plus the migration tests cover Rust and the JS side separately).
 
-Still open before merge:
-- T1 contract suite: `storage.test.ts` only runs against `idbBackend`. Needs the Rust stand-in (T3), which was dropped.
-- T4: covered now except a real `CryptoKey` round trip (the tests use the in-memory sealer; raw-file plaintext is checked in Rust).
-- T5: corrupt and read-only files are covered; a full disk is not.
-- T6: Rust side measured (`catalog_import_speed`, release): 200k channels import 1.4s, cold read 0.19s. Webview invoke transfer and an IDB baseline are not measured, so the "no more than 20% slower" comparison is open.
-- T7 manual Windows upgrade/downgrade run has not been done.
+Done and tested (all run in `npm test` / `cargo test`):
+- T1 contract suite: `storageContract.ts` runs against IndexedDB (`storage.test.ts`) and the real Rust store (`storage.rust.test.ts`).
+- T3 parity: `src-tauri/examples/storage_harness.rs` serves the `storage_*` commands over stdio; `storageParity.test.ts` checks both backends give the same snapshot. `npm test` builds the harness first (`pretest`).
+- T4: legacy IDB v1/v3/v5, mid-copy crash and relaunch, partial stores, count mismatch, undecryptable key, migration against real Rust encryption, and no plaintext credentials in the database files (control search included).
+- T5: corrupt file, read-only file, full disk (`max_page_count`), damaged key file. SQLite-cannot-open fallback rules are in `sqliteBackend.test.ts`.
+- T6 (`TIVIHUB_PERF=1 TIVIHUB_HARNESS_PROFILE=release npx vitest run storagePerformance`): 200k channels + 50k movies, over a pipe: SQLite import 1.5s, read 0.38s, longest event-loop stall 6ms. fake-indexeddb for reference: import 3.7s, read 1.5s, stall 355ms. fake-indexeddb is not a real browser IDB and a pipe is not Tauri's invoke, so confirm in T7.
 - Keychain: `load_or_create_key` falls back to a key file with a diagnostic. If the keychain later becomes unavailable, a new key is generated and old sealed data cannot be opened (sources then need re-entry).
+
+Open, needs a person on a real build:
+- T7 manual run (checklist at the end of this file).
 
 ## Goal and scope
 
@@ -133,3 +136,13 @@ CI: `ci.yml` has no `cargo` step today. Add `cargo test` in Phase 1 as a require
 1. Is the web build shipped to users, or only the desktop app?
 2. Accept D3 (OS keychain)? Which platforms must be supported on day one?
 3. Is deleting the old IDB after one release OK, or keep it indefinitely?
+
+## T7 checklist (Windows first, then macOS/Linux builds from CI)
+
+1. Install release v1.7.0. Add an Xtream source with credentials, an M3U source, a few favorites, run a subtitle search, set the MDBList key.
+2. Install the branch build over it. First launch shows the startup screen and migrates. Check: all sources open without re-entering credentials, favorites and library are intact, ratings and subtitle keys still work.
+3. Check `%APPDATA%` for the app: `tivihub.sqlite3` exists and contains no plaintext password (`findstr /c:"<your password>" tivihub.sqlite3*` finds nothing).
+4. Close and reopen: no second migration, normal startup time. Refresh a large catalog and watch the UI stay responsive.
+5. Delete a source and confirm its channels and favorites are gone.
+6. Reinstall v1.7.0: it opens with its untouched IndexedDB data (changes made on the branch build will not be there).
+7. Linux without a secret service: first launch works and records the KEY_FILE_FALLBACK diagnostic.
