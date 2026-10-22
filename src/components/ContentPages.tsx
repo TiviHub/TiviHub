@@ -1,3 +1,5 @@
+import { ProgressIndicator } from "./ProgressIndicator";
+import { CardSkeletons, RowSkeletons, Skeleton } from "./Skeleton";
 import { ExternalRatingsPanel } from "./ExternalRatings";
 import type { RatingsService } from "../ratingsService";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
@@ -89,6 +91,7 @@ function CatalogCard({
   isFavorite,
   inLibrary,
   currentProgram,
+  guideLoading = false,
   onOpen,
   onFavorite,
   onAddToLibrary,
@@ -99,6 +102,7 @@ function CatalogCard({
   isFavorite: boolean;
   inLibrary: boolean;
   currentProgram?: EpgProgram;
+  guideLoading?: boolean;
   onOpen: () => void;
   onFavorite: () => void;
   onAddToLibrary: () => void;
@@ -136,6 +140,7 @@ function CatalogCard({
         <span className="catalog-card-copy">
           <strong data-tooltip={titleOf(item)}>{titleOf(item)}</strong>
           <small data-tooltip={subtitle}>{subtitle}</small>
+          {isLive && guideLoading && !currentProgram && <Skeleton className="skeleton-line" />}
           {currentProgram && (
             <span className="program-progress">
               <span style={{ width: `${Math.max(0, Math.min(100, ((Date.now() - currentProgram.startMillis) / (currentProgram.endMillis - currentProgram.startMillis)) * 100))}%` }} />
@@ -189,6 +194,7 @@ export function CatalogPage({
   livePlayer,
   livePlaybackItemId,
   livePlayerMini = false,
+  guideLoading = false,
   mdblistApiKey = "",
   popularCatalogService,
 }: {
@@ -210,6 +216,7 @@ export function CatalogPage({
   livePlayer?: ReactNode;
   livePlaybackItemId?: string;
   livePlayerMini?: boolean;
+  guideLoading?: boolean;
   mdblistApiKey?: string;
   popularCatalogService?: PopularCatalogService;
 }) {
@@ -353,6 +360,7 @@ export function CatalogPage({
     return (
       <CatalogCard
         currentProgram={currentProgram}
+        guideLoading={guideLoading}
         inLibrary={contentType !== "LIVE" && libraryIds.has(`${contentType}:${item.id}`)}
         isFavorite={favoriteIds.has(item.id)}
         item={item}
@@ -443,9 +451,9 @@ export function CatalogPage({
       </header>
 
       {(loading || isSorting) && (
-        <div aria-live="polite" className="inline-status">
-          <span className="spinner" />
-          {isSorting ? "Sorting your catalog…" : "Updating your catalog…"}
+        <div aria-live="polite" role="status">
+          <span className="sr-only">{isSorting ? "Sorting your catalog…" : "Updating your catalog…"}</span>
+          <ProgressIndicator label={isSorting ? "Sorting your catalog" : "Updating your catalog"} />
         </div>
       )}
       {(section === "Movies" || section === "Series") &&
@@ -460,7 +468,12 @@ export function CatalogPage({
                 <p aria-live="polite" role="status">MDBList popular titles are unavailable. Showing recently added instead.</p>
               )}
               {usePopularPanel && !popularState
-                ? <p aria-live="polite" className="inline-status" role="status"><span className="spinner" /> Loading popular titles…</p>
+                ? (
+                  <div aria-live="polite" role="status">
+                    <span className="sr-only">Loading popular titles…</span>
+                    <CardSkeletons className="catalog-featured-grid" count={5} />
+                  </div>
+                )
                 : (
                   <div className="catalog-grid catalog-featured-grid">
                     {featuredItems.map((item) => renderCatalogCard(item))}
@@ -470,11 +483,18 @@ export function CatalogPage({
           </div>
         )}
       {items.length === 0 ? (
-        <div aria-live="polite" className="catalog-empty" role="status">
-          <div className="empty-icon"><Icon name={section === "Live TV" ? "live_tv" : section === "Movies" ? "movie" : "tv"} /></div>
-          <h2>{loading ? "Tuning in…" : `No ${section.toLowerCase()} yet`}</h2>
-          <p>{loading ? "Your catalog will appear here when the source finishes loading." : "Add or refresh a playlist that includes this content."}</p>
-        </div>
+        loading ? (
+          <div aria-live="polite" role="status">
+            <span className="sr-only">Tuning in… Your catalog will appear here when the source finishes loading.</span>
+            <CardSkeletons count={section === "Live TV" ? 12 : 18} live={section === "Live TV"} />
+          </div>
+        ) : (
+          <div aria-live="polite" className="catalog-empty" role="status">
+            <div className="empty-icon"><Icon name={section === "Live TV" ? "live_tv" : section === "Movies" ? "movie" : "tv"} /></div>
+            <h2>{`No ${section.toLowerCase()} yet`}</h2>
+            <p>Add or refresh a playlist that includes this content.</p>
+          </div>
+        )
       ) : filtered.length === 0 ? (
         <div className="catalog-empty compact-empty">
           <Icon name="search" />
@@ -527,6 +547,7 @@ export function CatalogPage({
                         <strong>{channel.name}</strong>
                         <small>{channel.group}</small>
                         {current && <small className="live-channel-current-program">{current.title}</small>}
+                        {!current && guideLoading && <Skeleton className="skeleton-line" />}
                       </span>
                       {livePlaybackItemId === channel.id && <span aria-label="Playing" className="live-channel-playing"><Icon name="play_arrow" /></span>}
                     </button>
@@ -810,12 +831,14 @@ function OfflineDownloadAction({
   activeDownloadIds,
   onDownload,
   compact = false,
+  iconOnly = false,
 }: {
   media: DownloadableMedia;
   downloadedIds: ReadonlySet<string>;
   activeDownloadIds: ReadonlySet<string>;
   onDownload: (media: DownloadableMedia) => void;
   compact?: boolean;
+  iconOnly?: boolean;
 }) {
   const id = downloadIdFor(media);
   const downloaded = downloadedIds.has(id);
@@ -825,7 +848,7 @@ function OfflineDownloadAction({
   return (
     <button
       aria-label={`${label} ${media.title}`}
-      className={`${compact ? "icon-button download-action-compact episode-download-action" : "secondary-button download-action"}`}
+      className={iconOnly ? "detail-icon-button" : compact ? "icon-button episode-download-action" : "secondary-button download-action"}
       disabled={!supported || downloaded || downloading}
       onClick={() => onDownload(media)}
       data-tooltip={!supported
@@ -835,7 +858,7 @@ function OfflineDownloadAction({
       type="button"
     >
       <Icon name={downloaded ? "check" : downloading ? "downloading" : "download"} />
-      {!compact && label}
+      {!compact && !iconOnly && label}
     </button>
   );
 }
@@ -887,7 +910,6 @@ export function MovieDetail({
       <button className="back-button" data-tooltip="Back to Movies overview" onClick={onBack} type="button"><Icon name="arrow_back" /> Movies</button>
       <header className="series-detail-header">
         {movie.posterUrl && <img alt="" aria-hidden="true" className="detail-backdrop" src={movie.posterUrl} />}
-        {movie.posterUrl ? <img alt="" src={movie.posterUrl} /> : <div className="movie-detail-poster"><Icon name="movie" /></div>}
         <div>
           <p className="eyebrow">MOVIE DETAILS{movie.year ? ` / ${movie.year}` : ""}</p>
           <h1>{movie.name}</h1>
@@ -902,27 +924,30 @@ export function MovieDetail({
               <Icon name="play_arrow" /> {continueWatching ? "Continue watching" : "Watch movie"}
             </button>
             <button
+              aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
               aria-pressed={favorite}
-              className={`secondary-button${favorite ? " selected" : ""}`}
+              className={`detail-icon-button favorite${favorite ? " selected" : ""}`}
+              data-tooltip={favorite ? "Remove from favorites" : "Add to favorites"}
               onClick={onFavorite}
               type="button"
             >
               <Icon name={favorite ? "favorite" : "favorite_border"} />
-              {favorite ? "Remove from favorites" : "Add to favorites"}
             </button>
             <button
+              aria-label={inLibrary ? "Remove from library" : "Add to watchlist"}
               aria-pressed={inLibrary}
-              className={`secondary-button library-action${inLibrary ? " selected" : ""}`}
+              className={`detail-icon-button${inLibrary ? " selected" : ""}`}
+              data-tooltip={inLibrary ? "Remove from library" : "Add to watchlist"}
               onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >
-              <Icon name={inLibrary ? "delete" : "library_add"} />
-              {inLibrary ? "Remove from library" : "Add to watchlist"}
+              <Icon name={inLibrary ? "check" : "library_add"} />
             </button>
             {onDownload && (
               <OfflineDownloadAction
                 activeDownloadIds={activeDownloadIds}
                 downloadedIds={downloadedIds}
+                iconOnly
                 media={{
                   id: movie.id,
                   playlistId: movie.playlistId,
@@ -1052,9 +1077,6 @@ export function SeriesDetail({
       <button className="back-button" data-tooltip="Back to Series overview" onClick={onBack} type="button"><Icon name="arrow_back" /> Series</button>
       <header className="series-detail-header">
         {series.posterUrl && <img alt="" aria-hidden="true" className="detail-backdrop" src={series.posterUrl} />}
-        {series.posterUrl
-          ? <img alt="" src={series.posterUrl} />
-          : <div className="movie-detail-poster"><Icon name="tv" /></div>}
         <div>
           <p className="eyebrow">{seriesDetails}</p>
           <h1>{series.name}</h1>
@@ -1078,22 +1100,24 @@ export function SeriesDetail({
               <Icon name="play_arrow" /> {continueWatching ? "Continue watching" : "Play first episode"}
             </button>
             <button
+              aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
               aria-pressed={favorite}
-              className={`secondary-button${favorite ? " selected" : ""}`}
+              className={`detail-icon-button favorite${favorite ? " selected" : ""}`}
+              data-tooltip={favorite ? "Remove from favorites" : "Add to favorites"}
               onClick={onFavorite}
               type="button"
             >
               <Icon name={favorite ? "favorite" : "favorite_border"} />
-              {favorite ? "Remove from favorites" : "Add to favorites"}
             </button>
             <button
+              aria-label={inLibrary ? "Remove from library" : "Add to watchlist"}
               aria-pressed={inLibrary}
-              className={`secondary-button library-action${inLibrary ? " selected" : ""}`}
+              className={`detail-icon-button${inLibrary ? " selected" : ""}`}
+              data-tooltip={inLibrary ? "Remove from library" : "Add to watchlist"}
               onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >
-              <Icon name={inLibrary ? "delete" : "library_add"} />
-              {inLibrary ? "Remove from library" : "Add to watchlist"}
+              <Icon name={inLibrary ? "check" : "library_add"} />
             </button>
           </div>
         </div>
@@ -1122,7 +1146,12 @@ export function SeriesDetail({
           </div>
         )}
       </div>
-      {loading && <div className="inline-status"><span className="spinner" /> Loading episodes…</div>}
+      {loading && (
+        <div aria-live="polite" role="status">
+          <span className="sr-only">Loading episodes…</span>
+          <RowSkeletons count={5} />
+        </div>
+      )}
       {error && <p className="form-error" role="alert">{error}</p>}
       {!loading && !error && availableEpisodes.length === 0 && (
         <div className="catalog-empty compact-empty"><h2>No episodes found</h2><p>The provider returned no episode details for this series.</p></div>
@@ -1370,7 +1399,7 @@ export function LibraryPage({
                     <Icon name="play_arrow" />
                   </button>
                 )}
-                <button aria-label={`Remove ${favorite.title} from favorites`} className="icon-button" data-tooltip="Remove from favorites" onClick={() => onRemoveFavorite(favorite)} type="button">
+                <button aria-label={`Remove ${favorite.title} from favorites`} className="icon-button is-favorite" data-tooltip="Remove from favorites" onClick={() => onRemoveFavorite(favorite)} type="button">
                   <Icon name="favorite" />
                 </button>
               </article>

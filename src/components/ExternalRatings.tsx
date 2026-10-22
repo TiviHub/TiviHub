@@ -1,3 +1,4 @@
+import { Skeleton } from "./Skeleton";
 import { useEffect, useState } from "react";
 import { MdblistError } from "../providers/mdblist";
 import { createTitleIdentity } from "../ratings";
@@ -126,7 +127,14 @@ export function ExternalRatingsPanel({
       {!hasPlaylistOverview && state.phase === "ready" && state.overview && (
         <p className="external-ratings-overview">{state.overview}</p>
       )}
-      {state.phase === "loading" && <p role="status">Loading external ratings…</p>}
+      {state.phase === "loading" && (
+        <div role="status">
+          <span className="sr-only">Loading external ratings…</span>
+          <div aria-hidden="true" className="skeleton-ratings">
+            {[0, 1, 2].map((index) => <Skeleton className="skeleton-rating" key={index} />)}
+          </div>
+        </div>
+      )}
       {state.phase === "unmatched" && <p>External ratings unavailable: this title has no year or ID to match safely.</p>}
       {state.phase === "not-found" && <p>No external ratings were found for this title.</p>}
       {state.phase === "error" && <p role="status">External ratings unavailable. {state.message}</p>}

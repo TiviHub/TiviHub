@@ -172,7 +172,6 @@ export function GlobalSearchDialog({
         tabIndex={-1}
       >
         <header className="global-search-header">
-          <Icon name="search" />
           <div>
             <h2 id="global-search-title">Search TiviHub</h2>
             <p>Find channels, movies, series, or jump to an action.</p>
@@ -182,6 +181,7 @@ export function GlobalSearchDialog({
           </button>
         </header>
         <label className="global-search-input">
+          <Icon name="search" />
           <span className="sr-only">Search channels, movies, series, and actions</span>
           <input
             autoComplete="off"

@@ -139,7 +139,7 @@ describe("application source lifecycle", () => {
     await waitFor(() => expect(document.documentElement.scrollTop).toBe(0));
     expect(await screen.findByRole("heading", { name: "Big Buck Bunny (2008)" })).toBeTruthy();
     await user.hover(screen.getByRole("button", { name: "Add to favorites" }));
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Add to favorites");
     await user.unhover(screen.getByRole("button", { name: "Add to favorites" }));
 
     window.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 3 }));

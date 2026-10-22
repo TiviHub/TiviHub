@@ -1,3 +1,4 @@
+import { RowSkeletons } from "./Skeleton";
 import type { DownloadRecord, DownloadTask } from "../downloads";
 import { Icon } from "./common";
 import { HomeEmptyState } from "./HomeEmptyState";
@@ -72,7 +73,10 @@ export function DownloadsPage({
       </header>
 
       {loading ? (
-        <div aria-live="polite" className="inline-status"><span className="spinner" /> Loading downloads…</div>
+        <div aria-live="polite" role="status">
+          <span className="sr-only">Loading downloads…</span>
+          <RowSkeletons artwork count={4} />
+        </div>
       ) : (
         <div className="downloads-list" aria-label="Downloads">
           {tasks.map((task) => {

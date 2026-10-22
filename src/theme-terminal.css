@@ -160,7 +160,7 @@ textarea {
   box-shadow: none;
 }
 
-:is(.source-row, .episode-row, .favorite-row, .episode-download-row, .diagnostics-download-row, .home-layout-editor-row, .settings-update-row, .stream-health-channel, .guide-row, .live-guide-row) {
+:is(.source-row, .diagnostics-download-row, .home-layout-editor-row, .settings-update-row, .stream-health-channel, .guide-row, .live-guide-row) {
   border-color: transparent;
   background: var(--row);
 }
@@ -186,10 +186,6 @@ textarea {
   background: var(--primary);
 }
 
-.live-channel-list-item {
-  border-bottom-color: transparent;
-}
-
 .page-intro h1,
 .section-heading h2,
 .settings-card-heading h2 {
@@ -198,7 +194,7 @@ textarea {
 }
 
 /* Nested controls sit on grey rows, not outlines. */
-:is(.theme-option, .secondary-button, .home-empty-source-types > span, .source-type, .source-mode, .settings-download-location, .settings-switch, .icon-button, .catalog-view-switch, .library-tabs, .library-content-tabs, .custom-select-trigger, .form-row input, .form-row select, .form-row textarea, input[type="text"], input[type="search"], input[type="url"], input[type="password"], select, textarea) {
+:is(.theme-option, .secondary-button, .home-empty-source-types > span, .source-type, .source-mode, .settings-download-location, .settings-switch, .icon-button, .catalog-view-switch, .custom-select-trigger, .form-row input, .form-row select, .form-row textarea, input[type="text"], input[type="search"], input[type="url"], input[type="password"], select, textarea) {
   border-color: transparent;
   background-color: var(--row);
 }
@@ -222,7 +218,7 @@ textarea {
   display: none;
 }
 
-/* Live TV channel list: separate grey tiles like the website mockup. */
+/* Live TV channel list: same card rows as every other list (see the shared card rule in styles.css). */
 .live-channel-sidebar {
   border-color: transparent;
   background: transparent;
@@ -236,10 +232,65 @@ textarea {
 .live-channel-list {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: 9px;
+  scrollbar-gutter: stable;
 }
 
-.live-channel-list-item {
-  border-bottom: 0;
+/* Right padding matches the list's thin scrollbar gutter so the buttons end where the tiles end. */
+.live-channel-pagination {
+  border-top-color: transparent;
+  padding-inline: 0 11px;
+}
+
+/* The dialog search row is the field; its inner input stays transparent like .search-field input. */
+.global-search-input input[type="search"] {
+  background-color: transparent;
+}
+
+/* Episode rows and library tabs follow the Live TV channel list: separate grey tiles, grey hover, purple selection bar. */
+.library-tabs button:hover:not(.active),
+.library-content-tabs button:hover:not(.active) {
+  border-color: transparent;
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.library-tabs {
+  border-bottom-color: transparent;
+}
+
+.library-tabs button,
+.library-content-tabs button {
+  border: 0;
   background: var(--row);
+}
+
+
+/* Icon buttons share one look everywhere (library rows, dialogs, toolbars): bare muted icon, grey tile on hover, no purple outline. */
+button.icon-button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+button.icon-button:hover:not(:disabled),
+button.icon-button.selected {
+  border-color: transparent;
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+button.icon-button.selected {
+  color: var(--secondary);
+}
+
+/* Same as the eyebrow labels: the settings menu has no small caps caption. */
+.settings-nav > p {
+  display: none;
+}
+
+/* File inputs get the same flat grey field as the other form inputs. */
+.form-field input[type="file"] {
+  border-color: transparent;
+  background-color: var(--row);
 }

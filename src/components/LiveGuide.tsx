@@ -1,3 +1,4 @@
+import { Skeleton } from "./Skeleton";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { EpgProgram, LiveChannel } from "../types";
 import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../liveGuideLayout";
@@ -160,7 +161,7 @@ export function LiveGuide({
         <div>
           <p className="eyebrow">CHANNELS · PROGRAMME TIMES</p>
           <h1>TV Guide</h1>
-          <p>{rows.length.toLocaleString()} of {channels.length.toLocaleString()} channels{loading ? " · Loading listings…" : ""}</p>
+          <p>{rows.length.toLocaleString()} of {channels.length.toLocaleString()} channels{loading && <span className="sr-only"> · Loading listings…</span>}</p>
         </div>
         <div className="catalog-controls live-guide-page-controls">
           <label className="search-field">
@@ -290,6 +291,7 @@ export function LiveGuide({
                     {ticks.map((tick) => (
                       <span aria-hidden="true" className={`live-guide-gridline${new Date(tick.millis).getMinutes() === 0 ? " is-hour" : ""}`} key={tick.millis} style={{ left: `${tick.left}px` }} />
                     ))}
+                    {loading && programs.length === 0 && <Skeleton className="live-guide-program-skeleton" />}
                     {programs.filter((program) =>
                       !normalizedProgramQuery || program.title.toLocaleLowerCase().includes(normalizedProgramQuery),
                     ).map((program) => {
@@ -339,9 +341,9 @@ export function LiveGuide({
         <span>{currentChannel ? `Playing: ${currentChannel.name}` : "Select a channel to start playback"}</span>
         <span>Click a programme to play its channel live</span>
         {loading && (
-          <span className="live-guide-loading">
-            <span aria-hidden="true" className="spinner" />
-            Loading guide data
+          <span className="live-guide-loading" role="status">
+            <span className="sr-only">Loading guide data</span>
+            <Skeleton className="live-guide-footer-skeleton" />
           </span>
         )}
       </footer>
