@@ -1,0 +1,65 @@
+{
+  "name": "run1-refresh-L",
+  "at": "2026-10-21T19:13:16.514Z",
+  "commit": "d84133e",
+  "dirty": true,
+  "machine": {
+    "os": "Windows_NT 10.0.26200",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+    "logicalCores": 20,
+    "ramGb": 31.7,
+    "node": "v24.19.0"
+  },
+  "build": "perf build of the packaged release executable",
+  "size": "L",
+  "runs": [
+    {
+      "wallMs": 23483,
+      "longTaskCount": 14,
+      "longTaskMaxMs": 1508
+    },
+    {
+      "wallMs": 29807,
+      "longTaskCount": 14,
+      "longTaskMaxMs": 1569
+    },
+    {
+      "wallMs": 26130,
+      "longTaskCount": 14,
+      "longTaskMaxMs": 1525
+    },
+    {
+      "wallMs": 29190,
+      "longTaskCount": 13,
+      "longTaskMaxMs": 1711
+    },
+    {
+      "wallMs": 26759,
+      "longTaskCount": 12,
+      "longTaskMaxMs": 1486
+    }
+  ],
+  "summary": {
+    "wallMs": {
+      "n": 5,
+      "median": 26759,
+      "min": 23483,
+      "max": 29807,
+      "spreadPct": 23.6
+    },
+    "longTaskMaxMs": {
+      "n": 5,
+      "median": 1525,
+      "min": 1486,
+      "max": 1711,
+      "spreadPct": 14.8
+    },
+    "longTaskCount": {
+      "n": 5,
+      "median": 14,
+      "min": 12,
+      "max": 14,
+      "spreadPct": 14.3
+    }
+  }
+}

@@ -4,15 +4,113 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    # ci-proof/** branches let CI be tried on real runners without opening a pull request.
+    branches: [main, "ci-proof/**"]
 
 permissions:
   contents: read
 
+# A new push cancels the older run of the same pull request; runs on main and on tags are never cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
-    name: Test, lint, and build
+  checks:
+    name: Checks (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: Linux
+            os: ubuntu-22.04
+          - name: macOS arm64
+            os: macos-latest
+          - name: macOS x64
+            os: macos-15-intel
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust build output
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf libssl-dev libgtk-3-dev libayatana-appindicator3-dev xdg-utils file
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Check Rust formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Run Clippy
+        if: runner.os == 'Linux'
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Audit JavaScript dependencies
+        if: runner.os == 'Linux'
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Install cargo-audit
+        if: runner.os == 'Linux'
+        run: command -v cargo-audit || cargo install cargo-audit --locked
+
+      # Fails on any advisory that is not listed in src-tauri/.cargo/audit.toml. RUSTSEC-2024-0437
+      # (protobuf, from the chromecast crate) is accepted here and reported by the next step.
+      - name: Audit Rust dependencies
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        run: cargo audit --ignore RUSTSEC-2024-0437
+
+      - name: Report known Rust advisory (protobuf, chromecast crate)
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        run: |
+          if ! cargo audit > /dev/null 2>&1; then
+            echo "::warning title=Known advisory::RUSTSEC-2024-0437 (protobuf recursion crash) comes from the chromecast crate and has no fix available yet. See src-tauri/.cargo/audit.toml."
+          fi
+
+      - name: Build desktop frontend
+        run: npm run build:desktop
+
+  web:
+    name: Browser E2E and website build
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -29,20 +127,8 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
-      - name: Type-check
-        run: npm run typecheck
-
-      - name: Run tests
-        run: npm test
-
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-
       - name: Run browser workflow and large-playlist tests
         run: npm run test:e2e
 
       - name: Build website
         run: npm run build
-
-      - name: Build desktop frontend
-        run: npm run build:desktop

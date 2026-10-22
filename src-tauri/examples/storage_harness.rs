@@ -12,7 +12,10 @@ use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 
 fn text(args: &Value, name: &str) -> Result<String, String> {
-    args[name].as_str().map(str::to_owned).ok_or_else(|| format!("missing argument {name}"))
+    args[name]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| format!("missing argument {name}"))
 }
 
 fn call(store: &storage::Store, command: &str, args: &Value) -> Result<Value, String> {
@@ -31,8 +34,13 @@ fn call(store: &storage::Store, command: &str, args: &Value) -> Result<Value, St
             Value::Null
         }
         "storage_stage" => {
-            let records = serde_json::from_value(args["records"].clone()).map_err(|e| e.to_string())?;
-            store.stage(&text(args, "generation")?, &text(args, "storeName")?, records)?;
+            let records =
+                serde_json::from_value(args["records"].clone()).map_err(|e| e.to_string())?;
+            store.stage(
+                &text(args, "generation")?,
+                &text(args, "storeName")?,
+                records,
+            )?;
             Value::Null
         }
         "storage_finish_catalog" => {
@@ -65,13 +73,19 @@ fn main() {
     let key = [7u8; 32];
     let opened = match std::env::args().nth(1) {
         Some(path) => storage::Store::open(std::path::Path::new(&path), key),
-        None => storage::Store::from_connection(rusqlite::Connection::open_in_memory().unwrap(), key),
+        None => {
+            storage::Store::from_connection(rusqlite::Connection::open_in_memory().unwrap(), key)
+        }
     };
     let store = opened.expect("could not open the database");
     let mut out = std::io::stdout().lock();
     for line in std::io::stdin().lock().lines() {
         let request: Value = serde_json::from_str(&line.unwrap()).unwrap();
-        let reply = match call(&store, request["command"].as_str().unwrap_or(""), &request["args"]) {
+        let reply = match call(
+            &store,
+            request["command"].as_str().unwrap_or(""),
+            &request["args"],
+        ) {
             Ok(value) => json!({"id": request["id"], "ok": value}),
             Err(error) => json!({"id": request["id"], "error": error}),
         };
