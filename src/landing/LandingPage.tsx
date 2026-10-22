@@ -1,26 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { IconName } from "../components/common";
 
 function LandingIcon({ name }: { name: IconName }) {
-  return <span aria-hidden="true" className="material-icons">{name}</span>;
+  return <span aria-hidden="true" className="material-icons" data-icon={name} />;
 }
 
-const highlights: { icon: IconName; title: string; description: string }[] = [
-  {
-    icon: "devices",
-    title: "Your sources, your choice",
-    description: "Connect sources you provide and are authorized to use. TiviHub does not include channels or media.",
-  },
-  {
-    icon: "shield",
-    title: "Stored on your device",
-    description: "Your playlists, favorites, settings, and progress stay in local app storage.",
-  },
-  {
-    icon: "lock",
-    title: "No TiviHub account",
-    description: "No TiviHub app server, cloud sync, or analytics. Playback connects directly to your provider.",
-  },
+const windowsDownloadUrl = "https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe";
+const releasesUrl = "https://github.com/TiviHub/TiviHub/releases/latest";
+const repoUrl = "https://github.com/TiviHub/TiviHub";
+
+const platforms = [
+  { name: "Windows", detail: "Windows 10/11 (x64) installer", href: windowsDownloadUrl },
+  { name: "macOS", detail: "Apple silicon and Intel .dmg", href: releasesUrl },
+  { name: "Linux", detail: "x64 AppImage and .deb", href: releasesUrl },
 ];
 
 const faqCategories = ["All", "Getting started", "Privacy", "Compatibility", "Updates"] as const;
@@ -69,11 +62,183 @@ const faqItems: { question: string; answer: string; category: Exclude<FaqCategor
   },
 ];
 
+// Mockups of the app with sample data; they illustrate the product, they are not captures.
+const navIcons: IconName[] = ["home", "live_tv", "schedule", "theaters", "tv", "bookmark_border", "download"];
+
+function AppWindow({ active, title, sub, children }: { active: number | "settings"; title: string; sub?: string; children: ReactNode }) {
+  return (
+    <div className="ui app-window" data-nosnippet data-ui>
+      <div className="aw-side">
+        <span className="aw-logo">
+          <svg aria-hidden="true" viewBox="0 0 512 512"><path d="M140 126v220l172-110z" /><rect height="28" width="72" x="340" y="330" /></svg>
+        </span>
+        {navIcons.map((icon, i) => (
+          <span className={active === i ? "aw-nav is-active" : "aw-nav"} key={icon}><LandingIcon name={icon} /></span>
+        ))}
+        <span className={active === "settings" ? "aw-nav aw-settings is-active" : "aw-nav aw-settings"}><LandingIcon name="settings" /></span>
+      </div>
+      <div className="aw-main">
+        <p className="aw-title">{title}</p>
+        {sub && <p className="aw-sub">{sub}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const channelNames = ["Sport Live", "News 24", "Cinema One", "Nature HD", "Music Box", "Kids Zone"];
+
+function LiveWindow() {
+  return (
+    <AppWindow active={1} sub={`${channelNames.length} channels in this source`} title="Live TV">
+      <div className="aw-live">
+        <div className="aw-list">
+          <p className="ui-title">Channels <span>{channelNames.length}</span></p>
+          {channelNames.map((name, i) => (
+            <div className={i === 0 ? "aw-channel is-active" : "aw-channel"} key={name}>
+              <span>{name}</span>
+              <LandingIcon name={i === 2 ? "favorite" : "favorite_border"} />
+            </div>
+          ))}
+        </div>
+        <div className="aw-player">
+          <span className="ui-live">Live</span>
+          <span className="aw-player-title">Sport Live</span>
+          <span className="aw-player-sub">Live match · second half</span>
+          <span className="aw-controls"><LandingIcon name="play_arrow" /><i /><LandingIcon name="fullscreen" /></span>
+        </div>
+      </div>
+    </AppWindow>
+  );
+}
+
+function GuideWindow() {
+  const rows: [string, [string, number, boolean?][]][] = [
+    ["Sport Live", [["Pre-match", 1], ["Live match", 3, true], ["Review", 2]]],
+    ["News 24", [["Morning bulletin", 2], ["Weather", 1], ["Late edition", 3]]],
+    ["Cinema One", [["Feature film", 4], ["Feature film", 2]]],
+    ["Nature HD", [["Wild coasts", 2], ["Night safari", 2], ["Deep blue", 2]]],
+    ["Music Box", [["Sessions", 3], ["Charts", 3]]],
+  ];
+  return (
+    <AppWindow active={2} sub={`${rows.length} of ${rows.length} channels`} title="TV Guide">
+      <div className="aw-times"><span>14:00</span><span>15:00</span><span>16:00</span></div>
+      {rows.map(([channel, shows]) => (
+        <div className="ui-slot" key={channel}>
+          <span className="ui-channel">{channel}</span>
+          <div className="ui-shows" style={{ gridTemplateColumns: shows.map(([, s]) => `${s}fr`).join(" ") }}>
+            {shows.map(([show, , live], i) => (
+              <span className={live ? "ui-show is-live" : "ui-show"} key={show + i}>{show}</span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </AppWindow>
+  );
+}
+
+function LibraryWindow() {
+  const shelves: [string, [string, number][]][] = [
+    ["Continue watching", [["Harbour Lights", 72], ["The Long Winter", 35], ["Signal Fires", 90], ["Paper Cities", 12]]],
+    ["Favorites", [["Night Shift", 0], ["Open Water", 0], ["Glass Hours", 0], ["Low Tide", 0]]],
+  ];
+  return (
+    <AppWindow active={0} title="Home">
+      {shelves.map(([shelf, titles]) => (
+        <div className="aw-shelf" key={shelf}>
+          <p className="ui-title">{shelf}</p>
+          <div className="ui-tiles">
+            {titles.map(([title, done]) => (
+              <div className="ui-tile" key={title}>
+                <span className="ui-poster">{title}</span>
+                {done > 0 && <span className="ui-progress"><i style={{ width: `${done}%` }} /></span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </AppWindow>
+  );
+}
+
+function SourcesWindow() {
+  const rows = [
+    ["Home playlist", "M3U file", "Active"],
+    ["Provider login", "Xtream server", "Active"],
+    ["Backup list", "M3U URL", "Paused"],
+  ];
+  return (
+    <AppWindow active="settings" sub="Manage this device's local data, sources, and appearance." title="Settings">
+      <p className="ui-title">Your sources</p>
+      {rows.map(([name, kind, state], i) => (
+        <div className={i === 0 ? "ui-row is-active" : "ui-row"} key={name}>
+          <span className="ui-name">{name}</span>
+          <span className="ui-meta">{kind}</span>
+          <span className={state === "Active" ? "ui-chip is-on" : "ui-chip"}>{state}</span>
+        </div>
+      ))}
+      <span className="ui-button">Add another source</span>
+    </AppWindow>
+  );
+}
+
+function DeviceWindow() {
+  const kept = ["Playlists", "Favorites", "Settings", "Playback progress"];
+  return (
+    <AppWindow active="settings" sub="Manage this device's local data, sources, and appearance." title="Settings">
+      <p className="ui-title">Privacy by design</p>
+      {kept.map((item) => (
+        <div className="ui-row" key={item}>
+          <span className="ui-name">{item}</span>
+          <span className="ui-chip is-on">Local</span>
+        </div>
+      ))}
+      <div className="ui-row ui-row-none">
+        <span className="ui-name">TiviHub account or cloud</span>
+        <span className="ui-chip">None</span>
+      </div>
+    </AppWindow>
+  );
+}
+
+const features: { title: string; text: string[]; fragment: ReactNode }[] = [
+  {
+    title: "Your sources, your choice",
+    text: [
+      "Connect M3U files and URLs or Xtream-compatible sources that you provide and are authorized to use.",
+      "TiviHub does not include channels, playlists or media.",
+    ],
+    fragment: <SourcesWindow />,
+  },
+  {
+    title: "Live TV with a guide",
+    text: [
+      "Browse channels and see what is on now and next, with guide data from your own provider.",
+      "Supported HLS and DASH streams play in the app.",
+    ],
+    fragment: <GuideWindow />,
+  },
+  {
+    title: "Movies and series, remembered",
+    text: [
+      "Favorites and playback progress live beside your films and series, so you pick up where you stopped.",
+    ],
+    fragment: <LibraryWindow />,
+  },
+  {
+    title: "Stored on your device",
+    text: [
+      "Your playlists, favorites, settings and progress stay in local app storage.",
+      "No TiviHub app server, no cloud sync, no analytics. Playback connects directly to your provider.",
+    ],
+    fragment: <DeviceWindow />,
+  },
+];
+
 export default function LandingPage() {
-  const windowsDownloadUrl = "https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe";
-  const releasesUrl = "https://github.com/TiviHub/TiviHub/releases/latest";
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<FaqCategory>("All");
+  const [showTop, setShowTop] = useState(false);
   const filteredFaq = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return faqItems.filter((item) => {
@@ -83,137 +248,128 @@ export default function LandingPage() {
     });
   }, [category, search]);
 
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > window.innerHeight * 0.8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Entrances only hide content once script runs, so the prerendered page stays readable without it.
+  useEffect(() => {
+    const root = document.documentElement;
+    const items = document.querySelectorAll<HTMLElement>("[data-reveal]");
+    if (!("IntersectionObserver" in window) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in");
+          observer.unobserve(entry.target);
+        }
+      }
+    }, { rootMargin: "0px 0px -8% 0px" });
+    items.forEach((item) => observer.observe(item));
+    root.classList.add("rv-ready");
+    return () => {
+      observer.disconnect();
+      root.classList.remove("rv-ready");
+    };
+  }, []);
+
   return (
     <div className="landing-page">
-      <header className="landing-header">
-        <a aria-label="TiviHub home" className="landing-brand" href="#top">
-          <img alt="" height="42" src="/icons/tivihub-192.png" width="42" />
-          <span>TiviHub<span className="landing-period">.</span></span>
-        </a>
-        <nav aria-label="Main navigation" className="landing-nav">
-          <a href="#features">Features</a>
-          <a href="#privacy">Privacy</a>
-          <a href="#faq">FAQ</a>
-          <a
-            aria-label="TiviHub on GitHub"
-            className="landing-nav-github"
-            href="https://github.com/TiviHub/TiviHub"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-            </svg>
+      <main>
+      <section aria-labelledby="landing-title" className="hero">
+        <header className="bar">
+          <a aria-label="TiviHub home" className="brand" href="#top">
+            <img alt="" height="36" src="/icons/tivihub-192.png" width="36" />
+            <span>TiviHub</span>
           </a>
-          <a className="landing-nav-download" href={windowsDownloadUrl}>Download <LandingIcon name="arrow_forward" /></a>
-        </nav>
-      </header>
+          <nav aria-label="Main navigation" className="nav">
+            <a href="#features">Features</a>
+            <a href="#download">Download</a>
+            <a href="#faq">FAQ</a>
+            <a href={repoUrl} rel="noopener noreferrer" target="_blank">GitHub</a>
+          </nav>
+        </header>
 
-      <main id="top">
-        <section aria-labelledby="landing-title" className="landing-hero">
-          <div className="landing-hero-copy">
-            <p className="landing-eyebrow"><span>✳</span> DESKTOP PLAYER / YOUR SOURCES</p>
-            <h1 id="landing-title">Your media<br /><span>Your universe</span></h1>
-            <p className="landing-lede">
-              A beautifully simple home for the channels, films, and series you choose.
-              Bring your own authorized sources. Keep your library on your device.
+        <div className="hero-grid" id="top">
+          <div className="hero-copy">
+            <h1 data-reveal id="landing-title">Your media. Your universe.</h1>
+            <p className="hero-sentence" data-reveal style={{ "--d": "60ms" } as CSSProperties}>
+              TiviHub is the desktop player for the channels, films and series you choose.
             </p>
-            <div className="landing-download" id="download">
-              <div className="landing-download-actions">
-                {windowsDownloadUrl ? (
-                  <a className="landing-download-button" href={windowsDownloadUrl}>
-                    <LandingIcon name="download" />
-                    <span>Download for Windows</span>
-                    <LandingIcon name="arrow_forward" />
-                  </a>
-                ) : (
-                  <button className="landing-download-button" disabled type="button">
-                    <LandingIcon name="download" />
-                    <span>Windows installer coming soon</span>
-                  </button>
-                )}
-                <a className="landing-all-platforms" href={releasesUrl}>All platforms</a>
-              </div>
-              <p>
-                {windowsDownloadUrl
-                  ? "Windows 10/11 · Linux x64 · macOS arm64/x64."
-                  : "Windows installer is being prepared. Linux may follow after playback testing."}
-              </p>
+            <div className="hero-actions" data-reveal style={{ "--d": "120ms" } as CSSProperties}>
+              <a className="button" href={windowsDownloadUrl}>
+                Download for Windows <LandingIcon name="download" />
+              </a>
+              <a className="textlink" href="#download">Other platforms</a>
             </div>
-            <div className="landing-trust">
-              <span><LandingIcon name="check" /> No account</span>
-              <span><LandingIcon name="check" /> Local library</span>
-              <span><LandingIcon name="check" /> No TiviHub cloud</span>
-            </div>
+            <p className="status" data-reveal style={{ "--d": "180ms" } as CSSProperties}>
+              <span>no account</span>
+              <span>local library</span>
+              <span>no cloud</span>
+            </p>
           </div>
+          <div className="hero-ui" data-reveal style={{ "--d": "100ms" } as CSSProperties}><LiveWindow /></div>
+        </div>
+      </section>
 
-          <div aria-hidden="true" className="landing-hero-art">
-            <div className="landing-orbit landing-orbit-outer" />
-            <div className="landing-orbit landing-orbit-inner" />
-            <div className="landing-logo-core">
-              <img alt="" src="/icons/tivihub-512.png" />
-            </div>
-            <span className="landing-art-star landing-art-star-one">✦</span>
-            <span className="landing-art-star landing-art-star-two">✧</span>
-            <span className="landing-art-caption">TIVIHUB / DESKTOP</span>
-            <div className="landing-art-card landing-art-card-top">
-              <LandingIcon name="movie" /><span>YOUR LIBRARY</span>
-            </div>
-            <div className="landing-art-card landing-art-card-bottom">
-              <span className="landing-art-pulse" /><span>READY WHEN YOU ARE</span>
-            </div>
-          </div>
-        </section>
+      <section aria-labelledby="manifesto-title" className="manifesto">
+        <h2 data-reveal id="manifesto-title">No account. No cloud.</h2>
+        <p data-reveal style={{ "--d": "80ms" } as CSSProperties}>
+          No middleman. Your sources stay yours. TiviHub is player software only: it doesn’t proxy or host your streams, and it doesn’t include channels or media.
+        </p>
+      </section>
 
-        <section aria-label="Privacy summary" className="landing-privacy-strip" id="privacy">
-          <div><span className="landing-status-light" /><span>LOCAL-FIRST BY DESIGN</span></div>
-          <p>Your sources stay yours. TiviHub doesn’t proxy or host your streams.</p>
-        </section>
-
-        <section aria-labelledby="features-title" className="landing-features" id="features">
-          <div className="landing-section-heading">
-            <div>
-              <p className="landing-eyebrow">MADE FOR YOUR MEDIA</p>
-              <h2 id="features-title">Your hub. Your rules.</h2>
+      <section aria-labelledby="features-title" className="features" id="features">
+        <h2 className="section-title" data-reveal id="features-title">One hub for it all.</h2>
+        {features.map((feature) => (
+          <article className="feature" key={feature.title}>
+            <div className="feature-panel" data-reveal>{feature.fragment}</div>
+            <div className="feature-text" data-reveal style={{ "--d": "80ms" } as CSSProperties}>
+              <h3>{feature.title}</h3>
+              {feature.text.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
             </div>
-            <p>One desktop app for organizing and playing the sources you configure.</p>
-          </div>
-          <div className="landing-feature-grid">
-            {highlights.map((item, index) => (
-              <article className="landing-feature-card" key={item.title}>
-                <span className="landing-feature-index">0{index + 1}</span>
-                <span className="landing-feature-icon"><LandingIcon name={item.icon} /></span>
-                <h3>{item.title}</h3>
-                <p>{item.description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+          </article>
+        ))}
+      </section>
 
-        <section aria-labelledby="faq-title" className="landing-faq" id="faq">
-          <div className="landing-section-heading">
-            <div>
-              <p className="landing-eyebrow">GOOD TO KNOW</p>
-              <h2 id="faq-title">Frequently asked questions</h2>
-            </div>
-            <p>Find clear answers about setup, privacy, compatibility, and updates.</p>
-          </div>
-          <div className="landing-faq-tools">
-            <label className="landing-faq-search">
-              <LandingIcon name="search" />
+      <section aria-labelledby="download-title" className="platforms" id="download">
+        <h2 className="section-title" data-reveal id="download-title">Download TiviHub.</h2>
+        <ul>
+          {platforms.map((platform, i) => (
+            <li data-reveal key={platform.name} style={{ "--d": `${i * 70}ms` } as CSSProperties}>
+              <a href={platform.href}>
+                <span className="platform-name">{platform.name}</span>
+                <LandingIcon name="arrow_forward" />
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p className="platform-note" data-reveal>
+          {platforms.map((platform) => platform.detail).join(" · ")}. Every release is on GitHub.
+        </p>
+      </section>
+
+      <section aria-labelledby="faq-title" className="faq" id="faq">
+        <div className="faq-head">
+          <h2 className="section-title" data-reveal id="faq-title">Questions, answered.</h2>
+          <div className="faq-tools">
+            <label className="faq-search">
               <span className="visually-hidden">Search frequently asked questions</span>
               <input
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search questions..."
+                placeholder="Search questions"
                 type="search"
                 value={search}
               />
             </label>
-            <div aria-label="Filter frequently asked questions by topic" className="landing-faq-categories">
+            <div aria-label="Filter frequently asked questions by topic" className="faq-categories" role="group">
               {faqCategories.map((item) => (
                 <button
                   aria-pressed={category === item}
-                  className={category === item ? "landing-faq-category is-active" : "landing-faq-category"}
+                  className={category === item ? "chip is-active" : "chip"}
                   key={item}
                   onClick={() => setCategory(item)}
                   type="button"
@@ -223,29 +379,58 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
-          <div className="landing-faq-list">
-            {filteredFaq.length ? filteredFaq.map((item) => (
-              <details className="landing-faq-item" key={item.question}>
-                <summary>
-                  <span>{item.question}</span>
-                  <LandingIcon name="expand_more" />
-                </summary>
-                <p>{item.answer}</p>
-              </details>
-            )) : (
-              <p className="landing-faq-empty" role="status">No answers match that search. Try another term or topic.</p>
-            )}
-          </div>
-        </section>
+        </div>
+        {filteredFaq.length ? filteredFaq.map((item) => (
+          <article className="faq-row" key={item.question}>
+            <h3>{item.question}</h3>
+            <p>{item.answer}</p>
+          </article>
+        )) : (
+          <p className="faq-empty" role="status">No answers match that search. Try another term or topic.</p>
+        )}
+      </section>
+
+      <section aria-labelledby="close-title" className="close">
+        <h2 data-reveal id="close-title">Add sources. Press play.</h2>
+        <div className="close-foot" data-reveal style={{ "--d": "80ms" } as CSSProperties}>
+          <p>Free to download. Add your sources and press play.</p>
+          <a className="button" href={windowsDownloadUrl}>
+            Download for Windows <LandingIcon name="download" />
+          </a>
+        </div>
+      </section>
+
       </main>
 
-      <footer className="landing-footer">
-        <a aria-label="TiviHub home" className="landing-brand" href="#top">
-          <img alt="" height="32" src="/icons/tivihub-192.png" width="32" />
-          <span>TiviHub<span className="landing-period">.</span></span>
+      <a aria-label="Back to top" className={showTop ? "to-top is-visible" : "to-top"} href="#top" tabIndex={showTop ? 0 : -1}>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 4l8 8-1.8 1.8-5.2-5.2V20h-2V8.6l-5.2 5.2L4 12z" /></svg>
+      </a>
+
+      <script
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: faqItems.map(({ question, answer }) => ({
+              "@type": "Question",
+              name: question,
+              acceptedAnswer: { "@type": "Answer", text: answer },
+            })),
+          }),
+        }}
+        type="application/ld+json"
+      />
+
+      <footer className="footer">
+        <div className="footer-links">
+          <a href={repoUrl} rel="noopener noreferrer" target="_blank">GitHub</a>
+          <a href={releasesUrl}>All releases</a>
+          <a href="#faq">FAQ</a>
+        </div>
+        <p className="footer-legal">Player software only. No channels or media are supplied. © {new Date().getFullYear()} TiviHub</p>
+        <a aria-label="TiviHub, back to top" className="footer-wordmark" href="#top">
+          <span className="wordmark"><span>Tivi</span><span>Hub</span></span>
         </a>
-        <p>Player software only. No channels or media are supplied.</p>
-        <span>© {new Date().getFullYear()} TiviHub</span>
       </footer>
     </div>
   );

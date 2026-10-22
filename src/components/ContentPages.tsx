@@ -913,7 +913,6 @@ export function MovieDetail({
             <button
               aria-pressed={inLibrary}
               className={`secondary-button library-action${inLibrary ? " selected" : ""}`}
-              data-tooltip={inLibrary ? "Remove from library" : "Add to watchlist"}
               onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >
@@ -1090,7 +1089,6 @@ export function SeriesDetail({
             <button
               aria-pressed={inLibrary}
               className={`secondary-button library-action${inLibrary ? " selected" : ""}`}
-              data-tooltip={inLibrary ? "Remove from library" : "Add to watchlist"}
               onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >

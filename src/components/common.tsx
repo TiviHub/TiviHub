@@ -218,6 +218,8 @@ export function TooltipLayer() {
       const element = target.closest<HTMLElement>("button:not(.global-search-button)");
       const text = element?.dataset.tooltip?.trim() || element?.getAttribute("aria-label")?.trim();
       const isNavigationButton = Boolean(element?.closest(".sidebar, .topbar"));
+      // Buttons that already show a text label do not need a tooltip; only icon-only ones do.
+      const hasVisibleLabel = Boolean(element && !element.closest(".sidebar, .topbar") && [...element.childNodes].some((node) => !(node instanceof Element && node.classList.contains("material-icons")) && node.textContent?.trim()));
       const isEpisodeAction = Boolean(element?.matches(".episode-row, .episode-download-action"));
       const isLibraryAction = Boolean(element?.matches(".catalog-library-button, .library-action"));
       const isSourceAction = Boolean(element?.matches(".settings-source-action"));
@@ -226,6 +228,7 @@ export function TooltipLayer() {
         !element ||
         element.closest(".global-search-dialog") ||
         !text ||
+        hasVisibleLabel ||
         (!isNavigationButton && !isIconAction && !isEpisodeAction && !isLibraryAction && !isSourceAction)
       ) return;
       if (activeTargetRef.current === element && activeTextRef.current === text) return;
