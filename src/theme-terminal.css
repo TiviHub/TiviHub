@@ -154,13 +154,13 @@ textarea {
   --row-selected: #e4d8ff;
 }
 
-:is(.settings-card, .catalog-card, .dialog-card, .feature-card, .home-continue-card, .detail-more-card, .refresh-progress-card, .startup-progress-card, .cast-panel, .subtitle-panel, .home-empty-panel) {
+:is(.settings-card, .home-layout-editor, .catalog-card, .dialog-card, .feature-card, .home-continue-card, .detail-more-card, .refresh-progress-card, .startup-progress-card, .cast-panel, .subtitle-panel, .home-empty-panel) {
   border-color: transparent;
   background: var(--panel);
   box-shadow: none;
 }
 
-:is(.source-row, .diagnostics-download-row, .home-layout-editor-row, .settings-update-row, .stream-health-channel, .guide-row, .live-guide-row) {
+:is(.source-row, .diagnostics-download-row, .settings-update-row, .stream-health-channel, .guide-row, .live-guide-row) {
   border-color: transparent;
   background: var(--row);
 }

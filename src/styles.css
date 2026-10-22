@@ -7344,7 +7344,8 @@ button:disabled {
 .favorite-row,
 .episode-download-row,
 .download-item,
-.live-channel-list-item {
+.live-channel-list-item,
+.home-layout-editor-row {
   border: 1px solid var(--outline-soft);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -7355,7 +7356,8 @@ button:disabled {
 .favorite-row:hover,
 .episode-download-row:hover,
 .download-item:hover,
-.live-channel-list-item:hover {
+.live-channel-list-item:hover,
+.home-layout-editor-row:hover {
   border-color: var(--outline);
 }
 
@@ -7547,4 +7549,32 @@ button.icon-button.is-favorite {
 
 .playback-status-skeleton {
   width: 160px;
+}
+
+/* Edit Home: same panel, headings and list rows as Settings and the other lists. */
+.home-layout-footer {
+  justify-content: flex-start;
+}
+
+.home-layout-editor {
+  padding: 25px;
+  border-radius: var(--radius-xl);
+}
+
+.home-layout-editor-heading p {
+  font-size: 0.82rem;
+}
+
+.home-layout-editor-list {
+  gap: 9px;
+  margin-top: 20px;
+}
+
+.home-layout-editor-row {
+  min-height: 0;
+  padding: 11px;
+}
+
+.home-layout-editor-row > label {
+  font-size: 0.8rem;
 }

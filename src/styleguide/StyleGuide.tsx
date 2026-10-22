@@ -350,6 +350,17 @@ export function StyleGuide() {
             </div>
           </div>
         </Block>
+        <Block title="home-layout-editor-row (Edit Home)">
+          <ol className="home-layout-editor-list" style={{ margin: 0 }}>
+            <li className="home-layout-editor-row">
+              <label><input defaultChecked type="checkbox" /><span>Continue watching</span></label>
+              <div>
+                <button aria-label="Move up" className="icon-button home-layout-move-button move-up" disabled type="button"><Icon name="chevron_left" /></button>
+                <button aria-label="Move down" className="icon-button home-layout-move-button move-down" type="button"><Icon name="chevron_right" /></button>
+              </div>
+            </li>
+          </ol>
+        </Block>
         <Block title="live-channel-list-item">
           <div className="live-channel-list">
             {[{ selected: true, favorite: false }, { selected: false, favorite: true }, { selected: false, favorite: false }].map(({ selected, favorite }) => (
