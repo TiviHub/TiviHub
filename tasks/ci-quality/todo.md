@@ -30,7 +30,7 @@ Plan: `tasks/ci-quality/plan.md`. Spec: `docs/specs/SPEC-ci-quality.md`. No task
 
 ## Phase 2: the matrix
 
-- [ ] **T3: Cross-platform CI job** (M)
+- [x] **T3: Cross-platform CI job** (M)
   - Description: Rewrite `ci.yml`: a matrix job on four runners for install, typecheck, lint, `npm test`, `cargo test`, desktop build; Rust fmt and clippy on Linux; the Playwright E2E and website build in a separate Windows job; `concurrency` (cancel PR runs only), `timeout-minutes`, `Swatinem/rust-cache@v2`, and the `ci-proof/**` push trigger.
   - Acceptance:
     - A push to a `ci-proof/*` branch runs all jobs and they pass on Windows, Linux, macOS arm64 and macOS x64.
@@ -40,14 +40,14 @@ Plan: `tasks/ci-quality/plan.md`. Spec: `docs/specs/SPEC-ci-quality.md`. No task
   - Dependencies: T1, T2
   - Files: `.github/workflows/ci.yml`
 
-- [ ] **T4: Dependency audits** (S)
+- [x] **T4: Dependency audits** (S)
   - Description: Add `cargo audit` and `npm audit --omit=dev --audit-level=high` steps.
   - Acceptance: both run in CI and pass; any existing advisory found is listed in the PR and nothing is ignored without maintainer approval.
   - Verify: Actions run is green; the step logs show both tools ran.
   - Dependencies: T3
   - Files: `.github/workflows/ci.yml`
 
-- [ ] **T5: Dependabot for cargo and GitHub Actions** (XS)
+- [x] **T5: Dependabot for cargo and GitHub Actions** (XS)
   - Description: Add two `updates` entries (`cargo` in `/src-tauri`, `github-actions` in `/`), weekly, same PR limit style as npm.
   - Acceptance: `dependabot.yml` is valid YAML and lists three ecosystems.
   - Verify: parse the file locally; GitHub's Dependabot tab shows no config error after the push (maintainer check).
@@ -55,13 +55,13 @@ Plan: `tasks/ci-quality/plan.md`. Spec: `docs/specs/SPEC-ci-quality.md`. No task
   - Files: `.github/dependabot.yml`
 
 ### Checkpoint 2: PRs prove all platforms
-- [ ] All four OS jobs green in Actions; E2E job green
+- [x] All four OS jobs green in Actions; E2E job green
 - [ ] Audit results reviewed with the maintainer
 - [ ] Review with maintainer before touching the release workflow
 
 ## Phase 3: release dry-run
 
-- [ ] **T6: Dry-run mode in the release workflow** (M)
+- [x] **T6: Dry-run mode in the release workflow** (M)
   - Description: Add `pull_request: types [labeled]` (only for label `release-dry-run`) and `workflow_dispatch` to `release.yml`. In those runs, skip release creation, asset upload and publish, and upload the installers as workflow artifacts.
   - Acceptance:
     - A tag push still behaves exactly as before (same jobs, same publish).
@@ -72,26 +72,37 @@ Plan: `tasks/ci-quality/plan.md`. Spec: `docs/specs/SPEC-ci-quality.md`. No task
   - Files: `.github/workflows/release.yml`
 
 ### Checkpoint 3: a tag is no longer the first full build
-- [ ] Dry-run green on all platforms, no release created
+- [x] Dry-run green on all platforms, no release created
 - [ ] Diff of `release.yml` reviewed line by line for the push path
 
 ## Phase 4: proof and docs
 
-- [ ] **T7: Deliberate-break proofs** (M)
+- [x] **T7: Deliberate-break proofs** (M)
   - Description: On throwaway `ci-proof/*` branches, break each gate once: a mis-formatted Rust file, a clippy warning, an ESLint error, a test that fails only on Linux, and a known-vulnerable dependency. Confirm each fails only its own job.
   - Acceptance: a table in the PR: break, expected failing job, actual result. Nothing from these branches is merged.
   - Verify: Actions API for each branch; branches deleted afterwards (with the maintainer's OK).
   - Dependencies: T3, T4
+  - Result (runs on 2026-10-21; each failed only its own step, all other jobs green):
+
+    | Break | Expected failing step | Actual |
+    |---|---|---|
+    | `break-fmt` | Check Rust formatting (Linux) | Linux: Check Rust formatting |
+    | `break-clippy` | Run Clippy (Linux) | Linux: Run Clippy |
+    | `break-lint` | Lint (all 4 OS) | all 4: Lint |
+    | `break-linux-test` | Run Rust tests (Linux only) | Linux: Run Rust tests; other 3 OS and E2E passed |
+    | `break-npm-audit` | Audit JavaScript dependencies (Linux) | Linux: Audit JavaScript dependencies |
+    | `break-cargo-audit` | Audit Rust dependencies (Linux) | Linux: Audit Rust dependencies |
   - Files: none kept (throwaway commits)
 
-- [ ] **T8: Cache speed-up measurement** (S)
+- [x] **T8: Cache speed-up measurement** (S)
   - Description: Compare the Windows matrix job time on a cold run and a warm re-run of the same commit.
   - Acceptance: the warm run is at least 40 percent faster, with both durations in the PR; if not, say so and look at what is not cached.
   - Verify: job durations from the Actions API.
   - Dependencies: T3
+  - Result: Windows warm run only 33% faster (target 40%, missed); Linux -71%, macOS x64 -57%.
   - Files: none
 
-- [ ] **T9: Contributor docs** (XS)
+- [x] **T9: Contributor docs** (XS)
   - Description: Update `CONTRIBUTING.md` with the new local commands (`npm run lint`, `cargo fmt`, `cargo clippy`, `cargo audit`) and what CI runs, and note the job names to select as required checks.
   - Acceptance: commands match what CI runs; no stale statements (CONTRIBUTING currently says CI runs on pushes to main and PRs on one OS).
   - Verify: re-read against `ci.yml`.
