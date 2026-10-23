@@ -386,13 +386,35 @@ export function CatalogPage({
     );
   }
 
+  const filtersActive = query.trim() !== "" || category !== "All";
+
   return (
     <section className={`catalog-page${livePlayerMini ? " live-tv-mini-page" : ""}`}>
       <header className="page-intro catalog-intro">
         <div>
           <p className="eyebrow">{section === "Live TV" ? "ON AIR / CHANNELS" : section === "Movies" ? "YOUR CINEMA" : "THE NEXT EPISODE"}</p>
           <h1>{section}</h1>
-          <p>{items.length.toLocaleString()} {section === "Live TV" ? "channels" : section.toLowerCase()} in this source</p>
+          <p>
+            {filtersActive
+              ? `${filtered.length.toLocaleString()} of ${items.length.toLocaleString()} ${section === "Live TV" ? "channels" : section.toLowerCase()}${category !== "All" ? ` in ${category}` : ""}`
+              : `${items.length.toLocaleString()} ${section === "Live TV" ? "channels" : section.toLowerCase()} in this source`}
+            {filtersActive && (
+              <>
+                {" · "}
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setQuery("");
+                    setCategory("All");
+                    setPage(1);
+                  }}
+                  type="button"
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
+          </p>
         </div>
         <div className="catalog-controls">
           <label className="search-field">
@@ -663,7 +685,13 @@ export function CatalogPage({
                   </div>
                   <p className="eyebrow">READY TO WATCH</p>
                   <h2>{selectedChannel?.name ?? "Choose a channel"}</h2>
-                  <p>Select a channel to start its live stream.</p>
+                  <p>
+                    {selectedChannel
+                      ? (currentByChannel.get(selectedChannel.tvgId || selectedChannel.id)?.title
+                        ? `On now: ${currentByChannel.get(selectedChannel.tvgId || selectedChannel.id)?.title}`
+                        : selectedChannel.group)
+                      : "Select a channel to start its live stream."}
+                  </p>
                   {selectedChannel && (
                     <button className="primary-button" onClick={() => onPlay(playableChannel(selectedChannel))} type="button">
                       <Icon name="play_arrow" /> Watch live
@@ -1304,6 +1332,7 @@ export function LibraryPage({
             }}
             type="button"
           >
+            <Icon name={value === "Continue watching" ? "play_arrow" : value === "Watchlist" ? "bookmark" : value === "Watched" ? "check_circle" : "favorite"} />
             {value}<span>{value === "Continue watching" ? watching.length : value === "Watchlist" ? watchlist.length : value === "Watched" ? watched.length : favorites.length}</span>
           </button>
         ))}
@@ -1440,7 +1469,11 @@ export function LibraryPage({
                       </span>
                       <span className="library-item-copy">
                         <strong>{item.title}</strong>
-                        {item.parentTitle && <small>{item.parentTitle}</small>}
+                        <small>
+                          {LIBRARY_CONTENT_GROUPS.find((group) => group.key === libraryGroupFor(item.contentType))?.label}
+                          {item.parentTitle ? ` · ${item.parentTitle}` : ""}
+                          {item.status === "WATCHING" && item.durationMillis > 0 ? ` · ${Math.round(Math.max(0, Math.min(100, item.positionMillis / item.durationMillis * 100)))}% watched` : ""}
+                        </small>
                         {item.durationMillis > 0 && (
                           <span className="library-progress">
                             <span style={{ width: `${Math.max(0, Math.min(100, item.positionMillis / item.durationMillis * 100))}%` }} />

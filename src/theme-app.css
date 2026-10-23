@@ -1,7 +1,7 @@
-/* Terminal theme: black, grey and purple, mono type, square corners, dot grid.
+/* App theme: black, grey and purple, Roboto type, softly rounded corners, flat background.
    Loaded after styles.css so it overrides tokens and the few hard-coded looks. */
 :root {
-  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
   background: #0b0b0c;
   color: #fff;
   --bg: #0b0b0c;
@@ -19,32 +19,30 @@
   --outline-soft: #26262b;
   --glow: transparent;
   --glow-strong: transparent;
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
-  --radius-2xl: 0;
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --radius-2xl: 3px;
   --dot: #26262b;
 }
 
 :root[data-theme="light"] {
-  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
   --primary: #7a3df0;
   --primary-hover: #6528d8;
   --glow: transparent;
   --glow-strong: transparent;
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
-  --radius-2xl: 0;
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --radius-2xl: 3px;
   --dot: #dcdce2;
 }
 
 body {
   background-color: var(--bg);
-  background-image: radial-gradient(circle, var(--dot) 1.5px, transparent 1.6px);
-  background-size: 24px 24px;
 }
 
 button,
@@ -54,15 +52,8 @@ textarea {
   font-family: inherit;
 }
 
-/* Square everything; keep real dots and spinners round. */
-*,
-*::before,
-*::after {
-  border-radius: 0 !important;
-}
-
 :is(.online-indicator, .status-pulse, .settings-update-indicator, .spinner, .live-badge span, .live-channel-playing) {
-  border-radius: 50% !important;
+  border-radius: 50%;
 }
 
 /* No glows or soft shadows at rest. */

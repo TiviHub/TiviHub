@@ -8,6 +8,7 @@ import type {
   MdblistPopularCacheEntry,
   MdblistRateLimitState,
   Movie,
+  OpenSubtitleChoices,
   OpenSubtitleFileCacheEntry,
   OpenSubtitleSearchCacheEntry,
   Playlist,
@@ -311,6 +312,26 @@ export async function getOpenSubtitleFileCacheEntry(fileId: number): Promise<Ope
 
 export async function saveOpenSubtitleFileCacheEntry(entry: OpenSubtitleFileCacheEntry): Promise<void> {
   await (await backend()).tx([{ op: "put", store: "subtitleFiles", record: entry }]);
+}
+
+export async function getOpenSubtitleChoices(itemId: string): Promise<OpenSubtitleChoices | undefined> {
+  return (await backend()).get("subtitleChoices", itemId);
+}
+
+export async function saveOpenSubtitleChoices(entry: OpenSubtitleChoices): Promise<void> {
+  await (await backend()).tx([{ op: "put", store: "subtitleChoices", record: entry }]);
+}
+
+export async function countOpenSubtitleFiles(): Promise<number> {
+  return (await (await backend()).getAll("subtitleFiles")).length;
+}
+
+export async function clearOpenSubtitleCache(): Promise<void> {
+  await (await backend()).tx([
+    { op: "clear", store: "subtitleSearch" },
+    { op: "clear", store: "subtitleFiles" },
+    { op: "clear", store: "subtitleChoices" },
+  ]);
 }
 
 export async function createSnapshot(

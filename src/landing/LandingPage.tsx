@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import type { IconName } from "../components/common";
 
 function LandingIcon({ name }: { name: IconName }) {
@@ -62,153 +62,15 @@ const faqItems: { question: string; answer: string; category: Exclude<FaqCategor
   },
 ];
 
-// Mockups of the app with sample data; they illustrate the product, they are not captures.
-const navIcons: IconName[] = ["home", "live_tv", "schedule", "theaters", "tv", "bookmark_border", "download"];
-
-function AppWindow({ active, title, sub, children }: { active: number | "settings"; title: string; sub?: string; children: ReactNode }) {
-  return (
-    <div className="ui app-window" data-nosnippet data-ui>
-      <div className="aw-side">
-        <span className="aw-logo">
-          <svg aria-hidden="true" viewBox="0 0 512 512"><path d="M140 126v220l172-110z" /><rect height="28" width="72" x="340" y="330" /></svg>
-        </span>
-        {navIcons.map((icon, i) => (
-          <span className={active === i ? "aw-nav is-active" : "aw-nav"} key={icon}><LandingIcon name={icon} /></span>
-        ))}
-        <span className={active === "settings" ? "aw-nav aw-settings is-active" : "aw-nav aw-settings"}><LandingIcon name="settings" /></span>
-      </div>
-      <div className="aw-main">
-        <p className="aw-title">{title}</p>
-        {sub && <p className="aw-sub">{sub}</p>}
-        {children}
-      </div>
-    </div>
-  );
-}
-
-const channelNames = ["Sport Live", "News 24", "Cinema One", "Nature HD", "Music Box", "Kids Zone"];
-
-function LiveWindow() {
-  return (
-    <AppWindow active={1} sub={`${channelNames.length} channels in this source`} title="Live TV">
-      <div className="aw-live">
-        <div className="aw-list">
-          <p className="ui-title">Channels <span>{channelNames.length}</span></p>
-          {channelNames.map((name, i) => (
-            <div className={i === 0 ? "aw-channel is-active" : "aw-channel"} key={name}>
-              <span>{name}</span>
-              <LandingIcon name={i === 2 ? "favorite" : "favorite_border"} />
-            </div>
-          ))}
-        </div>
-        <div className="aw-player">
-          <span className="ui-live">Live</span>
-          <span className="aw-player-title">Sport Live</span>
-          <span className="aw-player-sub">Live match · second half</span>
-          <span className="aw-controls"><LandingIcon name="play_arrow" /><i /><LandingIcon name="fullscreen" /></span>
-        </div>
-      </div>
-    </AppWindow>
-  );
-}
-
-function GuideWindow() {
-  const rows: [string, [string, number, boolean?][]][] = [
-    ["Sport Live", [["Pre-match", 1], ["Live match", 3, true], ["Review", 2]]],
-    ["News 24", [["Morning bulletin", 2], ["Weather", 1], ["Late edition", 3]]],
-    ["Cinema One", [["Feature film", 4], ["Feature film", 2]]],
-    ["Nature HD", [["Wild coasts", 2], ["Night safari", 2], ["Deep blue", 2]]],
-    ["Music Box", [["Sessions", 3], ["Charts", 3]]],
-  ];
-  return (
-    <AppWindow active={2} sub={`${rows.length} of ${rows.length} channels`} title="TV Guide">
-      <div className="aw-times"><span>14:00</span><span>15:00</span><span>16:00</span></div>
-      {rows.map(([channel, shows]) => (
-        <div className="ui-slot" key={channel}>
-          <span className="ui-channel">{channel}</span>
-          <div className="ui-shows" style={{ gridTemplateColumns: shows.map(([, s]) => `${s}fr`).join(" ") }}>
-            {shows.map(([show, , live], i) => (
-              <span className={live ? "ui-show is-live" : "ui-show"} key={show + i}>{show}</span>
-            ))}
-          </div>
-        </div>
-      ))}
-    </AppWindow>
-  );
-}
-
-function LibraryWindow() {
-  const shelves: [string, [string, number][]][] = [
-    ["Continue watching", [["Harbour Lights", 72], ["The Long Winter", 35], ["Signal Fires", 90], ["Paper Cities", 12]]],
-    ["Favorites", [["Night Shift", 0], ["Open Water", 0], ["Glass Hours", 0], ["Low Tide", 0]]],
-  ];
-  return (
-    <AppWindow active={0} title="Home">
-      {shelves.map(([shelf, titles]) => (
-        <div className="aw-shelf" key={shelf}>
-          <p className="ui-title">{shelf}</p>
-          <div className="ui-tiles">
-            {titles.map(([title, done]) => (
-              <div className="ui-tile" key={title}>
-                <span className="ui-poster">{title}</span>
-                {done > 0 && <span className="ui-progress"><i style={{ width: `${done}%` }} /></span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </AppWindow>
-  );
-}
-
-function SourcesWindow() {
-  const rows = [
-    ["Home playlist", "M3U file", "Active"],
-    ["Provider login", "Xtream server", "Active"],
-    ["Backup list", "M3U URL", "Paused"],
-  ];
-  return (
-    <AppWindow active="settings" sub="Manage this device's local data, sources, and appearance." title="Settings">
-      <p className="ui-title">Your sources</p>
-      {rows.map(([name, kind, state], i) => (
-        <div className={i === 0 ? "ui-row is-active" : "ui-row"} key={name}>
-          <span className="ui-name">{name}</span>
-          <span className="ui-meta">{kind}</span>
-          <span className={state === "Active" ? "ui-chip is-on" : "ui-chip"}>{state}</span>
-        </div>
-      ))}
-      <span className="ui-button">Add another source</span>
-    </AppWindow>
-  );
-}
-
-function DeviceWindow() {
-  const kept = ["Playlists", "Favorites", "Settings", "Playback progress"];
-  return (
-    <AppWindow active="settings" sub="Manage this device's local data, sources, and appearance." title="Settings">
-      <p className="ui-title">Privacy by design</p>
-      {kept.map((item) => (
-        <div className="ui-row" key={item}>
-          <span className="ui-name">{item}</span>
-          <span className="ui-chip is-on">Local</span>
-        </div>
-      ))}
-      <div className="ui-row ui-row-none">
-        <span className="ui-name">TiviHub account or cloud</span>
-        <span className="ui-chip">None</span>
-      </div>
-    </AppWindow>
-  );
-}
-
-const features: { title: string; text: string[]; fragment: ReactNode }[] = [
+const features: { title: string; text: string[]; shot: string; alt: string }[] = [
   {
     title: "Your sources, your choice",
     text: [
       "Connect M3U files and URLs or Xtream-compatible sources that you provide and are authorized to use.",
       "TiviHub does not include channels, playlists or media.",
     ],
-    fragment: <SourcesWindow />,
+    shot: "app-sources",
+    alt: "TiviHub settings listing three sources: a local M3U file, an Xtream login and an M3U URL",
   },
   {
     title: "Live TV with a guide",
@@ -216,14 +78,16 @@ const features: { title: string; text: string[]; fragment: ReactNode }[] = [
       "Browse channels and see what is on now and next, with guide data from your own provider.",
       "Supported HLS and DASH streams play in the app.",
     ],
-    fragment: <GuideWindow />,
+    shot: "app-guide",
+    alt: "TiviHub TV guide with channels, programme blocks and a now marker",
   },
   {
     title: "Movies and series, remembered",
     text: [
       "Favorites and playback progress live beside your films and series, so you pick up where you stopped.",
     ],
-    fragment: <LibraryWindow />,
+    shot: "app-home",
+    alt: "TiviHub home with continue watching progress and favorite movies",
   },
   {
     title: "Stored on your device",
@@ -231,7 +95,8 @@ const features: { title: string; text: string[]; fragment: ReactNode }[] = [
       "Your playlists, favorites, settings and progress stay in local app storage.",
       "No TiviHub app server, no cloud sync, no analytics. Playback connects directly to your provider.",
     ],
-    fragment: <DeviceWindow />,
+    shot: "app-privacy",
+    alt: "TiviHub settings explaining that data stays on this device",
   },
 ];
 
@@ -295,7 +160,7 @@ export default function LandingPage() {
 
         <div className="hero-grid" id="top">
           <div className="hero-copy">
-            <h1 data-reveal id="landing-title">Your media. Your universe.</h1>
+            <h1 data-reveal id="landing-title">Your media.<br />Your universe.</h1>
             <p className="hero-sentence" data-reveal style={{ "--d": "60ms" } as CSSProperties}>
               TiviHub is the desktop player for the channels, films and series you choose.
             </p>
@@ -311,7 +176,7 @@ export default function LandingPage() {
               <span>no cloud</span>
             </p>
           </div>
-          <div className="hero-ui" data-reveal style={{ "--d": "100ms" } as CSSProperties}><LiveWindow /></div>
+          <div className="hero-ui" data-reveal style={{ "--d": "100ms" } as CSSProperties}><img alt="TiviHub showing a movie library with sample posters and titles" className="hero-shot" height="1200" src="/landing/app-hero.png" width="1920" /></div>
         </div>
       </section>
 
@@ -326,7 +191,9 @@ export default function LandingPage() {
         <h2 className="section-title" data-reveal id="features-title">One hub for it all.</h2>
         {features.map((feature) => (
           <article className="feature" key={feature.title}>
-            <div className="feature-panel" data-reveal>{feature.fragment}</div>
+            <div className="feature-panel" data-reveal>
+              <img alt={feature.alt} className="feature-shot" height="800" loading="lazy" src={`/landing/${feature.shot}.png`} width="1280" />
+            </div>
             <div className="feature-text" data-reveal style={{ "--d": "80ms" } as CSSProperties}>
               <h3>{feature.title}</h3>
               {feature.text.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}

@@ -7,6 +7,7 @@ import type {
   MdblistPopularCacheEntry,
   MdblistRateLimitState,
   Movie,
+  OpenSubtitleChoices,
   OpenSubtitleFileCacheEntry,
   OpenSubtitleSearchCacheEntry,
   Playlist,
@@ -44,6 +45,7 @@ export interface StoreValues {
   mdblistRateLimits: MdblistRateLimitState;
   subtitleSearch: OpenSubtitleSearchCacheEntry;
   subtitleFiles: OpenSubtitleFileCacheEntry;
+  subtitleChoices: OpenSubtitleChoices;
   secrets: StoredSecret;
 }
 
@@ -53,7 +55,7 @@ export type IndexName = "byPlaylist" | "bySeries" | "byChannel" | "bySource";
 export const STORE_NAMES: readonly StoreName[] = [
   "playlists", "documents", "channels", "movies", "series", "episodes", "favorites",
   "library", "epg", "ratings", "popularCatalog", "mdblistRateLimits", "subtitleSearch",
-  "subtitleFiles", "secrets",
+  "subtitleFiles", "subtitleChoices", "secrets",
 ];
 
 /** One backend call that runs as a single transaction together with the rest of its batch. */

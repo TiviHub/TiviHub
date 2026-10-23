@@ -174,6 +174,8 @@ export function PlaybackDialog({
   const [subtitleBusy, setSubtitleBusy] = useState(false);
   const [subtitleError, setSubtitleError] = useState<string | null>(null);
   const [subtitleOpen, setSubtitleOpen] = useState(false);
+  const [savedSubtitles, setSavedSubtitles] = useState<{ fileId: number; name: string }[]>([]);
+  const attachedSubtitlesRef = useRef(new Map<number, () => void>());
   const [castOpen, setCastOpen] = useState(false);
   const [castDevices, setCastDevices] = useState<CastDeviceInfo[]>([]);
   const [castBusy, setCastBusy] = useState(false);
@@ -521,6 +523,7 @@ export function PlaybackDialog({
           video.load();
           if (video.readyState >= HTMLMediaElement.HAVE_METADATA) seek();
           setStatus("Ready to play");
+          void restoreSubtitle(() => disposed);
           return;
         }
         selectedPlaybackPath = "Shaka Player";
@@ -570,6 +573,7 @@ export function PlaybackDialog({
         syncTracks(player);
         syncVariantTracks(player);
         setStatus(video.paused ? "Ready to play" : "Playing");
+        void restoreSubtitle(() => disposed);
       } catch (cause) {
         if (disposed || nativeHlsFallbackAttemptedRef.current) return;
         if (selectedPlaybackPath === "Shaka Player") handleShakaFailure(cause);
@@ -595,6 +599,7 @@ export function PlaybackDialog({
       video.querySelectorAll("track[data-tivihub-subtitle]").forEach((track) => track.remove());
       for (const url of subtitleUrlsRef.current) URL.revokeObjectURL(url);
       subtitleUrlsRef.current = [];
+      attachedSubtitlesRef.current.clear();
       if (player && playerRef.current === player) {
         void player.destroy().catch((cause: unknown) => console.error("Could not close media player", cause));
       }
@@ -662,7 +667,13 @@ export function PlaybackDialog({
     }
   }
 
-  async function attachSubtitle(name: string, contents: string) {
+  // Selects an already attached subtitle again instead of adding a duplicate track.
+  async function attachSubtitle(name: string, contents: string, fileId?: number) {
+    const existing = fileId === undefined ? undefined : attachedSubtitlesRef.current.get(fileId);
+    if (existing) {
+      existing();
+      return;
+    }
     const player = playerRef.current;
     const blob = new Blob([asWebVtt(contents)], { type: "text/vtt;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -670,6 +681,7 @@ export function PlaybackDialog({
     if (player) {
       const track = await player.addTextTrackAsync(url, "und", "subtitles", "text/vtt", undefined, name);
       player.selectTextTrack(track);
+      if (fileId !== undefined) attachedSubtitlesRef.current.set(fileId, () => { player.selectTextTrack(track); syncTracks(player); });
       syncTracks(player);
       return;
     }
@@ -687,7 +699,45 @@ export function PlaybackDialog({
       syncNativeTracks();
     }, { once: true });
     video.append(track);
+    if (fileId !== undefined) attachedSubtitlesRef.current.set(fileId, () => { track.track.mode = "showing"; syncNativeTracks(); });
     syncNativeTracks();
+  }
+
+  // `stale` stops a load that was replaced mid-restore from attaching onto the newer player.
+  async function restoreSubtitle(stale: () => boolean) {
+    for (const fileId of await subtitleService.choices(item.id)) {
+      try {
+        const subtitle = await subtitleService.cachedFile(fileId);
+        if (subtitle && !stale()) await attachSubtitle(subtitle.name, subtitle.contents, fileId);
+      } catch (cause) {
+        console.error("Could not restore a saved subtitle", cause);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (subtitleOpen) void refreshSavedSubtitles();
+  }, [subtitleOpen, item.id]);
+
+  async function refreshSavedSubtitles() {
+    setSavedSubtitles(await subtitleService.saved(item.id));
+  }
+
+  async function applySavedSubtitle(fileId: number) {
+    setSubtitleError(null);
+    try {
+      const subtitle = await subtitleService.cachedFile(fileId);
+      if (!subtitle) throw new Error("Subtitle is no longer cached.");
+      await attachSubtitle(subtitle.name, subtitle.contents, fileId);
+      setSubtitleOpen(false);
+    } catch (cause) {
+      setSubtitleError("Couldn't add this saved subtitle. Search for it again.");
+    }
+  }
+
+  async function forgetSavedSubtitle(fileId: number) {
+    await subtitleService.forgetChoice(item.id, fileId);
+    await refreshSavedSubtitles();
   }
 
   async function importSubtitle(event: ChangeEvent<HTMLInputElement>) {
@@ -711,7 +761,8 @@ export function PlaybackDialog({
     setSubtitleError(null);
     try {
       const subtitle = await subtitleService.download(subtitleApiKey, result.fileId);
-      await attachSubtitle(subtitle.name, subtitle.contents);
+      await attachSubtitle(subtitle.name, subtitle.contents, result.fileId);
+      await subtitleService.rememberChoice(item.id, result.fileId);
       setSubtitleOpen(false);
     } catch (cause) {
       setSubtitleError("Couldn't download this subtitle. Please try again.");
@@ -857,8 +908,10 @@ export function PlaybackDialog({
       >
         <header className="playback-header">
           <div>
-            <p className="eyebrow">{item.live ? "LIVE SIGNAL" : "NOW PLAYING"}</p>
-            <h2 id="playback-title">{item.title}</h2>
+            <h2 id="playback-title">
+              {item.live && <span className="playback-badge">Live</span>}
+              {item.title}
+            </h2>
             <p aria-live="polite" className="playback-status" role="status">
               {/* shortcut: keyed on the initial status text, switch to a status enum if more phases need a skeleton */}
               {status.startsWith("Preparing") ? <><span className="sr-only">{status}</span><Skeleton className="skeleton-line playback-status-skeleton" /></> : status}
@@ -1094,54 +1147,100 @@ export function PlaybackDialog({
 
         {!item.live && subtitleOpen && (
           <section className="subtitle-panel" aria-label="Search OpenSubtitles">
-            <form
-              className="subtitle-search"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void searchSubtitles();
-              }}
-            >
-              <input
-                aria-label="Subtitle search"
-                onChange={(event) => setSubtitleQuery(event.target.value)}
-                placeholder="Movie or episode title"
-                value={subtitleQuery}
-              />
-              <button className="primary-button" disabled={subtitleBusy} type="submit">
-                {subtitleBusy ? "Searching…" : "Search"}
-              </button>
-            </form>
-            {subtitleError && <p className="form-error" role="alert">{subtitleError}</p>}
-            {subtitleBusy && subtitleResults.length === 0 && (
-              <div aria-live="polite" role="status">
-                <span className="sr-only">Searching subtitles…</span>
-                <RowSkeletons count={3} />
-              </div>
-            )}
-            {subtitleResults.length > 0 && (
-              <ul className="subtitle-results">
-                {subtitleResults.slice(0, 20).map((result) => (
-                  <li key={`${result.fileId}:${result.fileName}`}>
-                    <span>
-                      <strong>{result.fileName}</strong>
-                      <small>{result.language}{result.release ? ` · ${result.release}` : ""}</small>
-                    </span>
-                    <button
-                      aria-label={`Download ${result.fileName}`}
-                      className="icon-button"
-                      disabled={subtitleBusy}
-                      onClick={() => void downloadSubtitle(result)}
-                      type="button"
-                    >
-                      <Icon name="download" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!subtitleApiKey && (
-              <p className="form-note">Add your API key in Settings to search. You can import a subtitle file without an API key.</p>
-            )}
+            <div className="subtitle-column">
+              <strong className="subtitle-column-title">Search OpenSubtitles</strong>
+              <form
+                className="subtitle-search"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void searchSubtitles();
+                }}
+              >
+                <label className="search-field">
+                  <Icon name="search" />
+                  <input
+                    aria-label="Subtitle search"
+                    onChange={(event) => setSubtitleQuery(event.target.value)}
+                    placeholder="Movie or episode title"
+                    value={subtitleQuery}
+                  />
+                </label>
+                <button className="secondary-button selected" disabled={subtitleBusy} type="submit">
+                  {subtitleBusy ? "Searching…" : "Search"}
+                </button>
+              </form>
+              {subtitleError && <p className="form-error" role="alert">{subtitleError}</p>}
+              {subtitleBusy && subtitleResults.length === 0 && (
+                <div aria-live="polite" role="status">
+                  <span className="sr-only">Searching subtitles…</span>
+                  <RowSkeletons count={3} />
+                </div>
+              )}
+              {subtitleResults.length > 0 && (
+                <ul className="subtitle-results">
+                  {subtitleResults.slice(0, 20).map((result) => (
+                    <li key={`${result.fileId}:${result.fileName}`}>
+                      <span>
+                        <strong>{result.fileName}</strong>
+                        <small>{result.language}{result.release ? ` · ${result.release}` : ""}</small>
+                      </span>
+                      <button
+                        aria-label={`Download ${result.fileName}`}
+                        className="icon-button"
+                        data-tooltip="Download"
+                        disabled={subtitleBusy}
+                        onClick={() => void downloadSubtitle(result)}
+                        type="button"
+                      >
+                        <Icon name="download" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!subtitleApiKey && (
+                <p className="form-note">Add your API key in Settings to search. You can import a subtitle file without an API key.</p>
+              )}
+            </div>
+            <div className="subtitle-column">
+              <strong className="subtitle-column-title">
+                Saved downloads
+                {savedSubtitles.length > 0 && <span className="subtitle-count">{savedSubtitles.length}</span>}
+              </strong>
+              {savedSubtitles.length === 0 && (
+                <div className="subtitle-empty">
+                  <Icon name="subtitles" />
+                  <p>Nothing saved yet. Download a subtitle and it will appear here.</p>
+                </div>
+              )}
+              {savedSubtitles.length > 0 && (
+                <ul className="subtitle-results">
+                  {savedSubtitles.map((saved) => (
+                    <li key={saved.fileId}>
+                      <span><strong>{saved.name}</strong></span>
+                      <button
+                        aria-label={`Use ${saved.name}`}
+                        className="icon-button"
+                        data-tooltip="Use this subtitle"
+                        onClick={() => void applySavedSubtitle(saved.fileId)}
+                        type="button"
+                      >
+                        <Icon name="subtitles" />
+                      </button>
+                      <button
+                        aria-label={`Remove ${saved.name}`}
+                        className="icon-button"
+                        data-tooltip="Remove from this title"
+                        onClick={() => void forgetSavedSubtitle(saved.fileId)}
+                        type="button"
+                      >
+                        <Icon name="delete" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
         )}
         <p className="player-disclaimer">

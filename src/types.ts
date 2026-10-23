@@ -252,6 +252,12 @@ export interface OpenSubtitleSearchCacheEntry {
   expiresAt: number;
 }
 
+/** Every subtitle file downloaded for one movie or episode, oldest first. */
+export interface OpenSubtitleChoices {
+  itemId: string;
+  fileIds: number[];
+}
+
 export interface OpenSubtitleFileCacheEntry {
   fileId: number;
   name: string;

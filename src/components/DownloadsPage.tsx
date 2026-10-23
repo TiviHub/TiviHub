@@ -68,7 +68,13 @@ export function DownloadsPage({
         <div>
           <p className="eyebrow">OFFLINE LIBRARY</p>
           <h1>Downloads</h1>
-          <p>Movies and episodes saved for offline playback.</p>
+          <p>
+            {[
+              `${downloads.length} saved`,
+              downloads.length > 0 ? formatBytes(downloads.reduce((total, download) => total + download.sizeBytes, 0)) : null,
+              tasks.length > 0 ? `${tasks.length} in progress` : null,
+            ].filter(Boolean).join(" · ")}
+          </p>
         </div>
       </header>
 
@@ -79,6 +85,7 @@ export function DownloadsPage({
         </div>
       ) : (
         <div className="downloads-list" aria-label="Downloads">
+          {tasks.length > 0 && downloads.length > 0 && <h2 className="downloads-group-title">In progress</h2>}
           {tasks.map((task) => {
             const progress = task.totalBytes && task.totalBytes > 0
               ? Math.min(100, (task.receivedBytes / task.totalBytes) * 100)
@@ -141,6 +148,7 @@ export function DownloadsPage({
             );
           })}
 
+          {tasks.length > 0 && downloads.length > 0 && <h2 className="downloads-group-title">Saved on this device</h2>}
           {downloads.map((download) => (
             <article className="download-item is-complete" key={download.id}>
               <div className="download-item-artwork">

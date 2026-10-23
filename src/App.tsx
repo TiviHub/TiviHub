@@ -2798,6 +2798,13 @@ function MediaHome({
     }
   }
 
+  const featuredResume = homeLayout.hidden.includes("continueWatching")
+    ? undefined
+    : continueWatching.find((item) => item.streamUrl && item.contentType !== "LIVE");
+  const featuredResumeProgress = featuredResume && featuredResume.durationMillis > 0
+    ? Math.max(0, Math.min(100, featuredResume.positionMillis / featuredResume.durationMillis * 100))
+    : 0;
+
   if (library.length === 0 && favorites.length === 0) {
     return (
       <HomeEmptyState
@@ -2820,6 +2827,29 @@ function MediaHome({
         <h1>Home</h1>
         <p>Your favorites and watch progress, all in one place.</p>
       </header>
+      {featuredResume && (
+        <article className="home-resume">
+          <span className="home-resume-art">
+            <span className="catalog-artwork-fallback"><Icon name={featuredResume.contentType === "LIVE" ? "live_tv" : featuredResume.contentType === "MOVIE" ? "movie" : "tv"} /></span>
+            {featuredResume.artworkUrl && <img alt="" draggable={false} onError={(event) => { event.currentTarget.hidden = true; }} src={featuredResume.artworkUrl} />}
+          </span>
+          <div className="home-resume-copy">
+            <strong>{featuredResume.title}</strong>
+            <small>
+              {homeContentTypeLabel(featuredResume.contentType)}
+              {featuredResume.parentTitle ? ` · ${featuredResume.parentTitle}` : ""}
+              {featuredResume.durationMillis > 0 ? ` · ${Math.round(featuredResumeProgress)}% watched` : ""}
+            </small>
+            {featuredResume.durationMillis > 0 && (
+              <span className="library-progress"><span style={{ width: `${featuredResumeProgress}%` }} /></span>
+            )}
+          </div>
+          <button className="primary-button" onClick={() => playLibraryItem(featuredResume)} type="button">
+            <Icon name="play_arrow" />
+            Resume
+          </button>
+        </article>
+      )}
       {homeLayout.order.map((key) => (
         <Fragment key={key}>
           {homeLayout.hidden.includes(key) ? null : renderHomeShelf(key)}
