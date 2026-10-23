@@ -81,7 +81,7 @@ Never add one-off bordered or purple-outline icon button variants. Icon-only but
 
 ## Player
 
-- One player look for the modal player, the inline Live TV player and the mini player: header with title (plus the `.playback-badge` "Live" chip on live channels, no eyebrow), video edge to edge, tools row below with 42px `.player-track-select` boxes, small `--faint` disclaimer. The modal player gives the header and tools a side margin; the inline player does the same with its own margin.
+- One player look for the modal player, the inline Live TV player and the mini player: header with title (plus the `.playback-badge` "Live" chip on live channels, no eyebrow), video edge to edge, tools row below with 42px `.player-track-select` boxes. The modal player gives the header and tools a side margin; the inline player does the same with its own margin.
 - Subtitle panel (`.subtitle-panel`): search uses the shared `.search-field` plus a 42px `.secondary-button.selected`, never a custom input or a 48px primary button. Result and saved rows are `.subtitle-results li` in the shared card look; saved heading carries a `.subtitle-count` pill; the empty state is `.subtitle-empty` (bordered card, 27px icon), not loose text.
 - Home resume card (`.home-resume`): shared card look, 96px poster, progress bar, one 48px `.primary-button`. It is the only large card on Home; shelves stay poster cards.
 - Count pills (tab counts, `.subtitle-count`, shelf counts) are 999px pills on `--row-selected` / `--surface-raised`.

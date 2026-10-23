@@ -6531,13 +6531,6 @@ button:disabled {
   font-size: 0.68rem;
 }
 
-.player-disclaimer {
-  margin: 0;
-  color: var(--faint);
-  font-size: 0.68rem;
-  line-height: 1.5;
-}
-
 @media (max-width: 820px) {
   .downloads-page-heading {
     align-items: stretch;
@@ -7860,11 +7853,7 @@ button.icon-button.is-favorite {
   margin: 9px 16px 0;
 }
 
-.browse-layout .playback-dialog.playback-inline:not(.playback-mini) > .player-disclaimer {
-  padding: 0 16px 9px;
-}
-
-.browse-player-info {
+.browse-layout .playback-dialog.playback-inline:not(.playback-mini) > .browse-player-info {
   display: grid;
   gap: 6px;
   padding: 14px 16px;

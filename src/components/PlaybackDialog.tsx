@@ -1082,9 +1082,6 @@ export function PlaybackDialog({
             subtitleResults={subtitleResults}
           />
         )}
-        <p className="player-disclaimer">
-          Playback and subtitle requests connect directly to their configured hosts. Availability depends on the webview codecs, CORS, and source permissions.
-        </p>
       </section>
   );
   return inline ? playerContent : (
