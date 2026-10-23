@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { replayUrl } from "../catchup";
 import { getLibraryItems, saveLibraryItem } from "../storage/database";
-import type { LibraryItem, LiveChannel, PlayableItem, Playlist } from "../types";
+import type { EpgProgram, LibraryItem, LiveChannel, PlayableItem, Playlist } from "../types";
 
 interface Options {
   notify: (message: string, kind: "error" | "notice") => void;
@@ -30,6 +31,28 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     setPlayableItem({
       ...item,
       drmCertificateUrl: item.drmCertificateUrl || source?.drmCertificateUrl,
+    });
+  }
+
+  /** Plays a recorded programme (or the one on air from its start) of a channel with an archive. */
+  function openReplay(channel: LiveChannel, program: EpgProgram) {
+    const source = sources.find((entry) => entry.id === channel.playlistId);
+    const streamUrl = source && replayUrl(channel, source, program.startMillis, program.endMillis);
+    if (!streamUrl) {
+      notify("This recording could not be opened. The provider may not keep it any more.", "error");
+      return;
+    }
+    openPlayback({
+      id: `${channel.id}:replay:${program.startMillis}`,
+      playlistId: channel.playlistId,
+      contentType: "LIVE",
+      title: `${channel.name} · ${program.title}`,
+      streamUrl,
+      artworkUrl: channel.logoUrl,
+      drmLicenseUrl: channel.drmLicenseUrl,
+      drmSystem: channel.drmSystem,
+      live: false,
+      replay: true,
     });
   }
 
@@ -70,6 +93,7 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     streamHealthRequest,
     setStreamHealthRequest,
     openPlayback,
+    openReplay,
     closePlayback,
     recordWatchedChannel,
   };

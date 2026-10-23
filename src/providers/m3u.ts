@@ -1,4 +1,5 @@
 import type { DrmSystem, Episode, LiveChannel, Movie, Series } from "../types";
+import { catchupFromAttributes } from "../catchup";
 import { recordDiagnosticFailure } from "../diagnosticLog";
 import { readResponseText, validateHttpsUrl } from "./http";
 
@@ -216,6 +217,7 @@ function createM3uCatalogParser(context: PlaylistContext) {
         streamUrl,
         logoUrl,
         tvgId: metadata.attributes["tvg-id"] || undefined,
+        catchup: catchupFromAttributes(metadata.attributes),
         drmLicenseUrl,
         drmSystem: context.drmSystem,
       });

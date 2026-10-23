@@ -8,6 +8,7 @@ import type {
   Series,
 } from "../types";
 import { recordDiagnosticFailure } from "../diagnosticLog";
+import { formatServerTime } from "../serverTime";
 import { readResponseText, validateHttpsUrl } from "./http";
 
 interface XtreamPayload {
@@ -25,6 +26,7 @@ export interface XtreamCatalog {
   movies: Movie[];
   series: Series[];
   expiresAtMillis?: number;
+  serverTimeZone?: string;
 }
 
 export class XtreamAccountExpiredError extends Error {
@@ -89,6 +91,26 @@ export function xtreamStreamUrl(
     : "";
   const file = `${encodePathPart(id)}.${encodePathPart(extension || "mp4")}`;
   base.pathname = `${apiPath}/${type}/${encodePathPart(playlist.username)}/${encodePathPart(playlist.password)}/${file}`;
+  base.username = "";
+  base.password = "";
+  base.search = "";
+  return base.toString();
+}
+
+/** Address of a recorded programme; the start is written in the server's own time zone. */
+export function xtreamTimeshiftUrl(
+  playlist: Playlist,
+  providerId: string,
+  startMillis: number,
+  endMillis: number,
+): string {
+  const base = apiBase(playlist);
+  const apiPath = base.pathname.endsWith("/player_api.php")
+    ? base.pathname.slice(0, -"/player_api.php".length)
+    : "";
+  const minutes = Math.max(1, Math.ceil((endMillis - startMillis) / 60_000));
+  const start = formatServerTime(startMillis, playlist.serverTimeZone);
+  base.pathname = `${apiPath}/timeshift/${encodePathPart(playlist.username)}/${encodePathPart(playlist.password)}/${minutes}/${start}/${encodePathPart(providerId)}.m3u8`;
   base.username = "";
   base.password = "";
   base.search = "";
@@ -225,6 +247,12 @@ function expiryMillis(value: unknown): number | undefined {
   return undefined;
 }
 
+function archiveFor(item: XtreamPayload): Pick<LiveChannel, "catchup"> {
+  if (optionalNumber(item.tv_archive) !== 1) return {};
+  const days = optionalNumber(item.tv_archive_duration);
+  return { catchup: { mode: "xtream", days: days && days > 0 ? days : 1 } };
+}
+
 function drmFor(playlist: Playlist): Pick<LiveChannel, "drmLicenseUrl" | "drmSystem"> {
   return playlist.drmLicenseUrl
     ? {
@@ -234,10 +262,10 @@ function drmFor(playlist: Playlist): Pick<LiveChannel, "drmLicenseUrl" | "drmSys
     : {};
 }
 
-export async function authenticateXtream(
+async function authenticate(
   playlist: Playlist,
   signal?: AbortSignal,
-): Promise<number | undefined> {
+): Promise<{ expiresAtMillis?: number; serverTimeZone?: string }> {
   const payload = object(await requestJson(authenticatedUrl(playlist), "Xtream account check", signal));
   const userInfo = object(payload?.user_info);
   if (!userInfo) throw new Error("Xtream returned an unexpected authentication response.");
@@ -250,14 +278,24 @@ export async function authenticateXtream(
   if (auth === 0 || ["disabled", "unauthorized"].includes(status)) {
     throw new Error(message || `Xtream authentication was rejected (${status || "inactive"}).`);
   }
-  return expiryMillis(userInfo.exp_date);
+  return {
+    expiresAtMillis: expiryMillis(userInfo.exp_date),
+    serverTimeZone: stringValue(object(payload?.server_info)?.timezone),
+  };
+}
+
+export async function authenticateXtream(
+  playlist: Playlist,
+  signal?: AbortSignal,
+): Promise<number | undefined> {
+  return (await authenticate(playlist, signal)).expiresAtMillis;
 }
 
 export async function loadXtreamCatalog(
   playlist: Playlist,
   signal?: AbortSignal,
 ): Promise<XtreamCatalog> {
-  const expiresAtMillis = await authenticateXtream(playlist, signal);
+  const { expiresAtMillis, serverTimeZone } = await authenticate(playlist, signal);
   const [liveCategoriesRaw, liveRaw, movieCategoriesRaw, moviesRaw, seriesCategoriesRaw, seriesRaw] =
     await Promise.all([
       requestJson(authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal),
@@ -293,6 +331,7 @@ export async function loadXtreamCatalog(
       streamUrl: xtreamStreamUrl(playlist, "live", providerId, "m3u8"),
       logoUrl: stringValue(item.stream_icon),
       tvgId: stringValue(item.epg_channel_id),
+      ...archiveFor(item),
       ...drm,
     }];
   });
@@ -345,7 +384,7 @@ export async function loadXtreamCatalog(
     }];
   });
 
-  return { channels, movies, series, expiresAtMillis };
+  return { channels, movies, series, expiresAtMillis, serverTimeZone };
 }
 
 export async function loadXtreamEpisodes(

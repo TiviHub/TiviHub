@@ -190,7 +190,7 @@ function App() {
   } = useLocalData({ notify, setFavorites, setLibrary });
   const {
     playableItem, inlineLivePlayback, resumePosition, streamHealthRequest, setStreamHealthRequest,
-    openPlayback, closePlayback, recordWatchedChannel,
+    openPlayback, openReplay, closePlayback, recordWatchedChannel,
   } = usePlayback({ notify, setLibrary, sources });
   const {
     downloads, downloadTasks, downloadDirectoryPath, downloadsLoaded, downloadedIds, activeDownloadIds,
@@ -703,6 +703,7 @@ function App() {
                 loading={guideLoadCount > 0}
                 onLoadGuideForChannels={(guideChannels) => void loadGuideForChannels(guideChannels)}
                 onPlay={(channel) => openPlayback(playableChannel(channel))}
+                onReplay={openReplay}
                 selectedChannelId={inlineLivePlayback && playableItem?.live ? playableItem.id : undefined}
               />
             ) : section === "Downloads" ? (

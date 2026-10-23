@@ -191,6 +191,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !optionalHttpUrl(playlist.epgUrl) ||
       !optionalText(playlist.fileName, 255) ||
       !optionalFinite(playlist.expiresAtMillis) ||
+      !optionalText(playlist.serverTimeZone, 64) ||
       !optionalFinite(playlist.lastCatalogRefreshAt)
     ) {
       throw new Error("Backup contains an invalid playlist.");

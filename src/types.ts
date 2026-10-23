@@ -33,6 +33,8 @@ export interface Playlist {
   /** Set by the SQLite migration when saved credentials could not be decrypted and must be entered again. */
   needsReentry?: boolean;
   expiresAtMillis?: number;
+  /** IANA time zone the Xtream server reported; replay times are written in it. */
+  serverTimeZone?: string;
   lastCatalogRefreshAt?: number;
   lastCatalogRefreshAttemptAt?: number;
   lastCatalogRefreshOutcome?: CatalogRefreshOutcome;
@@ -49,8 +51,20 @@ export interface LiveChannel {
   streamUrl: string;
   logoUrl?: string;
   tvgId?: string;
+  /** Present when the provider keeps a recording of this channel for replay. */
+  catchup?: ChannelCatchup;
   drmLicenseUrl?: string;
   drmSystem?: DrmSystem;
+}
+
+export type CatchupMode = "xtream" | "default" | "append" | "shift" | "flussonic";
+
+export interface ChannelCatchup {
+  mode: CatchupMode;
+  /** How many days back the provider keeps recordings. */
+  days: number;
+  /** URL template from the playlist's `catchup-source`, for the template modes. */
+  source?: string;
 }
 
 export interface Movie {
@@ -180,6 +194,8 @@ export interface PlayableItem {
   drmSystem?: DrmSystem;
   drmCertificateUrl?: string;
   live: boolean;
+  /** A recorded programme of a live channel: seekable, but not saved to the library. */
+  replay?: boolean;
   offline?: boolean;
   parentId?: string;
   parentTitle?: string;

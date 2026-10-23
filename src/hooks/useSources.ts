@@ -230,6 +230,7 @@ export function useSources(deps: SourceDeps) {
       try {
         const result = await loadXtreamCatalog(playlist, draft.signal);
         playlist.expiresAtMillis = result.expiresAtMillis;
+        playlist.serverTimeZone = result.serverTimeZone;
         catalog = result;
       } catch (cause) {
         if (cause instanceof XtreamAccountExpiredError) {
@@ -383,6 +384,7 @@ export function useSources(deps: SourceDeps) {
       let importedEpisodes: Episode[] | undefined;
       let skippedStreams = 0;
       let expiresAtMillis = source.expiresAtMillis;
+      let serverTimeZone = source.serverTimeZone;
       if (source.demo) {
         if (import.meta.env.DEV) {
           const { DEMO_PLAYLIST_CONTENT } = await import("../demo");
@@ -424,6 +426,7 @@ export function useSources(deps: SourceDeps) {
       } else {
         const result = await loadXtreamCatalog(source);
         expiresAtMillis = result.expiresAtMillis;
+        serverTimeZone = result.serverTimeZone;
         catalog = result;
       }
 
@@ -479,6 +482,7 @@ export function useSources(deps: SourceDeps) {
       const updatedSource: Playlist = {
         ...currentSource,
         expiresAtMillis,
+        serverTimeZone,
         active: activeSourceIdRef.current === source.id,
         lastCatalogRefreshAt: refreshedAt,
         lastCatalogRefreshAttemptAt: refreshedAt,

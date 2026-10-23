@@ -1,6 +1,7 @@
 import { Skeleton } from "./Skeleton";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { EpgProgram, LiveChannel } from "../types";
+import { canReplay, canStartOver } from "../catchup";
 import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../liveGuideLayout";
 import { CustomSelect, Icon } from "./common";
 
@@ -30,6 +31,7 @@ export function LiveGuide({
   loading,
   onLoadGuideForChannels,
   onPlay,
+  onReplay,
 }: {
   channels: LiveChannel[];
   epg: EpgProgram[];
@@ -39,6 +41,7 @@ export function LiveGuide({
   loading: boolean;
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (channel: LiveChannel) => void;
+  onReplay: (channel: LiveChannel, program: EpgProgram) => void;
 }) {
   const [date, setDate] = useState(() => startOfLocalDay(new Date()));
   const [now, setNow] = useState(Date.now());
@@ -298,20 +301,35 @@ export function LiveGuide({
                       const block = guideProgramBlock(program, bounds, hourWidth);
                       if (!block) return null;
                       const isCurrent = program.startMillis <= now && program.endMillis > now;
+                      const replayable = canReplay(channel, program, now);
+                      const startOver = isCurrent && block.width >= 96 && canStartOver(channel, program, now);
                       return (
+                        <Fragment key={program.id}>
                         <button
-                          aria-label={`${channel.name}: ${program.title}, ${formatTime(program.startMillis)} to ${formatTime(program.endMillis)}. Select to play channel live.`}
-                          className={`live-guide-program${isCurrent ? " is-current" : ""}`}
-                          key={program.id}
-                          onClick={() => onPlay(channel)}
+                          aria-label={`${channel.name}: ${program.title}, ${formatTime(program.startMillis)} to ${formatTime(program.endMillis)}. ${replayable ? "Select to watch the recording." : "Select to play channel live."}`}
+                          className={`live-guide-program${isCurrent ? " is-current" : ""}${replayable ? " is-replayable" : ""}`}
+                          onClick={() => replayable ? onReplay(channel, program) : onPlay(channel)}
                           style={{ left: `${block.left}px`, width: `${block.width}px` }}
-                          data-tooltip={`${program.title} · ${formatTime(program.startMillis)}–${formatTime(program.endMillis)}`}
+                          data-tooltip={`${program.title} · ${formatTime(program.startMillis)}–${formatTime(program.endMillis)}${replayable ? " · Watch recording" : ""}`}
                           type="button"
                         >
                           <small>{formatTime(program.startMillis)} – {formatTime(program.endMillis)}</small>
                           <strong>{program.title}</strong>
                           {isCurrent && <span className="live-guide-program-progress" style={{ width: `${Math.max(0, Math.min(100, ((now - program.startMillis) / (program.endMillis - program.startMillis)) * 100))}%` }} />}
                         </button>
+                        {startOver && (
+                          <button
+                            aria-label={`Start over ${program.title} on ${channel.name}`}
+                            className="icon-button live-guide-startover"
+                            data-tooltip="Start over"
+                            onClick={() => onReplay(channel, program)}
+                            style={{ left: `${block.left + block.width - 34}px` }}
+                            type="button"
+                          >
+                            <Icon name="restart_alt" />
+                          </button>
+                        )}
+                        </Fragment>
                       );
                     })}
                   </div>
@@ -339,7 +357,7 @@ export function LiveGuide({
       </div>
       <footer className="live-guide-footer">
         <span>{currentChannel ? `Playing: ${currentChannel.name}` : "Select a channel to start playback"}</span>
-        <span>Click a programme to play its channel live</span>
+        <span>Click a programme to play its channel live. Marked programmes can be watched again.</span>
         {loading && (
           <span className="live-guide-loading" role="status">
             <span className="sr-only">Loading guide data</span>

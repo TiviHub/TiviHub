@@ -348,7 +348,7 @@ export function PlaybackDialog({
 
   async function persistProgress(watched = false) {
     const video = videoRef.current;
-    if (!video || item.live) return;
+    if (!video || item.live || item.replay) return;
     try {
       await onProgressRef.current(
         item,
@@ -422,7 +422,7 @@ export function PlaybackDialog({
       );
     };
     const onTimeUpdate = () => {
-      if (item.live || video.currentTime < 1) return;
+      if (item.live || item.replay || video.currentTime < 1) return;
       const now = Date.now();
       if (now - lastSaveRef.current < 10_000) return;
       lastSaveRef.current = now;

@@ -288,6 +288,31 @@ describe("Xtream URL construction", () => {
     });
   });
 
+  it("reads archive availability and the server time zone", async () => {
+    const responses: Record<string, unknown> = {
+      "": { user_info: { auth: 1, status: "Active" }, server_info: { timezone: "Europe/Amsterdam" } },
+      get_live_categories: [],
+      get_live_streams: [
+        { stream_id: 1, name: "Recorded", tv_archive: 1, tv_archive_duration: "7" },
+        { stream_id: 2, name: "Not recorded", tv_archive: 0, tv_archive_duration: "0" },
+      ],
+      get_vod_categories: [],
+      get_vod_streams: [],
+      get_series_categories: [],
+      get_series: [],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => new Response(
+      JSON.stringify(responses[new URL(String(input)).searchParams.get("action") ?? ""]),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const catalog = await loadXtreamCatalog(playlist);
+
+    expect(catalog.serverTimeZone).toBe("Europe/Amsterdam");
+    expect(catalog.channels[0].catchup).toEqual({ mode: "xtream", days: 7 });
+    expect(catalog.channels[1].catchup).toBeUndefined();
+  });
+
   it("rejects Xtream responses larger than 200 MB", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       user_info: { auth: 1, status: "Active" },

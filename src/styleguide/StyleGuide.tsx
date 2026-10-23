@@ -480,6 +480,31 @@ export function StyleGuide() {
         </div>
       </section>
 
+      <section className="sg-section" id="guide-programmes">
+        <div className="sg-section-head">
+          <h2>TV guide programmes</h2>
+          <p>Blocks in the guide timeline. A 3px primary bar marks a finished programme the provider still has a recording of; the programme on air can be started over.</p>
+        </div>
+        <div className="sg-specimens">
+        <Block title="live-guide-program (normal, replayable, current with start over)">
+          <div className="live-guide-program-track" style={{ position: "relative", height: 62, width: 560 }}>
+            <button className="live-guide-program" style={{ left: 0, width: 150 }} type="button">
+              <small>18:00 – 19:00</small><strong>Evening film</strong>
+            </button>
+            <button className="live-guide-program is-replayable" style={{ left: 156, width: 150 }} type="button">
+              <small>19:00 – 20:00</small><strong>Recorded news</strong>
+            </button>
+            <button className="live-guide-program is-current" style={{ left: 312, width: 200 }} type="button">
+              <small>20:00 – 21:30</small><strong>On air now</strong>
+            </button>
+            <button aria-label="Start over" className="icon-button live-guide-startover" data-tooltip="Start over" style={{ left: 478 }} type="button">
+              <Icon name="restart_alt" />
+            </button>
+          </div>
+        </Block>
+        </div>
+      </section>
+
       <section className="sg-section" id="pagination">
         <div className="sg-section-head">
           <h2>Pagination</h2>
