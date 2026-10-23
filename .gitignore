@@ -31,3 +31,6 @@ Thumbs.db
 /src-tauri/target-perf/
 /scripts/perf/seeded/
 /scripts/perf/data/
+
+# Reference screenshots and notes (competitor UI, not ours)
+/screenshots/
