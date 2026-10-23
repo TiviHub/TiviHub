@@ -285,3 +285,8 @@ button.icon-button.selected {
   border-color: transparent;
   background-color: var(--row);
 }
+
+/* No monospace in the UI (browsers default <code> to it). */
+code {
+  font-family: inherit;
+}

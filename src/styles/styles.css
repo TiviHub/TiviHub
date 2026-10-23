@@ -4798,7 +4798,7 @@ button:disabled {
 /* The guide scrolls sideways to "now"; keep the empty message at the left edge of the view. */
 .live-guide-rows > .live-guide-empty {
   position: sticky;
-  left: 0;
+  left: 24px;
   width: fit-content;
   max-width: calc(100vw - 80px);
 }
