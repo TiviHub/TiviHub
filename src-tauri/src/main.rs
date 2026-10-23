@@ -2,6 +2,7 @@
 
 mod chromecast;
 mod diagnostics;
+mod net;
 mod storage;
 
 use diagnostics::{BackendDiagnosticEvent, BackendDiagnostics};
@@ -147,6 +148,7 @@ fn get_backend_diagnostics(
 fn main() {
     tauri::Builder::default()
         .manage(BackendDiagnostics::default())
+        .manage(net::ProxyState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -175,6 +177,8 @@ fn main() {
             cast_media,
             stop_cast,
             get_backend_diagnostics,
+            net::http_fetch,
+            net::proxy_register,
             storage::storage_status,
             storage::storage_get,
             storage::storage_get_all,
