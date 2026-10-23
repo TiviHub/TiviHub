@@ -13,6 +13,11 @@ export const STALKER_DEFAULT_USER_AGENT =
 const STB_MODEL = "Model: MAG250; Link: WiFi";
 const MAX_PORTAL_RESPONSE_BYTES = 200 * 1024 * 1024;
 const EPG_PERIOD_HOURS = 6;
+const MAX_PORTAL_REQUESTS = 4;
+const DEFAULT_WATCHDOG_SECONDS = 120;
+
+/** How long to wait before repeating a request the portal answered with "too many requests"; tests shorten it. */
+export const retryPolicy = { delaysMillis: [2000, 5000, 10_000] };
 
 /** Stream addresses are only known when you press play, so the catalog keeps this stand-in. */
 export const STALKER_LINK_HOST = "stalker.invalid";
@@ -104,9 +109,38 @@ function macOf(playlist: Playlist): string {
 }
 
 // One login per source; a portal logs the box in again when its token stops working.
-const sessions = new Map<string, Promise<string>>();
 
 class PortalAuthError extends Error {}
+
+// A portal answers a few requests at a time; asking for more gets a box throttled or logged out.
+let activeRequests = 0;
+const waiting: Array<() => void> = [];
+
+async function gated<T>(work: () => Promise<T>): Promise<T> {
+  if (activeRequests < MAX_PORTAL_REQUESTS) activeRequests += 1;
+  else await new Promise<void>((resolve) => waiting.push(resolve)); // the finishing request hands its slot over
+  try {
+    return await work();
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else activeRequests -= 1;
+  }
+}
+
+function pause(millis: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException("The operation was aborted.", "AbortError"));
+    const timer = setTimeout(resolve, millis);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("The operation was aborted.", "AbortError"));
+    }, { once: true });
+  });
+}
+
+// Plain-text answers (with HTTP 200) that mean the session is not valid.
+const AUTH_FAILURE = /authori[sz]ation|access denied|unauthori[sz]ed|not valid/i;
 
 async function portalRequest(
   playlist: Playlist,
@@ -124,20 +158,32 @@ async function portalRequest(
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let response: Response;
-  try {
-    response = await providerFetch(`${stalkerApiUrl(playlist.url)}?${query}`, { headers, signal }, stalkerUserAgent(playlist));
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
-    recordDiagnosticFailure("stalker-portal", "network");
-    throw new Error(
-      "The portal could not be reached. Stalker portals need the desktop app, and the portal address and your connection must be correct.",
-      { cause: error },
-    );
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      response = await gated(() => providerFetch(`${stalkerApiUrl(playlist.url)}?${query}`, { headers, signal }, stalkerUserAgent(playlist)));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      recordDiagnosticFailure("stalker-portal", "network");
+      throw new Error(
+        "The portal could not be reached. Stalker portals need the desktop app, and the portal address and your connection must be correct.",
+        { cause: error },
+      );
+    }
+    // Too many requests: wait as the portal asks (or a little longer each time) and try again.
+    const delay = retryPolicy.delaysMillis[attempt];
+    if ((response.status === 429 || response.status === 503) && delay !== undefined) {
+      const asked = Number(response.headers.get("retry-after"));
+      await pause(Number.isFinite(asked) && asked > 0 ? Math.min(asked * 1000, 30_000) : delay, signal);
+      continue;
+    }
+    break;
   }
   if (response.status === 401 || response.status === 403) throw new PortalAuthError();
   if (!response.ok) {
     recordDiagnosticFailure("stalker-portal", "http", response.status);
-    throw new Error(`The portal answered with HTTP ${response.status}.`);
+    throw new Error(response.status === 429
+      ? "The portal is limiting requests from this computer right now. Wait a few minutes and try again."
+      : `The portal answered with HTTP ${response.status}.`);
   }
   const text = await readResponseText(response, maxBytes, "Portal response");
   let parsed: unknown;
@@ -145,21 +191,27 @@ async function portalRequest(
     parsed = JSON.parse(text);
   } catch {
     // Without a valid session many portals answer with a plain "Authorization failed." page.
-    if (/authori[sz]ation|not valid/i.test(text)) throw new PortalAuthError();
+    if (AUTH_FAILURE.test(text)) throw new PortalAuthError();
     recordDiagnosticFailure("stalker-portal", "invalid-response");
     throw new Error("The portal returned something TiviHub does not understand. Check the portal address.");
   }
   return (parsed as Payload | null)?.js ?? null;
 }
 
-async function login(playlist: Playlist, signal?: AbortSignal): Promise<string> {
+interface Session {
+  token: string;
+  /** Seconds between keep-alive pings, as the portal asks. */
+  watchdogSeconds: number;
+}
+
+async function login(playlist: Playlist, signal?: AbortSignal): Promise<Session> {
   const mac = macOf(playlist);
   const handshake = await portalRequest(playlist, { type: "stb", action: "handshake", token: "", prehash: "" }, null, signal);
   const token = stringValue((handshake as Payload | null)?.token);
   if (!token) throw new Error("The portal did not accept this MAC address.");
 
   const id = await deviceId(mac);
-  await portalRequest(playlist, {
+  const profileRequest = (secondStep: boolean) => portalRequest(playlist, {
     type: "stb",
     action: "get_profile",
     hd: "1",
@@ -171,13 +223,18 @@ async function login(playlist: Playlist, signal?: AbortSignal): Promise<string> 
     device_id: id,
     device_id2: id,
     sn: id.slice(0, 13),
-    auth_second_step: "1",
+    ...(secondStep ? { auth_second_step: "1" } : {}),
     hw_version: "1.7-BD-00",
     api_signature: "262",
     not_valid_token: "0",
-  }, token, signal);
+  }, token, signal) as Promise<Payload | null>;
 
-  if (playlist.username.trim()) {
+  // The profile says how the box stands: 0 is fine, 1 is blocked, 2 wants a login first.
+  let profile = await profileRequest(false);
+  if (numberValue(profile?.status) === 2) {
+    if (!playlist.username.trim()) {
+      throw new Error("This portal asks for a login. Add the username and password in the source's login settings.");
+    }
     await portalRequest(playlist, {
       type: "stb",
       action: "do_auth",
@@ -186,11 +243,20 @@ async function login(playlist: Playlist, signal?: AbortSignal): Promise<string> 
       device_id: id,
       device_id2: id,
     }, token, signal);
+    profile = await profileRequest(true);
   }
-  return token;
+  const status = numberValue(profile?.status) ?? 0;
+  if (status === 1) {
+    throw new Error(stringValue(profile?.block_msg) ?? stringValue(profile?.msg) ?? "The portal has blocked this account.");
+  }
+  if (status === 2) throw new Error("The portal did not accept this login. Check the username and password with your provider.");
+  const asked = numberValue(profile?.watchdog_timeout) ?? DEFAULT_WATCHDOG_SECONDS;
+  return { token, watchdogSeconds: Math.min(3600, Math.max(30, asked)) };
 }
 
-function session(playlist: Playlist, signal?: AbortSignal, renew = false): Promise<string> {
+const sessions = new Map<string, Promise<Session>>();
+
+function session(playlist: Playlist, signal?: AbortSignal, renew = false): Promise<Session> {
   const key = `${playlist.id}|${playlist.url}|${playlist.macAddress}|${playlist.username}`;
   let current = renew ? undefined : sessions.get(key);
   if (!current) {
@@ -209,11 +275,11 @@ async function call(
   maxBytes?: number,
 ): Promise<unknown> {
   try {
-    return await portalRequest(playlist, params, await session(playlist, signal), signal, maxBytes);
+    return await portalRequest(playlist, params, (await session(playlist, signal)).token, signal, maxBytes);
   } catch (error) {
     if (!(error instanceof PortalAuthError)) throw error;
     try {
-      return await portalRequest(playlist, params, await session(playlist, signal, true), signal, maxBytes);
+      return await portalRequest(playlist, params, (await session(playlist, signal, true)).token, signal, maxBytes);
     } catch (second) {
       if (second instanceof PortalAuthError) {
         throw new Error("The portal refused this MAC address or login. Check them with your provider.", { cause: second });
@@ -239,6 +305,25 @@ export interface StalkerCatalog {
   series: Series[];
 }
 
+/**
+ * Most rows can be played from the address stored in `cmd` ("ffrt http://host/…"). Only a row that says
+ * it does not need a temporary link, and points at another host than the portal, is played that way;
+ * anything else asks the portal for a fresh address when you press play.
+ */
+function staticStreamUrl(playlist: Playlist, item: Payload, cmd: string): string | null {
+  const flags = [item.use_http_tmp_link, item.use_load_balancing];
+  if (flags.every((flag) => flag === undefined) || flags.some((flag) => ["1", "true"].includes(String(flag)))) return null;
+  const address = cmd.match(/https?:[/][/]\S+/)?.[0];
+  if (!address) return null;
+  try {
+    const host = new URL(address).hostname;
+    const local = host === "localhost" || host.startsWith("127.") || host === "[::1]" || host.endsWith(".local");
+    return local || host === new URL(playlist.url).hostname ? null : address;
+  } catch {
+    return null;
+  }
+}
+
 async function loadChannels(playlist: Playlist, signal?: AbortSignal): Promise<LiveChannel[]> {
   const genres = new Map(records(await call(playlist, { type: "itv", action: "get_genres" }, signal))
     .flatMap((genre) => {
@@ -259,7 +344,7 @@ async function loadChannels(playlist: Playlist, signal?: AbortSignal): Promise<L
       providerId: id,
       name,
       group,
-      streamUrl: stalkerLink(cmd, "itv"),
+      streamUrl: staticStreamUrl(playlist, item, cmd) ?? stalkerLink(cmd, "itv"),
       logoUrl: absolute(playlist, item.logo),
       ...(/\bradio\b/i.test(group) ? { radio: true } : {}),
     }];
@@ -272,7 +357,7 @@ interface Category {
 }
 
 /** Large portals list hundreds of thousands of titles, 14 per request; TiviHub imports the newest of each kind. */
-export const STALKER_LIBRARY_LIMIT = 3000;
+export const STALKER_LIBRARY_LIMIT = 1500;
 const LIBRARY_CONCURRENCY = 8;
 
 /** Category names by id for the video library or the series library; a portal without one answers with an error or nothing. */
@@ -360,7 +445,7 @@ function movieFrom(playlist: Playlist, item: Payload, category: Category, id: st
     playlistId: playlist.id,
     providerId: id,
     name,
-    streamUrl: stalkerLink(cmd, "vod"),
+    streamUrl: staticStreamUrl(playlist, item, cmd) ?? stalkerLink(cmd, "vod"),
     posterUrl: absolute(playlist, item.screenshot_uri),
     overview: stringValue(item.description),
     year,
@@ -461,6 +546,7 @@ function digitsIn(value: unknown): number | undefined {
 /** One level of a series: its seasons, or the episodes of a season. */
 async function openSeriesLevel(
   playlist: Playlist,
+  type: "vod" | "series",
   movieId: string,
   seasonId: string,
   signal?: AbortSignal,
@@ -468,7 +554,7 @@ async function openSeriesLevel(
   const items: Payload[] = [];
   for (let page = 1; page <= MAX_EPISODE_PAGES; page += 1) {
     const response = await call(playlist, {
-      type: "series",
+      type,
       action: "get_ordered_list",
       movie_id: movieId,
       season_id: seasonId,
@@ -507,11 +593,14 @@ export async function loadStalkerEpisodes(playlist: Playlist, series: Series, si
     });
   };
 
-  if (model === "vod") {
+  const inline = series.stalkerEpisodes ?? [];
+  if (model === "vod" && inline.length > 0) {
     if (!series.stalkerCmd) throw new Error("This series has no episode information from the portal.");
-    for (const number of series.stalkerEpisodes ?? []) add(1, number, undefined, series.stalkerCmd, null, number);
-  } else if (model === "series" && id) {
-    const top = await openSeriesLevel(playlist, id, "0", signal);
+    for (const number of inline) add(1, number, undefined, series.stalkerCmd, null, number);
+  } else if ((model === "vod" || model === "series") && id) {
+    // Seasons and episodes are opened one level at a time: first the seasons, then the episodes of each.
+    const type = model === "vod" ? "vod" : "series";
+    const top = await openSeriesLevel(playlist, type, id, "0", signal);
     for (const [position, item] of top.entries()) {
       const isSeason = ["1", "true"].includes(String(item.is_season)) || SEASON_NAME.test(stringValue(item.name) ?? "");
       if (!isSeason) {
@@ -522,20 +611,20 @@ export async function loadStalkerEpisodes(playlist: Playlist, series: Series, si
       const season = numberValue(item.season_num ?? item.season_number) ?? digitsIn(item.name) ?? position + 1;
       const seasonId = stringValue(item.id) ?? "";
       const seasonCmd = stringValue(item.cmd);
-      const inline = inlineEpisodes(item);
-      if (inline.length > 0 && seasonCmd) {
-        for (const number of inline) add(season, number, undefined, seasonCmd, item, number);
+      const numbers = inlineEpisodes(item);
+      if (numbers.length > 0 && seasonCmd) {
+        for (const number of numbers) add(season, number, undefined, seasonCmd, item, number);
         continue;
       }
       // Portals differ in which id names the season, so the second form is tried when the first is empty.
-      let list = await openSeriesLevel(playlist, id, seasonId, signal);
-      if (list.length === 0) list = await openSeriesLevel(playlist, seasonId, "0", signal);
+      let list = await openSeriesLevel(playlist, type, id, seasonId, signal);
+      if (list.length === 0) list = await openSeriesLevel(playlist, type, seasonId, "0", signal);
       for (const [index, episode] of list.entries()) {
         const cmd = stringValue(episode.cmd) ?? seasonCmd;
         if (!cmd) continue;
         const number = numberValue(episode.series_number ?? episode.episode_num ?? episode.episode_number) ?? digitsIn(episode.name) ?? index + 1;
-        const numbers = inlineEpisodes(episode);
-        if (numbers.length > 0) for (const n of numbers) add(season, n, undefined, cmd, episode, n);
+        const listed = inlineEpisodes(episode);
+        if (listed.length > 0) for (const n of listed) add(season, n, undefined, cmd, episode, n);
         else add(season, number, stringValue(episode.name), cmd, episode);
       }
     }
@@ -586,4 +675,28 @@ export async function resolveStalkerLink(playlist: Playlist, link: string, signa
   const found = cmd?.match(/https?:\/\/\S+/)?.[0] ?? (cmd?.startsWith("/") ? new URL(cmd, playlist.url).toString() : undefined);
   if (!found) throw new Error("The portal did not give a stream address. Your subscription may not include this channel.");
   return found;
+}
+
+/**
+ * Keeps the box logged in while a portal is open: Stalker portals expect a `get_events` ping every
+ * couple of minutes (the interval comes from the profile). A failed ping is not retried and does not end the session.
+ */
+export function startStalkerKeepAlive(playlist: Playlist): () => void {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const ping = async (first: boolean) => {
+    let seconds = DEFAULT_WATCHDOG_SECONDS;
+    try {
+      seconds = (await session(playlist, controller.signal)).watchdogSeconds;
+      await call(playlist, { type: "watchdog", action: "get_events", init: first ? "1" : "0", cur_play_type: "0", event_active_id: "0" }, controller.signal);
+    } catch {
+      // Not retried: the next ping is the retry.
+    }
+    if (!controller.signal.aborted) timer = setTimeout(() => void ping(false), seconds * 1000);
+  };
+  void ping(true);
+  return () => {
+    controller.abort();
+    clearTimeout(timer);
+  };
 }

@@ -135,6 +135,35 @@ describe("detail page external ratings", () => {
     expect(onOpenSeries).toHaveBeenCalledWith(related);
   });
 
+  it("starts Play first episode at the first real season, not at season 0 extras", async () => {
+    const onPlay = vi.fn();
+    render(<SeriesDetail
+      continueWatching={false}
+      episodes={[
+        { id: "extra", playlistId: "p1", seriesId: series.id, season: 0, number: 1, name: "Behind the scenes", streamUrl: "https://p.example/0.mp4" },
+        { id: "episode-1", playlistId: "p1", seriesId: series.id, season: 1, number: 1, name: "Pilot", streamUrl: "https://p.example/1.mp4" },
+      ]}
+      error={null}
+      favorite={false}
+      inLibrary={false}
+      loading={false}
+      onAddToLibrary={vi.fn()}
+      onBack={vi.fn()}
+      onContinueWatching={vi.fn()}
+      onFavorite={vi.fn()}
+      onDownload={vi.fn()}
+      onPlay={onPlay}
+      onRemoveFromLibrary={vi.fn()}
+      series={series}
+      showAdultContent={false}
+      ratingsService={service(async () => ({ status: "not-found" }))}
+    />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Play first episode/ }));
+
+    expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("Pilot") }));
+  });
+
   it("defaults the episode list to season 1 while retaining the all-seasons option", async () => {
     render(<SeriesDetail
       continueWatching={false}

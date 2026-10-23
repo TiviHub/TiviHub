@@ -1105,7 +1105,9 @@ export function SeriesDetail({
   const visible = availableEpisodes
     .filter((episode) => season === "all" || episode.season === season)
     .sort((a, b) => a.season - b.season || a.number - b.number);
-  const firstEpisode = [...availableEpisodes].sort((a, b) => a.season - b.season || a.number - b.number)[0];
+  const orderedEpisodes = [...availableEpisodes].sort((a, b) => a.season - b.season || a.number - b.number);
+  // Season 0 holds extras and specials; the first episode to play is the first of the real seasons.
+  const firstEpisode = orderedEpisodes.find((episode) => episode.season > 0) ?? orderedEpisodes[0];
   const relatedSeries = relatedPlaylistItems(series, playlistSeries);
   const seasonCount = seasons.length;
   const seriesDetails = loading

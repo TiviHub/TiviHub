@@ -8,6 +8,8 @@ import {
   loadStalkerEpisodes,
   normalizeMac,
   resolveStalkerLink,
+  retryPolicy,
+  startStalkerKeepAlive,
   stalkerApiUrl,
   stalkerLink,
   STALKER_LIBRARY_LIMIT,
@@ -25,6 +27,13 @@ interface Call {
 
 let calls: Call[];
 let rejectNext: number;
+/** Answers this many requests with HTTP 429 before behaving. */
+let throttle: number;
+/** Answers this many requests with a plain "Access denied." page (HTTP 200), as portals do for a dead session. */
+let authText: number;
+let inFlight: number;
+let maxInFlight: number;
+let slowMillis: number;
 
 /** A tiny portal: one handshake token, genres, channels, two pages of movies, EPG and link creation. */
 function portal(overrides: Record<string, (params: URLSearchParams) => unknown> = {}) {
@@ -59,17 +68,33 @@ function portal(overrides: Record<string, (params: URLSearchParams) => unknown> 
   vi.stubGlobal("isTauri", true);
   vi.stubGlobal("__TAURI_INTERNALS__", {
     invoke: vi.fn(async (_command: string, args: { request: { url: string; headers: [string, string][] } }) => {
-      const url = new URL(args.request.url);
-      const headers = Object.fromEntries(args.request.headers.map(([name, value]) => [name.toLowerCase(), value]));
-      calls.push({ params: url.searchParams, headers });
-      if (rejectNext > 0 && url.searchParams.get("action") !== "handshake") {
-        rejectNext -= 1;
-        return { status: 401, headers: [], body: "" };
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      try {
+        if (slowMillis > 0) await new Promise((resolve) => setTimeout(resolve, slowMillis));
+        const url = new URL(args.request.url);
+        const headers = Object.fromEntries(args.request.headers.map(([name, value]) => [name.toLowerCase(), value]));
+        calls.push({ params: url.searchParams, headers });
+        const action = url.searchParams.get("action");
+        if (throttle > 0 && action !== "handshake") {
+          throttle -= 1;
+          return { status: 429, headers: [], body: "" };
+        }
+        if (rejectNext > 0 && action !== "handshake") {
+          rejectNext -= 1;
+          return { status: 401, headers: [], body: "" };
+        }
+        if (authText > 0 && action !== "handshake") {
+          authText -= 1;
+          return { status: 200, headers: [], body: btoa("Access denied.") };
+        }
+        const key = `${url.searchParams.get("type")}:${action}`;
+        const handler = handlers[key];
+        const body = handler ? JSON.stringify({ js: handler(url.searchParams) }) : "<html>not found</html>";
+        return { status: 200, headers: [], body: btoa(body) };
+      } finally {
+        inFlight -= 1;
       }
-      const key = `${url.searchParams.get("type")}:${url.searchParams.get("action")}`;
-      const handler = handlers[key];
-      const body = handler ? JSON.stringify({ js: handler(url.searchParams) }) : "<html>not found</html>";
-      return { status: 200, headers: [], body: btoa(body) };
     }),
   });
 }
@@ -88,6 +113,12 @@ beforeEach(() => {
   vi.stubGlobal("crypto", webcrypto);
   calls = [];
   rejectNext = 0;
+  throttle = 0;
+  authText = 0;
+  inFlight = 0;
+  maxInFlight = 0;
+  slowMillis = 0;
+  retryPolicy.delaysMillis = [0, 0, 0];
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -207,12 +238,38 @@ describe("Stalker catalog", () => {
     await expect(loadStalkerCatalog(source())).rejects.toThrow(/does not understand|could not be reached/);
   });
 
-  it("sends the login when the portal needs one", async () => {
-    portal({ "stb:do_auth": () => true });
+  it("logs in only when the profile asks for it, then reads the profile again", async () => {
+    let profiles = 0;
+    portal({
+      "stb:get_profile": () => (profiles += 1) === 1 ? { status: 2 } : { status: 0 },
+      "stb:do_auth": () => true,
+    });
     await loadStalkerCatalog(source({ username: "user", password: "secret" }));
+
+    const profileCalls = calls.filter((call) => call.params.get("action") === "get_profile");
+    expect(profileCalls).toHaveLength(2);
+    expect(profileCalls[0].params.get("auth_second_step")).toBeNull();
+    expect(profileCalls[1].params.get("auth_second_step")).toBe("1");
     const auth = calls.find((call) => call.params.get("action") === "do_auth");
     expect(auth?.params.get("login")).toBe("user");
     expect(auth?.params.get("password")).toBe("secret");
+  });
+
+  it("does not send a login the portal did not ask for", async () => {
+    portal({ "stb:do_auth": () => true });
+    await loadStalkerCatalog(source({ username: "user", password: "secret" }));
+    expect(calls.some((call) => call.params.get("action") === "do_auth")).toBe(false);
+  });
+
+  it("explains a portal that wants a login nobody entered, and a blocked box", async () => {
+    portal({ "stb:get_profile": () => ({ status: 2 }) });
+    await expect(loadStalkerCatalog(source())).rejects.toThrow(/asks for a login/);
+
+    portal({ "stb:get_profile": () => ({ status: 1, block_msg: "Account suspended" }) });
+    await expect(loadStalkerCatalog(source())).rejects.toThrow("Account suspended");
+
+    portal({ "stb:get_profile": () => ({ status: 2 }), "stb:do_auth": () => true });
+    await expect(loadStalkerCatalog(source({ username: "user", password: "wrong" }))).rejects.toThrow(/did not accept this login/);
   });
 
   it("uses the playlist's own User-Agent instead of the set-top-box one", async () => {
@@ -272,6 +329,145 @@ describe("Stalker library size", () => {
     portal({ "series:get_ordered_list": () => { throw new Error("series down"); } });
     const withoutSeries = await loadStalkerCatalog(source());
     expect(withoutSeries.movies.length).toBeGreaterThan(0);
+  });
+});
+
+describe("Stalker request behaviour", () => {
+  it("waits and repeats a request the portal throttles with HTTP 429", async () => {
+    portal();
+    throttle = 2;
+    await expect(loadStalkerEpg(source())).resolves.toHaveLength(1);
+    // The login's first request was refused twice and repeated until the portal answered.
+    expect(calls.filter((call) => call.params.get("action") === "get_profile")).toHaveLength(3);
+  });
+
+  it("gives up with a clear message when the portal keeps refusing", async () => {
+    portal();
+    throttle = 10;
+    await expect(loadStalkerEpg(source())).rejects.toThrow(/limiting requests/);
+  });
+
+  it("never has more than four requests in flight", async () => {
+    portal({
+      "vod:get_ordered_list": (params) => ({
+        total_items: 14 * 30,
+        max_page_items: 14,
+        data: [{ id: `m${params.get("p")}`, name: `Movie ${params.get("p")}`, cmd: "/m" }],
+      }),
+    });
+    slowMillis = 3;
+    const { movies } = await loadStalkerCatalog(source());
+    expect(movies.length).toBe(30);
+    expect(maxInFlight).toBeLessThanOrEqual(4);
+    expect(maxInFlight).toBeGreaterThan(1);
+  });
+
+  it("treats a plain \"Access denied.\" answer as a dead session and logs in again", async () => {
+    portal();
+    const playlist = source();
+    await loadStalkerCatalog(playlist);
+    const handshakes = () => calls.filter((call) => call.params.get("action") === "handshake").length;
+    expect(handshakes()).toBe(1);
+
+    authText = 1;
+    await expect(loadStalkerEpg(playlist)).resolves.toHaveLength(1);
+    expect(handshakes()).toBe(2);
+  });
+});
+
+describe("Stalker stream addresses", () => {
+  const channelsWith = (rows: Record<string, unknown>[]) => portal({
+    "itv:get_all_channels": () => ({ data: rows }),
+    "vod:get_ordered_list": () => ({ total_items: 0, max_page_items: 10, data: [] }),
+  });
+
+  it("plays a row from its stored address only when it says it needs no temporary link and lives on another host", async () => {
+    channelsWith([
+      { id: "1", name: "Static", cmd: "ffmpeg http://cdn.example/live/1.m3u8", use_http_tmp_link: "0", use_load_balancing: "0" },
+      { id: "2", name: "Temporary", cmd: "ffmpeg http://cdn.example/live/2.m3u8", use_http_tmp_link: "1", use_load_balancing: "0" },
+      { id: "3", name: "Balanced", cmd: "ffmpeg http://cdn.example/live/3.m3u8", use_http_tmp_link: "0", use_load_balancing: "1" },
+      { id: "4", name: "No flags", cmd: "ffmpeg http://cdn.example/live/4.m3u8" },
+      { id: "5", name: "Portal host", cmd: "ffmpeg http://portal.example/live/5.m3u8", use_http_tmp_link: "0", use_load_balancing: "0" },
+      { id: "6", name: "Localhost", cmd: "ffrt http://localhost/ch/6", use_http_tmp_link: "0", use_load_balancing: "0" },
+      { id: "7", name: "Relative", cmd: "/media/7", use_http_tmp_link: "0", use_load_balancing: "0" },
+    ]);
+    const { channels } = await loadStalkerCatalog(source());
+    const byName = Object.fromEntries(channels.map((channel) => [channel.name, channel.streamUrl]));
+
+    expect(byName.Static).toBe("http://cdn.example/live/1.m3u8");
+    for (const name of ["Temporary", "Balanced", "No flags", "Portal host", "Localhost", "Relative"]) {
+      expect(isStalkerLink(byName[name]), name).toBe(true);
+    }
+  });
+});
+
+describe("Stalker lazy series in the video library", () => {
+  it("opens seasons and episodes of an is_series item through the video library", async () => {
+    portal({
+      "vod:get_ordered_list": (params) => {
+        if (!params.get("movie_id")) {
+          return { total_items: 1, max_page_items: 10, data: [{ id: "90", name: "Lazy Show", cmd: "/m/90", is_series: "1", year: "2020" }] };
+        }
+        if (params.get("season_id") === "0") {
+          return { total_items: 2, max_page_items: 10, data: [
+            { id: "90:0", name: "Extras", is_season: "1", season_number: "0", cmd: "extras" },
+            { id: "90:1", name: "Season 1", is_season: "1", cmd: "s1" },
+          ] };
+        }
+        return { total_items: 1, max_page_items: 10, data: [{ id: "x", name: "Pilot", cmd: "pilot", series_number: "1" }] };
+      },
+      "series:get_categories": () => [],
+      "series:get_ordered_list": () => ({ total_items: 0, max_page_items: 10, data: [] }),
+    });
+    const playlist = source();
+    const { series } = await loadStalkerCatalog(playlist);
+    expect(series).toHaveLength(1);
+    expect(series[0]).toMatchObject({ providerId: "vod:90", stalkerEpisodes: [] });
+
+    const episodes = await loadStalkerEpisodes(playlist, series[0]);
+    expect(episodes.map((episode) => [episode.season, episode.number, episode.name])).toEqual([[0, 1, "Pilot"], [1, 1, "Pilot"]]);
+    const levelRequests = calls.filter((call) => call.params.get("movie_id"));
+    expect(levelRequests.every((call) => call.params.get("type") === "vod")).toBe(true);
+  });
+});
+
+describe("Stalker keep-alive", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("pings get_events once at the start and then at the interval the portal asks for, until stopped", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    portal({
+      "stb:get_profile": () => ({ status: 0, watchdog_timeout: 45 }),
+      "watchdog:get_events": () => ({ data: [] }),
+    });
+    const events = () => calls.filter((call) => call.params.get("type") === "watchdog");
+
+    const stop = startStalkerKeepAlive(source());
+    // The login hashes the device id with real (not faked) crypto, so wait for the first ping to arrive.
+    await vi.waitFor(() => expect(events().map((call) => call.params.get("init"))).toEqual(["1"]));
+
+    await vi.advanceTimersByTimeAsync(45_000);
+    await vi.waitFor(() => expect(events().map((call) => call.params.get("init"))).toEqual(["1", "0"]));
+
+    stop();
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(events()).toHaveLength(2);
+  });
+
+  it("keeps going after a failed ping", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    portal({
+      "stb:get_profile": () => ({ status: 0, watchdog_timeout: 30 }),
+      "watchdog:get_events": () => { throw new Error("portal hiccup"); },
+    });
+    const events = () => calls.filter((call) => call.params.get("type") === "watchdog");
+    const stop = startStalkerKeepAlive(source());
+    await vi.waitFor(() => expect(events()).toHaveLength(1));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(() => expect(events()).toHaveLength(2));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(() => expect(events()).toHaveLength(3));
+    stop();
   });
 });
 

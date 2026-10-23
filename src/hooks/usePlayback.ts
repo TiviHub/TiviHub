@@ -39,6 +39,12 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
         .catch((cause: unknown) => notify(cause instanceof Error ? cause.message : "The portal could not start this stream.", "error"));
       return;
     }
+    if (source?.type === "STALKER") {
+      // Every stream of a portal goes through the desktop proxy: it sets the set-top-box User-Agent and needs no CORS.
+      const plainFile = !item.live && !/[.](?:m3u8|mpd)(?:[?#]|$)/i.test(item.streamUrl);
+      start({ ...item, userAgent: stalkerUserAgent(source), direct: item.direct ?? plainFile }, position);
+      return;
+    }
     start(item, position);
   }
 

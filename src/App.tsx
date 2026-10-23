@@ -8,6 +8,7 @@ import { useLocalData } from "./hooks/useLocalData";
 import { usePlayback } from "./hooks/usePlayback";
 import { useLibrary } from "./hooks/useLibrary";
 import { useGlobalSearch } from "./hooks/useGlobalSearch";
+import { useStalkerKeepAlive } from "./hooks/useStalkerKeepAlive";
 import { useSources } from "./hooks/useSources";
 import { useNotifications } from "./hooks/useNotifications";
 import { isAdultContent } from "./adultContent";
@@ -255,6 +256,7 @@ function App() {
   }, []);
 
   const activeSource = sources.find((source) => source.id === activeSourceId) ?? null;
+  useStalkerKeepAlive(activeSource, ready);
   const activeSourceExpired = Boolean(activeSource && (
     isPlaylistExpired(activeSource, expiryCheckTime) || expiredSourceIds.has(activeSource.id)
   ));
