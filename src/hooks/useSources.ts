@@ -17,6 +17,7 @@ import type { SearchSection } from "../globalSearch";
 import { keepM3uIds } from "../m3uIds";
 import { visibleButton } from "../visibleButton";
 import { fetchM3u, parseM3uCatalog, parseM3uCatalogAsync } from "../providers/m3u";
+import { loadStalkerCatalog, loadStalkerEpg } from "../providers/stalker";
 import { fetchXmltv } from "../providers/xmltv";
 import {
   loadXtreamCatalog,
@@ -111,6 +112,12 @@ export function useSources(deps: SourceDeps) {
   } = deps;
 
   async function loadGuide(source: Playlist): Promise<number | null> {
+    if (!source.epgUrl && source.type === "STALKER") {
+      const programs = await loadStalkerEpg(source);
+      await replaceEpg(source.id, programs);
+      setEpg(programs);
+      return programs.length;
+    }
     if (!source.epgUrl && source.type === "XTREAM") return null;
     if (!source.epgUrl) {
       throw new Error("Add an XMLTV guide URL in the source settings before refreshing the guide.");
@@ -122,7 +129,7 @@ export function useSources(deps: SourceDeps) {
   }
 
   function tvGuideFailureMessage(source: Playlist) {
-    return !source.epgUrl && source.type !== "XTREAM"
+    return !source.epgUrl && source.type === "M3U"
       ? "Add a TV guide link in source settings to see listings."
       : "The TV guide couldn't be loaded. Please try again later.";
   }
@@ -226,6 +233,9 @@ export function useSources(deps: SourceDeps) {
       };
       importedEpisodes = importedCatalog.episodes;
       skippedStreams = importedCatalog.skipped;
+    } else if (playlist.type === "STALKER") {
+      draft.onStage?.("parsing");
+      catalog = await loadStalkerCatalog(playlist, draft.signal);
     } else {
       try {
         const result = await loadXtreamCatalog(playlist, draft.signal);
@@ -423,6 +433,8 @@ export function useSources(deps: SourceDeps) {
         };
         importedEpisodes = importedCatalog.episodes;
         skippedStreams = importedCatalog.skipped;
+      } else if (source.type === "STALKER") {
+        catalog = await loadStalkerCatalog(source);
       } else {
         const result = await loadXtreamCatalog(source);
         expiresAtMillis = result.expiresAtMillis;

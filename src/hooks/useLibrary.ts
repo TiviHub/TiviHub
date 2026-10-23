@@ -85,7 +85,7 @@ export function useLibrary(notify: (message: string, kind: "error" | "notice") =
       contentType: item.contentType,
       playlistId: item.playlistId,
       title: item.title,
-      streamUrl: item.streamUrl,
+      streamUrl: item.sourceUrl ?? item.streamUrl,
       artworkUrl: item.artworkUrl,
       drmLicenseUrl: item.drmLicenseUrl,
       drmSystem: item.drmSystem,

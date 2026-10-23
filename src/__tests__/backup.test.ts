@@ -61,6 +61,31 @@ describe("encrypted backups", () => {
       .rejects.toThrow(/invalid playlist/i);
   });
 
+  it("keeps a Stalker source and refuses one without a valid MAC address", async () => {
+    const source = {
+      id: "stalker-source",
+      name: "Portal",
+      type: "STALKER" as const,
+      url: "http://portal.example/c/",
+      username: "",
+      password: "",
+      macAddress: "00:1A:79:12:34:56",
+      active: true,
+      drmLicenseUrl: "",
+      drmSystem: "com.widevine.alpha" as const,
+      createdAt: 1,
+    };
+    const good = { ...snapshot, playlists: [source] };
+    await expect(decryptBackup(await encryptBackup(good, "a-long-test-password"), "a-long-test-password"))
+      .resolves.toEqual(good);
+
+    for (const macAddress of [undefined, "not-a-mac", "00:1a:79:12:34:56"]) {
+      const bad = { ...snapshot, playlists: [{ ...source, macAddress }] };
+      await expect(decryptBackup(await encryptBackup(bad, "a-long-test-password"), "a-long-test-password"))
+        .rejects.toThrow(/invalid playlist/i);
+    }
+  });
+
   it("rejects malformed records after successful decryption", async () => {
     const invalidSnapshot: UserDataSnapshot = {
       ...snapshot,

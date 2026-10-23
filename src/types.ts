@@ -1,4 +1,4 @@
-export type PlaylistType = "M3U" | "XTREAM";
+export type PlaylistType = "M3U" | "XTREAM" | "STALKER";
 export type ContentType = "LIVE" | "MOVIE" | "SERIES" | "EPISODE";
 export type LibraryStatus = "WATCHLIST" | "WATCHING" | "WATCHED";
 export type DrmSystem = "com.widevine.alpha" | "com.apple.fps" | "com.apple.fps.1_0";
@@ -23,6 +23,8 @@ export interface Playlist {
   url: string;
   username: string;
   password: string;
+  /** Stalker portals identify the account by the MAC address of a set-top box. Sealed like the password. */
+  macAddress?: string;
   active: boolean;
   drmLicenseUrl: string;
   drmSystem: DrmSystem;
@@ -198,6 +200,8 @@ export interface PlayableItem {
   drmSystem?: DrmSystem;
   drmCertificateUrl?: string;
   live: boolean;
+  /** The address kept in the catalog when `streamUrl` was resolved just before playing (Stalker portals). */
+  sourceUrl?: string;
   radio?: boolean;
   /** The source's custom User-Agent; the player sends it through the desktop proxy. */
   userAgent?: string;

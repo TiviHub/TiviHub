@@ -331,6 +331,39 @@ describe("playlist dialog user actions", () => {
     }
   });
 
+  it("offers Stalker portals only in the desktop app and saves a normalised MAC address", async () => {
+    const user = userEvent.setup();
+    const web = render(<PlaylistDialog onClose={vi.fn()} onConnect={vi.fn(async () => undefined)} />);
+    expect(screen.queryByRole("button", { name: "Stalker portal" })).toBeNull();
+    web.unmount();
+
+    vi.stubGlobal("isTauri", true);
+    try {
+      let submittedDraft: PlaylistDraft | undefined;
+      const onConnect = vi.fn(async (draft: PlaylistDraft) => { submittedDraft = draft; });
+      render(<PlaylistDialog onClose={vi.fn()} onConnect={onConnect} />);
+
+      await user.click(screen.getByRole("button", { name: "Stalker portal" }));
+      await user.type(screen.getByLabelText(/Portal URL/), "http://portal.example/c/");
+      await user.type(screen.getByLabelText(/MAC address/), "not a mac");
+      await user.click(screen.getByRole("button", { name: "Connect source" }));
+      expect(onConnect).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toMatch(/MAC address/);
+
+      await user.clear(screen.getByLabelText(/MAC address/));
+      await user.type(screen.getByLabelText(/MAC address/), "00-1a-79-12-34-56");
+      await user.click(screen.getByRole("button", { name: "Connect source" }));
+      await waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1));
+      expect(submittedDraft?.playlist).toMatchObject({
+        type: "STALKER",
+        url: "http://portal.example/c/",
+        macAddress: "00:1A:79:12:34:56",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("closes the source dialog on Escape", async () => {
     const onClose = vi.fn();
     render(<PlaylistDialog onClose={onClose} onConnect={vi.fn(async () => undefined)} />);

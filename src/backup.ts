@@ -175,11 +175,12 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !validId(playlist.id) ||
       playlistIds.has(playlist.id) ||
       !validText(playlist.name, 80) ||
-      !["M3U", "XTREAM"].includes(String(playlist.type)) ||
+      !["M3U", "XTREAM", "STALKER"].includes(String(playlist.type)) ||
       typeof playlist.url !== "string" ||
       playlist.url.length > 8192 ||
       (playlist.url !== "" && !isHttpUrl(playlist.url)) ||
-      (playlist.type === "XTREAM" && !isHttpUrl(playlist.url)) ||
+      (playlist.type !== "M3U" && !isHttpUrl(playlist.url)) ||
+      !validMac(playlist.macAddress, playlist.type === "STALKER") ||
       !validText(playlist.username, 4096, true) ||
       !validText(playlist.password, 4096, true) ||
       typeof playlist.active !== "boolean" ||
@@ -305,6 +306,11 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
     epgIds.add(String(program.id));
   }
   return snapshot as UserDataSnapshot;
+}
+
+function validMac(value: unknown, required: boolean): boolean {
+  if (value === undefined) return !required;
+  return typeof value === "string" && /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(value);
 }
 
 function validUserAgent(value: unknown): boolean {

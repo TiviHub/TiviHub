@@ -15,7 +15,7 @@ export function isPlaylistExpired(source: Pick<Playlist, "expiresAtMillis">, now
 
 export function canAutoRefreshCatalog(source: CatalogSource): boolean {
   if (source.demo) return false;
-  return source.type === "XTREAM" || (source.type === "M3U" && !source.fileName && Boolean(source.url));
+  return source.type === "XTREAM" || source.type === "STALKER" || (source.type === "M3U" && !source.fileName && Boolean(source.url));
 }
 
 export function catalogRefreshDueAt(source: CatalogSource): number {

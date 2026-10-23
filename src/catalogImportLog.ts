@@ -1,6 +1,6 @@
 export interface CatalogImportSummary {
   occurredAt: string;
-  provider: "M3U" | "XTREAM";
+  provider: "M3U" | "XTREAM" | "STALKER";
   elapsedMillis: number;
   channels: number;
   movies: number;
@@ -17,7 +17,7 @@ function isCatalogImportSummary(value: unknown): value is CatalogImportSummary {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as Partial<CatalogImportSummary>;
   return typeof entry.occurredAt === "string" &&
-    (entry.provider === "M3U" || entry.provider === "XTREAM") &&
+    (entry.provider === "M3U" || entry.provider === "XTREAM" || entry.provider === "STALKER") &&
     isNonNegativeSafeInteger(entry.elapsedMillis) &&
     isNonNegativeSafeInteger(entry.channels) &&
     isNonNegativeSafeInteger(entry.movies) &&

@@ -19,7 +19,7 @@ import type {
 /** Encrypted text as the backend stores it: an IndexedDB payload object or an opaque string from Rust. */
 export type Sealed = unknown;
 
-export type StoredPlaylist = Omit<Playlist, "url" | "username" | "password"> & {
+export type StoredPlaylist = Omit<Playlist, "url" | "username" | "password" | "macAddress"> & {
   privateData?: Sealed;
   url?: string;
   credentials?: Sealed;

@@ -1,5 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { replayUrl } from "../catchup";
+import { isStalkerLink, resolveStalkerLink, stalkerUserAgent } from "../providers/stalker";
 import { getLibraryItems, saveLibraryItem } from "../storage/database";
 import type { EpgProgram, LibraryItem, LiveChannel, PlayableItem, Playlist } from "../types";
 
@@ -24,6 +25,18 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
   }
 
   function openPlayback(item: PlayableItem, position = 0) {
+    const source = sources.find((entry) => entry.id === item.playlistId);
+    if (source?.type === "STALKER" && isStalkerLink(item.streamUrl)) {
+      // A portal hands out the stream address when you press play, and it only works for a short while.
+      resolveStalkerLink(source, item.streamUrl)
+        .then((streamUrl) => start({ ...item, streamUrl, sourceUrl: item.streamUrl, userAgent: stalkerUserAgent(source) }, position))
+        .catch((cause: unknown) => notify(cause instanceof Error ? cause.message : "The portal could not start this stream.", "error"));
+      return;
+    }
+    start(item, position);
+  }
+
+  function start(item: PlayableItem, position: number) {
     revokeOfflineUrl();
     setResumePosition(position);
     setInlineLivePlayback(item.live);
@@ -72,7 +85,7 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
         contentType: "LIVE",
         playlistId: item.playlistId,
         title: item.title,
-        streamUrl: item.streamUrl,
+        streamUrl: item.sourceUrl ?? item.streamUrl,
         artworkUrl: item.artworkUrl,
         drmLicenseUrl: item.drmLicenseUrl,
         drmSystem: item.drmSystem,

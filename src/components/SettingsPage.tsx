@@ -310,7 +310,7 @@ export function SettingsPage({
                 <div className="source-list">
                   {sources.map((source) => (
                     <article className={`source-row${source.id === activeSourceId ? " active" : ""}`} key={source.id}>
-                      <span className="source-row-icon"><Icon name={source.type === "M3U" ? "playlist_play" : "dns"} /></span>
+                      <span className="source-row-icon"><Icon name={source.type === "M3U" ? "playlist_play" : source.type === "STALKER" ? "devices" : "dns"} /></span>
                       <div className="source-row-copy">
                         <strong>{source.name}</strong>
                         <small>{source.type}{source.expiresAtMillis

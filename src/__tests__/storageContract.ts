@@ -40,6 +40,23 @@ describe(name, () => {
   }, 120_000);
   afterAll(() => target?.close?.());
 
+  it("seals a Stalker portal's MAC address with the other credentials", async () => {
+    const source: Playlist = {
+      ...playlist("storage-test-stalker"),
+      type: "STALKER",
+      url: "http://portal.example/c/",
+      username: "",
+      password: "",
+      macAddress: "00:1A:79:12:34:56",
+    };
+    await db.savePlaylist(source);
+    const stored = (await db.getPlaylists()).find((entry) => entry.id === source.id);
+    expect(stored?.macAddress).toBe("00:1A:79:12:34:56");
+    const rawRecord = await target.rawPlaylist(source.id);
+    expect(rawRecord).not.toHaveProperty("macAddress");
+    expect(JSON.stringify(rawRecord)).not.toContain("00:1A:79");
+  });
+
   it("encrypts credentials at rest and returns them to the owner", async () => {
     const source = playlist("storage-test-credentials");
     await db.savePlaylist(source);

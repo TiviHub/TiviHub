@@ -2,6 +2,7 @@ export const diagnosticOperations = [
   "m3u-playlist",
   "xtream-catalog",
   "xmltv-guide",
+  "stalker-portal",
   "subtitle-search",
   "subtitle-download",
 ] as const;
