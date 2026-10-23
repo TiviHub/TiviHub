@@ -8,6 +8,8 @@ import { RowSkeletons, Skeleton } from "./Skeleton";
 
 const FAVORITES_ID = "@@favorites";
 
+const formatTime = (millis: number) => new Date(millis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
 function ChannelRow({
   channel,
   current,
@@ -173,6 +175,14 @@ export function LiveTvPage({
       : browse.categories.find((category) => category.id === effectiveId)?.name ?? "";
   const visibleChannel = selectedChannel ?? shownChannels.find((channel) => channel.id === livePlaybackItemId) ?? shownChannels[0];
 
+  const programmes = useMemo(() => {
+    const key = visibleChannel ? visibleChannel.tvgId || visibleChannel.id : null;
+    const upcoming = key
+      ? epg.filter((program) => program.channelId === key && program.endMillis > now).sort((a, b) => a.startMillis - b.startMillis)
+      : [];
+    return { current: upcoming.find((program) => program.startMillis <= now), next: upcoming.find((program) => program.startMillis > now) };
+  }, [epg, now, visibleChannel]);
+
   function play(channel: LiveChannel) {
     setSelectedChannel(channel);
     onPlay(playableChannel(channel));
@@ -245,26 +255,42 @@ export function LiveTvPage({
         <div className="live-tv-main">
           <section aria-label="Live player" className={`live-tv-player${livePlayer ? " has-live-player" : ""}`}>
             {livePlayer ?? (
-              <div className="live-player-empty">
-                <div className="live-player-empty-art">
-                  {visibleChannel?.logoUrl ? <img alt="" src={visibleChannel.logoUrl} /> : <Icon name="live_tv" />}
+              <>
+                <div className="live-channel-sidebar-heading">
+                  <h2>{visibleChannel?.name ?? "Choose a channel"}</h2>
                 </div>
-                <h2>{visibleChannel?.name ?? "Choose a channel"}</h2>
-                <p>
-                  {visibleChannel
-                    ? (currentByChannel.get(visibleChannel.tvgId || visibleChannel.id)?.title
-                      ? `On now: ${currentByChannel.get(visibleChannel.tvgId || visibleChannel.id)?.title}`
-                      : visibleChannel.group)
-                    : "Select a channel to start its live stream."}
-                </p>
-                {visibleChannel && (
-                  <button className="primary-button" onClick={() => play(visibleChannel)} type="button">
-                    <Icon name="play_arrow" /> Watch live
-                  </button>
-                )}
-              </div>
+                <div className="live-player-empty">
+                  <div className="live-player-empty-art">
+                    {visibleChannel?.logoUrl ? <img alt="" src={visibleChannel.logoUrl} /> : <Icon name="live_tv" />}
+                  </div>
+                  <p>{visibleChannel ? (programmes.current ? `On now: ${programmes.current.title}` : visibleChannel.group) : "Select a channel to start its live stream."}</p>
+                  {visibleChannel && (
+                    <button className="primary-button" onClick={() => play(visibleChannel)} type="button">
+                      <Icon name="play_arrow" /> Watch live
+                    </button>
+                  )}
+                </div>
+              </>
             )}
           </section>
+          {livePlayer && (
+            <section aria-label="Programme" className="browse-player-info">
+              {programmes.current ? (
+                <>
+                  <small>On now · {formatTime(programmes.current.startMillis)} – {formatTime(programmes.current.endMillis)}</small>
+                  <strong>{programmes.current.title}</strong>
+                  {programmes.current.synopsis && <p>{programmes.current.synopsis}</p>}
+                </>
+              ) : guideLoading ? (
+                <Skeleton className="skeleton-line" />
+              ) : (
+                <p>No programme information for this channel.</p>
+              )}
+              {programmes.next && (
+                <small>Next · {formatTime(programmes.next.startMillis)} · {programmes.next.title}</small>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </section>
