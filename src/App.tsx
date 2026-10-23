@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useDownloads } from "./hooks/useDownloads";
+import { useLocalData } from "./hooks/useLocalData";
 import { useLibrary } from "./hooks/useLibrary";
 import { useGlobalSearch } from "./hooks/useGlobalSearch";
 import { useSources } from "./hooks/useSources";
@@ -20,31 +21,22 @@ import {
   loadXtreamEpisodes,
 } from "./providers/xtream";
 import {
-  getChannels,
-  getEpgPrograms,
   getEpisodes,
-  getFavorites,
   getLibraryItems,
-  getMovies,
   getMdblistApiKey,
   getMdblistPopularCacheEntry,
   getMdblistRateLimitState,
-  getOpenSubtitlesApiKey,
   getRatingsCacheEntry,
   saveMdblistApiKey,
   saveMdblistPopularCacheEntry,
   saveMdblistRateLimitState,
   saveRatingsCacheEntry,
-  getPlaylists,
-  getSeries,
   saveEpisodes,
   saveLibraryItem,
   saveOpenSubtitlesApiKey,
-  setActivePlaylist,
 } from "./storage/database";
 import type {
   ContentType,
-  EpgProgram,
   Episode,
   Favorite,
   LibraryItem,
@@ -170,16 +162,8 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [theme, setTheme] = useState<ThemePreference>(readThemePreference);
   const [showAdultContent, setShowAdultContent] = useState(readShowAdultContent);
-  const [sources, setSources] = useState<Playlist[]>([]);
-  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
-  const [channels, setChannels] = useState<LiveChannel[]>([]);
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [series, setSeries] = useState<Series[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [epg, setEpg] = useState<EpgProgram[]>([]);
   const [guideLoadCount, setGuideLoadCount] = useState(0);
-  const [subtitleApiKey, setSubtitleApiKey] = useState("");
-  const [mdblistApiKey, setMdblistApiKey] = useState("");
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
   const [streamHealthRequest, setStreamHealthRequest] = useState<{
@@ -200,7 +184,6 @@ function App() {
     total: number;
     phase: "preparing" | "deleting" | "updating";
   } | null>(null);
-  const [ready, setReady] = useState(false);
   const [animateStartup] = useState(
     () => isDesktopApp && !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
@@ -209,6 +192,10 @@ function App() {
     favorites, library, setFavorites, setLibrary, toggleFavorite, addToWatchlist, saveProgress,
     changeLibraryStatus, deleteLibraryItem, removeFromLibrary, removeFavorite,
   } = useLibrary(notify);
+  const {
+    sources, activeSourceId, channels, movies, series, epg, setEpg, subtitleApiKey, setSubtitleApiKey,
+    mdblistApiKey, setMdblistApiKey, ready, reloadLocalData,
+  } = useLocalData({ notify, setFavorites, setLibrary });
   const {
     downloads, downloadTasks, downloadDirectoryPath, downloadsLoaded, downloadedIds, activeDownloadIds,
     startDownload, cancelDownload, removeFailedDownload, deleteDownload, clearDownloads,
@@ -378,59 +365,6 @@ function App() {
       document.body.style.overflow = previousBodyOverflow;
     };
   }, [refreshing]);
-
-  async function reloadLocalData(preferredSourceId?: string) {
-    const savedSources = await getPlaylists();
-    const chosen = savedSources.find((source) => source.id === preferredSourceId) ??
-      savedSources.find((source) => source.active) ??
-      savedSources[0] ??
-      null;
-    if (chosen && !chosen.active) await setActivePlaylist(chosen.id);
-    const activeSources = chosen
-      ? savedSources.map((source) => ({ ...source, active: source.id === chosen.id }))
-      : savedSources;
-    const [savedFavorites, savedLibrary, allEpg, key, savedMdblistKey] = await Promise.all([
-      getFavorites(),
-      getLibraryItems(),
-      getEpgPrograms(),
-      getOpenSubtitlesApiKey(),
-      getMdblistApiKey(),
-    ]);
-    setSources(activeSources);
-    setActiveSourceId(chosen?.id ?? null);
-    setFavorites(savedFavorites);
-    setLibrary(savedLibrary);
-    setEpg(chosen ? allEpg.filter((program) => program.source === chosen.id) : []);
-    setSubtitleApiKey(key);
-    setMdblistApiKey(savedMdblistKey);
-    if (chosen) {
-      const [savedChannels, savedMovies, savedSeries] = await Promise.all([
-        getChannels(chosen.id),
-        getMovies(chosen.id),
-        getSeries(chosen.id),
-      ]);
-      setChannels(savedChannels);
-      setMovies(savedMovies);
-      setSeries(savedSeries);
-    } else {
-      setChannels([]);
-      setMovies([]);
-      setSeries([]);
-    }
-  }
-
-  useEffect(() => {
-    let active = true;
-    void reloadLocalData().then(() => {
-      if (active) setReady(true);
-    }).catch((cause: unknown) => {
-      if (active) {
-        notify(cause instanceof Error ? cause.message : "Could not open local TiviHub data.", "error");
-        setReady(true);
-      }
-    });
-    return () => { active = false; };
-  }, []);
 
   useEffect(() => {
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
