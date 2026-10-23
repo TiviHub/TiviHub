@@ -2,6 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path";
 import { open as openFile, remove as removeFile } from "@tauri-apps/plugin-fs";
+import { proxiedUrl, proxyBase, usesNativeTransport } from "./providers/transport";
 import type { ContentType } from "./types";
 
 export type DownloadContentType = Extract<ContentType, "MOVIE" | "EPISODE">;
@@ -310,6 +311,7 @@ export async function downloadMedia(
   media: DownloadableMedia,
   signal: AbortSignal,
   onProgress: (progress: DownloadProgress) => void,
+  userAgent?: string,
 ): Promise<{ record: DownloadRecord; folderError?: Error }> {
   if (!canDownloadMedia(media)) {
     throw new Error("Offline downloads support direct, non-DRM movie and episode files only. HLS streams and protected streams cannot be saved.");
@@ -318,7 +320,11 @@ export async function downloadMedia(
   const extension = mediaExtension(media.streamUrl);
   if (!extension) throw new Error("The video file type could not be determined.");
   const directoryAccess = await writableDownloadDirectory();
-  const response = await fetch(media.streamUrl, { signal, cache: "no-store", credentials: "omit" });
+  // A custom User-Agent goes through the backend proxy, which streams, so large files stay out of memory.
+  const address = usesNativeTransport(userAgent)
+    ? proxiedUrl(await proxyBase(userAgent!), media.streamUrl)
+    : media.streamUrl;
+  const response = await fetch(address, { signal, cache: "no-store", credentials: "omit" });
   if (!response.ok) throw new Error(`The provider could not serve this download (HTTP ${response.status}).`);
   const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
   if (

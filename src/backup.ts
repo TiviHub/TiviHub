@@ -192,6 +192,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !optionalText(playlist.fileName, 255) ||
       !optionalFinite(playlist.expiresAtMillis) ||
       !optionalText(playlist.serverTimeZone, 64) ||
+      !validUserAgent(playlist.userAgent) ||
       !optionalFinite(playlist.lastCatalogRefreshAt)
     ) {
       throw new Error("Backup contains an invalid playlist.");
@@ -304,6 +305,11 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
     epgIds.add(String(program.id));
   }
   return snapshot as UserDataSnapshot;
+}
+
+function validUserAgent(value: unknown): boolean {
+  // eslint-disable-next-line no-control-regex -- control characters must not reach a header
+  return value === undefined || (typeof value === "string" && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

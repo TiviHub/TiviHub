@@ -31,6 +31,7 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     setPlayableItem({
       ...item,
       drmCertificateUrl: item.drmCertificateUrl || source?.drmCertificateUrl,
+      userAgent: item.userAgent || source?.userAgent,
     });
   }
 

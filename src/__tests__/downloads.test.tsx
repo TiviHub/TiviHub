@@ -87,6 +87,25 @@ afterEach(async () => {
 });
 
 describe("offline downloads", () => {
+  it("downloads through the backend proxy when the source has a User-Agent", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "proxy_register") return { baseUrl: "http://127.0.0.1:5000/p/token" };
+      return undefined;
+    });
+    vi.stubGlobal("isTauri", true);
+    vi.stubGlobal("__TAURI_INTERNALS__", { invoke });
+    const fetchMock = vi.fn(async (_address: string) => new Response(new Uint8Array([1, 2, 3]), {
+      headers: { "content-type": "video/mp4" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await downloadMedia(media, new AbortController().signal, vi.fn(), "Custom/1");
+
+    expect(fetchMock.mock.calls[0][0])
+      .toBe("http://127.0.0.1:5000/p/token?u=https%3A%2F%2Fmedia.example%2Fsample.mp4");
+    expect(invoke).toHaveBeenCalledWith("proxy_register", { headers: [["User-Agent", "Custom/1"]] }, undefined);
+  });
+
   it("stores a large video in pieces and joins them for playback", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf(20), {
       headers: { "content-type": "video/mp4", "content-length": String(20 * 1024 ** 2) },

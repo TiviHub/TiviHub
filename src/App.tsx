@@ -196,7 +196,7 @@ function App() {
     downloads, downloadTasks, downloadDirectoryPath, downloadsLoaded, downloadedIds, activeDownloadIds,
     startDownload, cancelDownload, removeFailedDownload, deleteDownload, clearDownloads,
     changeDownloadDirectory, playDownload,
-  } = useDownloads({ notify, openPlayback });
+  } = useDownloads({ notify, openPlayback, sources });
   const [expiredSourceIds, setExpiredSourceIds] = useState<Set<string>>(() => new Set());
   const [expiryCheckTime, setExpiryCheckTime] = useState(() => Date.now());
   const { availableUpdate, updateStatus, checkUpdates, openAvailableUpdate } = useAppUpdate(isDesktopApp);

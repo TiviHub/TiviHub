@@ -10,6 +10,7 @@ import type {
 import { recordDiagnosticFailure } from "../diagnosticLog";
 import { formatServerTime } from "../serverTime";
 import { readResponseText, validateHttpsUrl } from "./http";
+import { providerFetch } from "./transport";
 
 interface XtreamPayload {
   [key: string]: unknown;
@@ -132,6 +133,7 @@ export function xtreamXmltvUrl(playlist: Playlist): string {
 }
 
 async function requestJson(
+  userAgent: string | undefined,
   url: string,
   operation: string,
   signal?: AbortSignal,
@@ -139,10 +141,10 @@ async function requestJson(
 ): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await providerFetch(url, {
       signal,
       headers: { Accept: "application/json, text/plain, */*" },
-    });
+    }, userAgent);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     recordDiagnosticFailure("xtream-catalog", "network");
@@ -266,7 +268,7 @@ async function authenticate(
   playlist: Playlist,
   signal?: AbortSignal,
 ): Promise<{ expiresAtMillis?: number; serverTimeZone?: string }> {
-  const payload = object(await requestJson(authenticatedUrl(playlist), "Xtream account check", signal));
+  const payload = object(await requestJson(playlist.userAgent, authenticatedUrl(playlist), "Xtream account check", signal));
   const userInfo = object(payload?.user_info);
   if (!userInfo) throw new Error("Xtream returned an unexpected authentication response.");
   const status = stringValue(userInfo.status ?? payload?.status)?.toLowerCase() ?? "";
@@ -298,12 +300,12 @@ export async function loadXtreamCatalog(
   const { expiresAtMillis, serverTimeZone } = await authenticate(playlist, signal);
   const [liveCategoriesRaw, liveRaw, movieCategoriesRaw, moviesRaw, seriesCategoriesRaw, seriesRaw] =
     await Promise.all([
-      requestJson(authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal),
-      requestJson(authenticatedUrl(playlist, "get_live_streams"), "Live channels", signal),
-      requestJson(authenticatedUrl(playlist, "get_vod_categories"), "Movie categories", signal),
-      requestJson(authenticatedUrl(playlist, "get_vod_streams"), "Movies", signal),
-      requestJson(authenticatedUrl(playlist, "get_series_categories"), "Series categories", signal),
-      requestJson(authenticatedUrl(playlist, "get_series"), "Series", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_streams"), "Live channels", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_vod_categories"), "Movie categories", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_vod_streams"), "Movies", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series_categories"), "Series categories", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series"), "Series", signal),
     ]);
 
   const categoryNames = (raw: unknown, description: string) =>
@@ -394,6 +396,7 @@ export async function loadXtreamEpisodes(
 ): Promise<Episode[]> {
   if (!series.providerId) throw new Error("This series does not have a provider ID.");
   const response = object(await requestJson(
+    playlist.userAgent,
     authenticatedUrl(playlist, "get_series_info", { series_id: series.providerId }),
     "Episode information",
     signal,
@@ -514,6 +517,7 @@ export async function loadXtreamShortEpg(
       const channelId = channel.tvgId || channel.id;
       try {
         const response = await requestJson(
+          playlist.userAgent,
           authenticatedUrl(playlist, "get_short_epg", {
             stream_id: providerId,
             limit: String(SHORT_EPG_PROGRAMS_PER_CHANNEL),

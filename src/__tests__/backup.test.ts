@@ -38,6 +38,29 @@ describe("encrypted backups", () => {
       .rejects.toThrow(/valid TiviHub backup/);
   });
 
+  it("keeps a source's User-Agent and refuses one with control characters", async () => {
+    const source = {
+      id: "ua-source",
+      name: "With User-Agent",
+      type: "M3U" as const,
+      url: "https://provider.example/list.m3u",
+      username: "",
+      password: "",
+      active: true,
+      drmLicenseUrl: "",
+      drmSystem: "com.widevine.alpha" as const,
+      createdAt: 1,
+      userAgent: "VLC/3.0.20 LibVLC/3.0.20",
+    };
+    const good = { ...snapshot, playlists: [source] };
+    await expect(decryptBackup(await encryptBackup(good, "a-long-test-password"), "a-long-test-password"))
+      .resolves.toEqual(good);
+
+    const bad = { ...snapshot, playlists: [{ ...source, userAgent: "VLC\r\nX-Injected: 1" }] };
+    await expect(decryptBackup(await encryptBackup(bad, "a-long-test-password"), "a-long-test-password"))
+      .rejects.toThrow(/invalid playlist/i);
+  });
+
   it("rejects malformed records after successful decryption", async () => {
     const invalidSnapshot: UserDataSnapshot = {
       ...snapshot,

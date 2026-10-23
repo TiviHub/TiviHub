@@ -28,6 +28,8 @@ export interface Playlist {
   drmSystem: DrmSystem;
   drmCertificateUrl?: string;
   epgUrl?: string;
+  /** Sent instead of the default User-Agent on every request for this source (desktop app only). */
+  userAgent?: string;
   fileName?: string;
   demo?: boolean;
   /** Set by the SQLite migration when saved credentials could not be decrypted and must be entered again. */
@@ -197,6 +199,8 @@ export interface PlayableItem {
   drmCertificateUrl?: string;
   live: boolean;
   radio?: boolean;
+  /** The source's custom User-Agent; the player sends it through the desktop proxy. */
+  userAgent?: string;
   /** A recorded programme of a live channel: seekable, but not saved to the library. */
   replay?: boolean;
   offline?: boolean;

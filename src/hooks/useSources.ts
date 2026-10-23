@@ -115,7 +115,7 @@ export function useSources(deps: SourceDeps) {
     if (!source.epgUrl) {
       throw new Error("Add an XMLTV guide URL in the source settings before refreshing the guide.");
     }
-    const programs = await fetchXmltv(source.epgUrl, source.id);
+    const programs = await fetchXmltv(source.epgUrl, source.id, source.userAgent);
     await replaceEpg(source.id, programs);
     setEpg(programs);
     return programs.length;
@@ -208,7 +208,7 @@ export function useSources(deps: SourceDeps) {
       const content = draft.fileContent ??
         (playlist.fileName
           ? (await getPlaylistDocument(playlist.id))?.content
-          : await fetchM3u(playlist.url, draft.signal));
+          : await fetchM3u(playlist.url, draft.signal, playlist.userAgent));
       if (!content) throw new Error("The local M3U file could not be read.");
       draft.onStage?.("parsing");
       const importedCatalog = await parseM3uCatalogAsync(content, {
@@ -406,7 +406,7 @@ export function useSources(deps: SourceDeps) {
         }
       } else if (source.type === "M3U") {
         const document = source.fileName ? await getPlaylistDocument(source.id) : undefined;
-        const content = document?.content ?? (source.fileName ? undefined : await fetchM3u(source.url));
+        const content = document?.content ?? (source.fileName ? undefined : await fetchM3u(source.url, undefined, source.userAgent));
         if (content === undefined) throw new Error("The imported M3U file is missing from local app storage.");
         const importedCatalog = await parseM3uCatalogAsync(content, {
           id: source.id,

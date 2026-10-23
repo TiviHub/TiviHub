@@ -15,14 +15,15 @@ import {
   type DownloadRecord,
   type DownloadTask,
 } from "../downloads";
-import type { PlayableItem } from "../types";
+import type { PlayableItem, Playlist } from "../types";
 
 interface Options {
   notify: (message: string, kind: "error" | "notice") => void;
   openPlayback: (item: PlayableItem) => void;
+  sources: Playlist[];
 }
 
-export function useDownloads({ notify, openPlayback }: Options) {
+export function useDownloads({ notify, openPlayback, sources }: Options) {
   const [downloads, setDownloads] = useState<DownloadRecord[]>([]);
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
   const [downloadDirectoryPath, setDownloadDirectoryPath] = useState<string | null>(null);
@@ -74,11 +75,12 @@ export function useDownloads({ notify, openPlayback }: Options) {
       { id, title: media.title, media, receivedBytes: 0, totalBytes: null, status: "downloading" },
     ]);
     try {
+      const userAgent = sources.find((source) => source.id === media.playlistId)?.userAgent;
       const result = await downloadMedia(media, controller.signal, (progress: DownloadProgress) => {
         setDownloadTasks((tasks) => tasks.map((task) => task.id === progress.id
           ? { ...task, ...progress, status: "downloading", error: undefined }
           : task));
-      });
+      }, userAgent);
       setDownloads((current) => [
         result.record,
         ...current.filter((download) => download.id !== result.record.id),

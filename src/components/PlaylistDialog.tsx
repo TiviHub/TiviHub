@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import type { DrmSystem, Playlist, PlaylistType } from "../types";
 import { validateHttpsUrl } from "../providers/http";
 import { MAX_M3U_BYTES } from "../providers/m3u";
@@ -39,6 +40,7 @@ export function PlaylistDialog({
   const [password, setPassword] = useState(editing?.password ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [epgUrl, setEpgUrl] = useState(editing?.epgUrl ?? "");
+  const [userAgent, setUserAgent] = useState(editing?.userAgent ?? "");
   const [drmLicenseUrl, setDrmLicenseUrl] = useState(editing?.drmLicenseUrl ?? "");
   const [drmSystem, setDrmSystem] = useState<DrmSystem>(editing?.drmSystem ?? "com.widevine.alpha");
   const [drmCertificateUrl, setDrmCertificateUrl] = useState(editing?.drmCertificateUrl ?? "");
@@ -140,6 +142,11 @@ export function PlaylistDialog({
       setError("Enter the Xtream username and password.");
       return;
     }
+    // eslint-disable-next-line no-control-regex -- control characters must not reach a header
+    if (/[\u0000-\u001f\u007f]/.test(userAgent)) {
+      setError("The User-Agent cannot contain line breaks or control characters.");
+      return;
+    }
     if (drmLicenseUrl) {
       try {
         validateHttpsUrl(drmLicenseUrl, "DRM license URL");
@@ -190,6 +197,7 @@ export function PlaylistDialog({
       drmSystem,
       drmCertificateUrl: drmCertificateUrl.trim() || undefined,
       epgUrl: epgUrl.trim() || undefined,
+      userAgent: (isTauri() && userAgent.trim()) || undefined,
       fileName: type === "M3U" && sourceMode === "file" ? file?.name ?? editing?.fileName : undefined,
       expiresAtMillis: editing?.expiresAtMillis,
       createdAt: editing?.createdAt ?? createdAt,
@@ -418,6 +426,25 @@ export function PlaylistDialog({
                   value={epgUrl}
                 />
               </label>
+              {isTauri() && (
+                <label className="form-field">
+                  <span>User-Agent <em>Optional</em></span>
+                  <input
+                    autoComplete="off"
+                    disabled={busyAction !== null}
+                    list="user-agent-presets"
+                    maxLength={256}
+                    onChange={(event) => setUserAgent(event.target.value)}
+                    placeholder="Uses TiviHub's default"
+                    value={userAgent}
+                  />
+                  <datalist id="user-agent-presets">
+                    <option value="VLC/3.0.20 LibVLC/3.0.20" />
+                    <option value="Kodi/21.0 (Windows NT 10.0; Win64; x64)" />
+                    <option value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36" />
+                  </datalist>
+                </label>
+              )}
               <label className="form-field">
                 <span>DRM system <em>Optional</em></span>
                 <div className="select-control">

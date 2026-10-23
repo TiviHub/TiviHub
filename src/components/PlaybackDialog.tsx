@@ -1,3 +1,4 @@
+import { proxiedUrl, proxyBase, usesNativeTransport } from "../providers/transport";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import webPackage from "../../package.json";
@@ -49,6 +50,9 @@ interface ShakaPlayer {
   attach(video: HTMLVideoElement): Promise<unknown>;
   addEventListener(type: string, listener: EventListener): void;
   configure(configuration: object): boolean;
+  getNetworkingEngine(): {
+    registerRequestFilter(filter: (type: number, request: { uris: string[] }) => void): void;
+  } | null;
   load(uri: string): Promise<unknown>;
   retryStreaming(): void;
   getTextTracks(): ShakaTextTrack[];
@@ -388,6 +392,9 @@ export function PlaybackDialog({
     const video: HTMLVideoElement = videoRefValue;
     if (castingDevice) return;
 
+    // With a custom User-Agent, requests go through the backend proxy so the header can be set.
+    let proxy: string | undefined;
+    let mediaUrl = item.streamUrl;
     let liveStartRecorded = false;
     const onPlaying = () => {
       playbackFailedRef.current = false;
@@ -467,7 +474,7 @@ export function PlaybackDialog({
         video.load();
         selectedPlaybackPath = "Native media element";
         playbackPathRef.current = selectedPlaybackPath;
-        video.src = item.streamUrl;
+        video.src = mediaUrl;
         video.load();
         await video.play();
         if (disposed) return;
@@ -506,10 +513,16 @@ export function PlaybackDialog({
 
     async function load() {
       try {
+        if (!item.offline && usesNativeTransport(item.userAgent)) {
+          proxy = await proxyBase(item.userAgent!);
+          mediaUrl = proxiedUrl(proxy, item.streamUrl);
+        }
+        if (disposed) return;
+        // Playlists that are not direct files need Shaka when proxied: native HLS would resolve segment addresses against the proxy.
         if (
           item.offline ||
           !item.drmLicenseUrl &&
-          (directMediaUrl(item.streamUrl) || nativeHlsUrl(item.streamUrl, video))
+          (directMediaUrl(item.streamUrl) || (!proxy && nativeHlsUrl(item.streamUrl, video)))
         ) {
           selectedPlaybackPath = "Native media element";
           playbackPathRef.current = selectedPlaybackPath;
@@ -519,7 +532,7 @@ export function PlaybackDialog({
             }
           };
           video.addEventListener("loadedmetadata", seek, { once: true });
-          video.src = item.streamUrl;
+          video.src = mediaUrl;
           video.load();
           if (video.readyState >= HTMLMediaElement.HAVE_METADATA) seek();
           setStatus("Ready to play");
@@ -564,6 +577,13 @@ export function PlaybackDialog({
               ]));
           }
           if (!player.configure({ drm })) throw new Error("This app's webview rejected the DRM configuration.");
+        }
+        if (proxy) {
+          const base = proxy;
+          // Manifest (0), segment (1), timing (4) and key (6) requests go to the provider; licence requests do not.
+          player.getNetworkingEngine()?.registerRequestFilter((type, request) => {
+            if ([0, 1, 4, 6].includes(type)) request.uris = request.uris.map((uri) => proxiedUrl(base, uri));
+          });
         }
         await player.load(item.streamUrl);
         if (disposed) return;
@@ -610,7 +630,7 @@ export function PlaybackDialog({
         video.load();
       }
     };
-  }, [item.id, item.streamUrl, item.drmLicenseUrl, item.drmSystem, item.drmCertificateUrl, item.live, item.offline, resumePositionMillis, castingDevice]);
+  }, [item.id, item.streamUrl, item.drmLicenseUrl, item.drmSystem, item.drmCertificateUrl, item.live, item.offline, item.userAgent, resumePositionMillis, castingDevice]);
 
   function selectQuality(value: string) {
     const player = playerRef.current;

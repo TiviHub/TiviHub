@@ -2,6 +2,7 @@ import type { DrmSystem, Episode, LiveChannel, Movie, Series } from "../types";
 import { catchupFromAttributes } from "../catchup";
 import { recordDiagnosticFailure } from "../diagnosticLog";
 import { readResponseText, validateHttpsUrl } from "./http";
+import { providerFetch } from "./transport";
 
 export const MAX_M3U_BYTES = 200 * 1024 * 1024;
 
@@ -353,11 +354,11 @@ export function parseM3u(content: string, context: PlaylistContext): LiveChannel
   return catalog.channels;
 }
 
-export async function fetchM3u(url: string, signal?: AbortSignal): Promise<string> {
+export async function fetchM3u(url: string, signal?: AbortSignal, userAgent?: string): Promise<string> {
   const parsed = validateHttpUrl(url, "playlist URL");
   let response: Response;
   try {
-    response = await fetch(parsed, { signal, headers: { Accept: "application/x-mpegURL, text/plain, */*" } });
+    response = await providerFetch(parsed, { signal, headers: { Accept: "application/x-mpegURL, text/plain, */*" } }, userAgent);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     recordDiagnosticFailure("m3u-playlist", "network");

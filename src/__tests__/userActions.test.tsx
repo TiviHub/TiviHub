@@ -307,6 +307,30 @@ describe("playlist dialog user actions", () => {
     expect(screen.getByText(/unencrypted \(HTTP\)/)).toBeTruthy();
   });
 
+  it("offers a User-Agent field only in the desktop app and saves it with the source", async () => {
+    const user = userEvent.setup();
+    const web = render(<PlaylistDialog onClose={vi.fn()} onConnect={vi.fn(async () => undefined)} />);
+    expect(screen.queryByLabelText(/User-Agent/)).toBeNull();
+    web.unmount();
+
+    vi.stubGlobal("isTauri", true);
+    try {
+      let submittedDraft: PlaylistDraft | undefined;
+      const onConnect = vi.fn(async (draft: PlaylistDraft) => { submittedDraft = draft; });
+      render(<PlaylistDialog onClose={vi.fn()} onConnect={onConnect} />);
+
+      await user.type(screen.getByLabelText(/Playlist name/), "Living room");
+      await user.type(screen.getByLabelText(/Playlist URL/), "https://provider.example/live.m3u");
+      await user.type(screen.getByLabelText(/User-Agent/), "VLC/3.0.20");
+      await user.click(screen.getByRole("button", { name: "Connect source" }));
+
+      await waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1));
+      expect(submittedDraft?.playlist.userAgent).toBe("VLC/3.0.20");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("closes the source dialog on Escape", async () => {
     const onClose = vi.fn();
     render(<PlaylistDialog onClose={onClose} onConnect={vi.fn(async () => undefined)} />);
