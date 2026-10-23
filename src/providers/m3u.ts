@@ -17,6 +17,8 @@ export interface M3uCatalog {
   movies: Movie[];
   series: Series[];
   episodes: Episode[];
+  /** Entries left out because their stream is not HTTP or HTTPS. */
+  skipped: number;
 }
 
 interface PendingEntry {
@@ -44,7 +46,7 @@ function titleSeparator(value: string): number {
   return -1;
 }
 
-function resolveStream(value: string, baseUrl?: string): string {
+function resolveStream(value: string, baseUrl?: string): string | null {
   let result: URL;
   try {
     result = baseUrl ? new URL(value, baseUrl) : new URL(value);
@@ -53,9 +55,8 @@ function resolveStream(value: string, baseUrl?: string): string {
       "This playlist contains a relative stream URL. Add its original playlist URL as the base address.",
     );
   }
-  if (result.protocol !== "http:" && result.protocol !== "https:") {
-    throw new Error("Playlist entries must use HTTP or HTTPS stream URLs.");
-  }
+  // rtmp://, rtsp:// and udp:// entries cannot play here; the caller skips them instead of failing the import.
+  if (result.protocol !== "http:" && result.protocol !== "https:") return null;
   return result.toString();
 }
 
@@ -107,6 +108,7 @@ function createM3uCatalogParser(context: PlaylistContext) {
   let pending: PendingEntry | null = null;
   let hasHeader = false;
   let firstLine = true;
+  let skipped = 0;
   const playlistDrmLicenseUrl = context.drmLicenseUrl;
 
   function processLine(rawLine: string) {
@@ -134,6 +136,11 @@ function createM3uCatalogParser(context: PlaylistContext) {
 
     const streamUrl = resolveStream(line, context.url);
     const metadata = pending;
+    pending = null;
+    if (streamUrl === null) {
+      skipped += 1;
+      return;
+    }
     const name = metadata.name ||
       metadata.attributes["tvg-name"] ||
       metadata.attributes["tvg-id"] ||
@@ -213,7 +220,6 @@ function createM3uCatalogParser(context: PlaylistContext) {
         drmSystem: context.drmSystem,
       });
     }
-    pending = null;
   }
 
   function finish(): M3uCatalog {
@@ -221,9 +227,10 @@ function createM3uCatalogParser(context: PlaylistContext) {
       throw new Error("This file is not a valid extended M3U playlist (missing #EXTM3U).");
     }
     if (channels.length + movies.length + episodes.length === 0) {
+      if (skipped > 0) throw new Error("Playlist entries must use HTTP or HTTPS stream URLs.");
       throw new Error("No media entries were found in this playlist.");
     }
-    return { channels, movies, series, episodes };
+    return { channels, movies, series, episodes, skipped };
   }
 
   return { processLine, finish };

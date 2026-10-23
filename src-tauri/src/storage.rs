@@ -458,6 +458,27 @@ fn decode_key(encoded: &str) -> Result<[u8; 32], String> {
         .ok_or_else(|| "The stored TiviHub encryption key is invalid.".to_string())
 }
 
+pub const DATABASE_FILE: &str = "tivihub.sqlite3";
+
+#[derive(Debug, PartialEq)]
+enum KeychainAction {
+    Use(String),
+    Create,
+    UseFile,
+    Fail,
+}
+
+/// A keychain error must never mint a new key while encrypted data exists: the old key would be
+/// shadowed by the new file and every saved login would become unreadable.
+fn keychain_action(read: Result<String, keyring::Error>, has_data: bool) -> KeychainAction {
+    match read {
+        Ok(stored) => KeychainAction::Use(stored),
+        Err(keyring::Error::NoEntry) => KeychainAction::Create,
+        Err(_) if has_data => KeychainAction::Fail,
+        Err(_) => KeychainAction::UseFile,
+    }
+}
+
 /// The OS keychain holds the key. Where there is none (for example Linux without a secret
 /// service) a key file next to the database is used instead, and a diagnostic is recorded.
 pub fn load_or_create_key(
@@ -469,15 +490,21 @@ pub fn load_or_create_key(
         return decode_key(&existing);
     }
     if let Ok(entry) = keyring::Entry::new(KEY_SERVICE, KEY_NAME) {
-        match entry.get_password() {
-            Ok(stored) => return decode_key(&stored),
-            Err(keyring::Error::NoEntry) => {
+        let has_data = dir.join(DATABASE_FILE).exists();
+        match keychain_action(entry.get_password(), has_data) {
+            KeychainAction::Use(stored) => return decode_key(&stored),
+            KeychainAction::Create => {
                 let key = random_key();
                 if entry.set_password(&B64.encode(key)).is_ok() {
                     return Ok(key);
                 }
             }
-            Err(_) => {}
+            KeychainAction::UseFile => {}
+            KeychainAction::Fail => {
+                return Err(
+                    "The system keychain could not be read. Restart TiviHub to try again.".to_string(),
+                );
+            }
         }
     }
     diagnostics.record("storage", "KEY_FILE_FALLBACK");
@@ -767,6 +794,21 @@ mod tests {
         std::fs::write(dir.join(KEY_FILE), "not a key").unwrap();
         assert!(load_or_create_key(&dir, &diagnostics).is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_keychain_error_never_replaces_the_key_of_existing_data() {
+        let failure = || keyring::Error::NoStorageAccess("locked".into());
+        assert_eq!(keychain_action(Err(failure()), true), KeychainAction::Fail);
+        assert_eq!(keychain_action(Err(failure()), false), KeychainAction::UseFile);
+        assert_eq!(
+            keychain_action(Err(keyring::Error::NoEntry), false),
+            KeychainAction::Create
+        );
+        assert_eq!(
+            keychain_action(Ok("k".into()), true),
+            KeychainAction::Use("k".into())
+        );
     }
 
     #[test]

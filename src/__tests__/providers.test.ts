@@ -22,6 +22,19 @@ afterEach(() => {
 });
 
 describe("M3U provider parsing", () => {
+  it("skips streams that are not HTTP instead of failing the import", () => {
+    const content = [
+      "#EXTM3U",
+      "#EXTINF:-1,Radio",
+      "rtmp://host/live",
+      "#EXTINF:-1,News",
+      "https://host/news.m3u8",
+    ].join("\n");
+    const catalog = parseM3uCatalog(content, { id: "mixed", name: "Mixed" });
+    expect(catalog.channels.map((channel) => channel.name)).toEqual(["News"]);
+    expect(catalog.skipped).toBe(1);
+  });
+
   it("parses quoted metadata and resolves relative stream URLs", () => {
     const channels = parseM3u(
       '#EXTM3U\n#EXTINF:-1 tvg-id="news.1" tvg-logo="https://cdn.example/logo.png" group-title="News, World",Evening News\nstreams/news.m3u8\n',

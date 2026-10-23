@@ -160,7 +160,7 @@ fn main() {
                     std::fs::create_dir_all(&dir)
                         .map_err(|_| "Could not create TiviHub's data folder.".to_string())?;
                     let key = storage::load_or_create_key(&dir, &diagnostics)?;
-                    storage::Store::open(&dir.join("tivihub.sqlite3"), key)
+                    storage::Store::open(&dir.join(storage::DATABASE_FILE), key)
                 });
             if opened.is_err() {
                 diagnostics.record("storage", "SQLITE_OPEN_FAILED");
