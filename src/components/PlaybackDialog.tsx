@@ -52,6 +52,9 @@ interface ShakaPlayer {
   configure(configuration: object): boolean;
   getNetworkingEngine(): {
     registerRequestFilter(filter: (type: number, request: { uris: string[] }) => void): void;
+    registerResponseFilter(
+      filter: (type: number, response: { uri: string; headers: Record<string, string> }) => void,
+    ): void;
   } | null;
   load(uri: string): Promise<unknown>;
   retryStreaming(): void;
@@ -581,8 +584,14 @@ export function PlaybackDialog({
         if (proxy) {
           const base = proxy;
           // Manifest (0), segment (1), timing (4) and key (6) requests go to the provider; licence requests do not.
-          player.getNetworkingEngine()?.registerRequestFilter((type, request) => {
+          const engine = player.getNetworkingEngine();
+          engine?.registerRequestFilter((type, request) => {
             if ([0, 1, 4, 6].includes(type)) request.uris = request.uris.map((uri) => proxiedUrl(base, uri));
+          });
+          // Relative segment addresses in a playlist resolve against the response address, so give back the real one.
+          engine?.registerResponseFilter((_type, response) => {
+            if (!response.uri.startsWith(base)) return;
+            response.uri = response.headers["x-final-url"] ?? new URL(response.uri).searchParams.get("u") ?? response.uri;
           });
         }
         await player.load(item.streamUrl);

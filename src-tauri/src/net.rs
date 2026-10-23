@@ -287,7 +287,7 @@ fn cors_headers() -> Vec<tiny_http::Header> {
         header("Access-Control-Allow-Methods", "GET, OPTIONS"),
         header(
             "Access-Control-Expose-Headers",
-            "content-length, content-range, accept-ranges, content-type",
+            "content-length, content-range, accept-ranges, content-type, x-final-url",
         ),
     ]
 }
@@ -362,6 +362,8 @@ fn handle(request: tiny_http::Request, profiles: &Profiles, port: u16, policy: P
     let status = response.status().as_u16();
     let length = response.content_length().map(|length| length as usize);
     let mut headers = cors_headers();
+    // The player resolves relative segment addresses against where the playlist really came from.
+    headers.push(header("X-Final-Url", response.url().as_str()));
     for name in PASSED_BACK_HEADERS {
         if let Some(value) = response.headers().get(*name).and_then(|v| v.to_str().ok()) {
             headers.push(header(name, value));
@@ -531,6 +533,10 @@ mod tests {
             .unwrap();
         assert_eq!(echoed.status(), 200);
         assert_eq!(echoed.headers()["access-control-allow-origin"], "*");
+        assert_eq!(
+            echoed.headers()["x-final-url"],
+            format!("http://127.0.0.1:{port}/echo").as_str()
+        );
         assert_eq!(echoed.text().unwrap(), "ua=Custom/1;cookie=");
 
         let partial = client
