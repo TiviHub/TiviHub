@@ -1,8 +1,9 @@
-import { Children, Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
-import { checkForUpdate, type AvailableUpdate } from "./updates";
+import { useAppUpdate } from "./hooks/useAppUpdate";
+import { useNotifications } from "./hooks/useNotifications";
 import { isAdultContent } from "./adultContent";
 import { getCatalogImportLogSnapshot, recordCatalogImportSummary } from "./catalogImportLog";
 import { getDiagnosticLogSnapshot } from "./diagnosticLog";
@@ -264,19 +265,14 @@ function App() {
   const [animateStartup] = useState(
     () => isDesktopApp && !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [notificationKey, setNotificationKey] = useState(0);
+  const { error, notice, notificationKey, notify, clearNotifications } = useNotifications();
   const [expiredSourceIds, setExpiredSourceIds] = useState<Set<string>>(() => new Set());
   const [expiryCheckTime, setExpiryCheckTime] = useState(() => Date.now());
-  const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
-  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "current" | "available" | "error">("idle");
+  const { availableUpdate, updateStatus, checkUpdates, openAvailableUpdate } = useAppUpdate(isDesktopApp);
   const requestedEpgChannels = useRef(new Set<string>());
   const activeSourceIdRef = useRef(activeSourceId);
   activeSourceIdRef.current = activeSourceId;
-  const updateCheckController = useRef<AbortController | null>(null);
   const downloadControllers = useRef(new Map<string, AbortController>());
-  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const globalSearchReturnFocusRef = useRef<HTMLElement | null>(null);
   const startupOverlayRef = useRef<HTMLDivElement>(null);
   const refreshOverlayRef = useRef<HTMLDivElement>(null);
@@ -359,33 +355,6 @@ function App() {
     if (!ready) startupOverlayRef.current?.focus();
   }, [ready]);
 
-  const checkUpdates = useCallback(async () => {
-    updateCheckController.current?.abort();
-    const controller = new AbortController();
-    updateCheckController.current = controller;
-    setUpdateStatus("checking");
-    try {
-      const update = await checkForUpdate(webPackage.version, controller.signal);
-      if (controller.signal.aborted) return;
-      setAvailableUpdate(update);
-      setUpdateStatus(update ? "available" : "current");
-    } catch (cause) {
-      if (controller.signal.aborted) return;
-      console.error("Could not check GitHub for TiviHub updates", cause);
-      setUpdateStatus("error");
-    }
-  }, []);
-
-  async function openAvailableUpdate() {
-    if (!availableUpdate) return;
-    try {
-      await openUrl(availableUpdate.installerUrl);
-    } catch (cause) {
-      console.error("Could not open the TiviHub installer download", cause);
-      setUpdateStatus("error");
-    }
-  }
-
   async function openExternalUrl(url: string) {
     try {
       await openUrl(url);
@@ -420,55 +389,6 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     return localDiagnostics.storageAvailable;
   }
-
-  function clearNotifications() {
-    if (notificationTimer.current !== null) {
-      clearTimeout(notificationTimer.current);
-      notificationTimer.current = null;
-    }
-    setError(null);
-    setNotice(null);
-  }
-
-  function notify(message: string, kind: "error" | "notice") {
-    if (notificationTimer.current !== null) clearTimeout(notificationTimer.current);
-    setNotificationKey((key) => key + 1);
-    setError(kind === "error" ? message : null);
-    setNotice(kind === "notice" ? message : null);
-    notificationTimer.current = setTimeout(() => {
-      setError(null);
-      setNotice(null);
-      notificationTimer.current = null;
-    }, 3000);
-  }
-
-  useEffect(() => () => {
-    if (notificationTimer.current !== null) clearTimeout(notificationTimer.current);
-  }, []);
-
-  useEffect(() => {
-    if (!isDesktopApp) return;
-    if (import.meta.env.DEV) {
-      try {
-        if (window.localStorage.getItem("tivihub.debug.simulate-update") === "true") {
-          setAvailableUpdate({
-            version: `${webPackage.version}-simulated`,
-            installerUrl: "https://github.com/TiviHub/TiviHub/releases/latest/download/TiviHub-setup.exe",
-          });
-          setUpdateStatus("available");
-          return;
-        }
-      } catch (cause) {
-        console.error("Could not read the TiviHub update simulation setting", cause);
-      }
-    }
-    void checkUpdates();
-    const timer = window.setInterval(() => void checkUpdates(), 6 * 60 * 60 * 1000);
-    return () => {
-      window.clearInterval(timer);
-      updateCheckController.current?.abort();
-    };
-  }, [checkUpdates, isDesktopApp]);
 
   useEffect(() => {
     if (refreshing) {
