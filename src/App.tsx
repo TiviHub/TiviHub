@@ -481,7 +481,7 @@ function App() {
         section={section}
       />
 
-      <main className="main-content" inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}>
+      <main className={`main-content${section === "Live TV" && activeSource ? " main-content--browse" : ""}`} inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}>
         <Topbar
           activeSourceExpired={activeSourceExpired}
           activeSourceName={activeSource?.name}

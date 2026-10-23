@@ -188,36 +188,7 @@ export function LiveTvPage({
 
   return (
     <section className={`catalog-page${livePlayerMini ? " live-tv-mini-page" : ""}`}>
-      <header className="page-intro catalog-intro">
-        <div>
-          <h1>Live TV</h1>
-          <p>
-            {categoryName}
-            {showingFavorites
-              ? ` · ${favoriteChannels.length.toLocaleString()} channels`
-              : browse.total !== undefined ? ` · ${browse.total.toLocaleString()} channels` : ""}
-          </p>
-        </div>
-        <div className="catalog-controls">
-          <label className="search-field">
-            <Icon name="search" />
-            <span className="sr-only">Search Live TV</span>
-            <input onChange={(event) => setQuery(event.target.value)} placeholder="Search live tv" value={query} />
-          </label>
-          {groupId && onCheckStreamGroup && (
-            <button
-              aria-label={`Check all channels in ${categoryName}`}
-              className="secondary-button catalog-group-check"
-              data-tooltip="Check all channels in this group"
-              onClick={checkGroup}
-              type="button"
-            >
-              <Icon name="check_circle" />
-              Check group
-            </button>
-          )}
-        </div>
-      </header>
+      <h1 className="sr-only">Live TV</h1>
       <div className="live-tv-layout browse-layout">
         <div className="live-channel-columns has-categories">
           <BrowseCategoryList
@@ -233,6 +204,24 @@ export function LiveTvPage({
             <div className="live-channel-sidebar-heading">
               <h2>{categoryName || "Channels"}</h2>
               <span>{(showingFavorites ? favoriteChannels.length : browse.total ?? shownChannels.length).toLocaleString()}</span>
+            </div>
+            <div className="browse-panel-tools">
+              <label className="search-field">
+                <Icon name="search" />
+                <span className="sr-only">Search Live TV</span>
+                <input onChange={(event) => setQuery(event.target.value)} placeholder="Search live tv" value={query} />
+              </label>
+              {groupId && onCheckStreamGroup && (
+                <button
+                  aria-label={`Check all channels in ${categoryName}`}
+                  className="icon-button"
+                  data-tooltip="Check all channels in this group"
+                  onClick={checkGroup}
+                  type="button"
+                >
+                  <Icon name="check_circle" />
+                </button>
+              )}
             </div>
             <div className="live-channel-list" ref={listRef} role="list">
               {browse.loading && (

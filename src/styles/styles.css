@@ -7846,17 +7846,85 @@ button.icon-button.is-favorite {
   font-size: 27px;
 }
 
-/* Browsing screens (Live TV now; Movies and Series next): category panel, then the items of the chosen category. */
+/* Browsing screens (Live TV now; Movies and Series next): edge to edge beside the sidebar, three full-height panels:
+   categories, the items of the chosen category, then the player or details. */
+.main-content.main-content--browse {
+  padding: 0;
+}
+
 .live-tv-layout.browse-layout {
-  grid-template-columns: minmax(560px, 1.05fr) minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+  margin: 0;
+  gap: 0;
+  grid-template-columns: 260px 340px minmax(0, 1fr);
+  align-items: stretch;
 }
 
 .live-channel-columns.has-categories {
-  grid-template-columns: minmax(190px, 0.8fr) minmax(230px, 1fr);
+  display: contents;
+}
+
+.browse-layout .live-channel-sidebar {
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-right: 1px solid var(--outline-soft);
+  border-radius: 0;
+}
+
+.browse-layout .live-channel-sidebar-heading {
+  min-height: 56px;
+  padding: 14px 16px;
+  border-bottom: 0;
+}
+
+.browse-layout .live-tv-main {
+  background: var(--bg);
+}
+
+.browse-layout .live-tv-player {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.browse-layout .live-tv-player:not(.has-live-player) {
+  display: grid;
+}
+
+.browse-layout .live-tv-player:not(.has-live-player) .live-player-empty {
+  align-content: center;
+  min-height: 100%;
+}
+
+.browse-layout .live-tv-player.has-live-player {
+  height: auto;
+}
+
+.browse-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px 9px;
+}
+
+.browse-panel-tools .search-field {
+  min-width: 0;
+  flex: 1;
+}
+
+.live-tv-mini-page .live-channel-columns.has-categories {
+  display: none;
 }
 
 .browse-category-search {
   padding: 9px 9px 0;
+}
+
+.browse-category-search .search-field {
+  width: 100%;
+  min-width: 0;
 }
 
 .browse-category-list {
@@ -7925,6 +7993,23 @@ button.icon-button.is-favorite {
 
 @media (max-width: 1180px) {
   .live-tv-layout.browse-layout {
+    height: auto;
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .live-channel-columns.has-categories {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .browse-layout .live-channel-sidebar {
+    height: auto;
+    max-height: 50vh;
+  }
+}
+
+@media (max-width: 820px) {
+  .main-content.main-content--browse {
+    padding: var(--app-topbar-height) 0 108px;
   }
 }

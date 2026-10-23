@@ -421,7 +421,7 @@ export function StyleGuide() {
         </div>
         <div className="sg-specimens">
           <Block title="BrowseCategoryList" note="Favorites and All are pinned above the source's own categories. The selected tile uses the shared selection look.">
-            <div className="live-channel-columns has-categories">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 260px)", height: 360 }}>
               <BrowseCategoryList
                 categories={[
                   { id: "@@favorites", name: "Favorites", count: 3, pinned: true },
@@ -440,7 +440,7 @@ export function StyleGuide() {
             </div>
           </Block>
           <Block title="Error" note="A failed request keeps what is on screen and offers Try again; it never leaves a silent gap.">
-            <div className="live-channel-columns has-categories">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 260px)", height: 360 }}>
               <BrowseCategoryList categories={[]} error="Could not reach the provider." loading={false} onRetry={() => undefined} onSelect={() => undefined} selectedId={null} title="Live categories" />
             </div>
           </Block>
