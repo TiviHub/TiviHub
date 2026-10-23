@@ -30,6 +30,8 @@ export interface DownloadRecord {
   mimeType: string;
   sizeBytes: number;
   completedAt: number;
+  /** Number of stored pieces; absent on downloads saved as one blob by older versions. */
+  parts?: number;
 }
 
 export interface DownloadProgress {
@@ -97,8 +99,9 @@ function getDatabase(): Promise<IDBPDatabase<DownloadDatabase>> {
 }
 
 const DIRECTORY_SETTING_KEY = "download-directory";
-// The offline copy lives in one Blob in memory while downloading, plus a second copy while it is saved; shortcut: 1 GB cap, stream to the folder and play from the file when a larger limit is needed.
-const MAX_DOWNLOAD_BYTES = 1024 ** 3;
+// A download is stored in pieces so only one piece is in memory at a time; the cap protects disk space.
+const PART_BYTES = 8 * 1024 ** 2;
+const MAX_DOWNLOAD_BYTES = 8 * 1024 ** 3;
 const PROGRESS_INTERVAL_MILLIS = 250;
 const DIRECT_MEDIA_EXTENSIONS = new Set(["mp4", "m4v", "webm", "mov", "ogv", "ogg"]);
 
@@ -139,6 +142,26 @@ function mediaTypeFor(extension: string): string {
   return "video/mp4";
 }
 
+// "#" never appears in an id because downloadIdFor percent-encodes its parts.
+const partKey = (id: string, index: number) => `${id}#${index}`;
+const partRange = (id: string) => IDBKeyRange.bound(`${id}#`, `${id}#￿`);
+
+async function removeParts(id: string): Promise<void> {
+  const database = await getDatabase();
+  await database.delete("files", partRange(id));
+}
+
+/** Drops pieces left behind by a download that was interrupted by a crash. Call before any download starts. */
+export async function removeOrphanedParts(): Promise<void> {
+  const database = await getDatabase();
+  const known = new Set(await database.getAllKeys("downloads"));
+  const orphans = (await database.getAllKeys("files")).filter((key) => {
+    const separator = key.lastIndexOf("#");
+    return separator >= 0 && !known.has(key.slice(0, separator));
+  });
+  await Promise.all(orphans.map((key) => database.delete("files", key)));
+}
+
 export async function getDownloads(): Promise<DownloadRecord[]> {
   const database = await getDatabase();
   return (await database.getAll("downloads")).sort((a, b) => b.completedAt - a.completedAt);
@@ -146,9 +169,21 @@ export async function getDownloads(): Promise<DownloadRecord[]> {
 
 export async function getDownloadedBlob(id: string): Promise<Blob> {
   const database = await getDatabase();
-  const stored = await database.get("files", id);
-  if (!stored) throw new Error("The downloaded video file is missing from local storage.");
-  return stored.blob;
+  const missing = () => new Error("The downloaded video file is missing from local storage.");
+  const record = await database.get("downloads", id);
+  if (record?.parts === undefined) {
+    const stored = await database.get("files", id);
+    if (!stored) throw missing();
+    return stored.blob;
+  }
+  const pieces: Blob[] = [];
+  for (let index = 0; index < record.parts; index += 1) {
+    const stored = await database.get("files", partKey(id, index));
+    if (!stored) throw missing();
+    pieces.push(stored.blob);
+  }
+  // Blobs read back from IndexedDB are backed by files, so joining them does not load the video into memory.
+  return new Blob(pieces, { type: record.mimeType });
 }
 
 export async function removeDownload(id: string): Promise<void> {
@@ -157,6 +192,7 @@ export async function removeDownload(id: string): Promise<void> {
   await Promise.all([
     transaction.objectStore("downloads").delete(id),
     transaction.objectStore("files").delete(id),
+    transaction.objectStore("files").delete(partRange(id)),
   ]);
   await transaction.done;
 }
@@ -266,7 +302,7 @@ async function saveToNativeDirectory(
 }
 
 function tooLargeError(): Error {
-  return new Error("This video is larger than 1 GB, which is too large to save for offline playback.");
+  return new Error("This video is larger than 8 GB, which is too large to save for offline playback.");
 }
 
 export async function downloadMedia(
@@ -298,71 +334,91 @@ export async function downloadMedia(
   const totalBytesHeader = Number(response.headers.get("content-length"));
   const totalBytes = Number.isFinite(totalBytesHeader) && totalBytesHeader > 0 ? totalBytesHeader : null;
   if (totalBytes && totalBytes > MAX_DOWNLOAD_BYTES) throw tooLargeError();
-  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  const database = await getDatabase();
+  const id = downloadIdFor(media);
+  let chunks: Uint8Array<ArrayBuffer>[] = [];
+  let bufferedBytes = 0;
+  let parts = 0;
   let receivedBytes = 0;
   let lastReportAt = 0;
   const reportProgress = () => onProgress({
-    id: downloadIdFor(media),
+    id,
     title: media.title,
     receivedBytes,
     totalBytes,
   });
-
-  if (response.body) {
-    const reader = response.body.getReader();
-    try {
-      while (true) {
-        const result = await reader.read();
-        if (result.done) break;
-        if (signal.aborted) throw new DOMException("The download was cancelled.", "AbortError");
-        chunks.push(result.value);
-        receivedBytes += result.value.byteLength;
-        if (receivedBytes > MAX_DOWNLOAD_BYTES) throw tooLargeError();
-        if (Date.now() - lastReportAt >= PROGRESS_INTERVAL_MILLIS) {
-          lastReportAt = Date.now();
-          reportProgress();
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  } else {
-    const body = new Uint8Array(await response.arrayBuffer());
-    if (body.byteLength > MAX_DOWNLOAD_BYTES) throw tooLargeError();
-    chunks.push(body);
-    receivedBytes = body.byteLength;
-  }
-  reportProgress();
-
-  if (signal.aborted) throw new DOMException("The download was cancelled.", "AbortError");
-  if (receivedBytes === 0) throw new Error("The provider returned an empty video file.");
-  if (totalBytes && receivedBytes !== totalBytes) {
-    throw new Error(`The download ended early (${receivedBytes} of ${totalBytes} bytes). Try again.`);
-  }
-  const blob = new Blob(chunks, { type: contentType || mediaTypeFor(extension) });
-  chunks.length = 0;
-  const record: DownloadRecord = {
-    id: downloadIdFor(media),
-    mediaId: media.id,
-    playlistId: media.playlistId,
-    contentType: media.contentType,
-    title: media.title,
-    artworkUrl: media.artworkUrl,
-    parentTitle: media.parentTitle,
-    fileName: safeFileName(media.title, media.id, extension),
-    mimeType: blob.type,
-    sizeBytes: blob.size,
-    completedAt: Date.now(),
+  const flushPart = async () => {
+    if (bufferedBytes === 0) return;
+    await database.put("files", { id: partKey(id, parts), blob: new Blob(chunks) });
+    parts += 1;
+    chunks = [];
+    bufferedBytes = 0;
   };
 
-  const database = await getDatabase();
-  const transaction = database.transaction(["downloads", "files"], "readwrite");
-  await Promise.all([
-    transaction.objectStore("downloads").put(record),
-    transaction.objectStore("files").put({ id: record.id, blob }),
-  ]);
-  await transaction.done;
+  await removeParts(id);
+  let record: DownloadRecord;
+  try {
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const result = await reader.read();
+          if (result.done) break;
+          if (signal.aborted) throw new DOMException("The download was cancelled.", "AbortError");
+          chunks.push(result.value);
+          bufferedBytes += result.value.byteLength;
+          receivedBytes += result.value.byteLength;
+          if (receivedBytes > MAX_DOWNLOAD_BYTES) throw tooLargeError();
+          if (bufferedBytes >= PART_BYTES) await flushPart();
+          if (Date.now() - lastReportAt >= PROGRESS_INTERVAL_MILLIS) {
+            lastReportAt = Date.now();
+            reportProgress();
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } else {
+      const body = new Uint8Array(await response.arrayBuffer());
+      if (body.byteLength > MAX_DOWNLOAD_BYTES) throw tooLargeError();
+      chunks.push(body);
+      bufferedBytes = receivedBytes = body.byteLength;
+    }
+    reportProgress();
 
+    if (signal.aborted) throw new DOMException("The download was cancelled.", "AbortError");
+    if (receivedBytes === 0) throw new Error("The provider returned an empty video file.");
+    if (totalBytes && receivedBytes !== totalBytes) {
+      throw new Error(`The download ended early (${receivedBytes} of ${totalBytes} bytes). Try again.`);
+    }
+    await flushPart();
+    record = {
+      id,
+      mediaId: media.id,
+      playlistId: media.playlistId,
+      contentType: media.contentType,
+      title: media.title,
+      artworkUrl: media.artworkUrl,
+      parentTitle: media.parentTitle,
+      fileName: safeFileName(media.title, media.id, extension),
+      mimeType: contentType || mediaTypeFor(extension),
+      sizeBytes: receivedBytes,
+      completedAt: Date.now(),
+      parts,
+    };
+    await database.put("downloads", record);
+  } catch (cause) {
+    await removeParts(id).catch(() => undefined);
+    throw cause;
+  }
+  return copyToChosenFolder(record, directoryAccess);
+}
+
+async function copyToChosenFolder(
+  record: DownloadRecord,
+  directoryAccess: Awaited<ReturnType<typeof writableDownloadDirectory>>,
+): Promise<{ record: DownloadRecord; folderError?: Error }> {
+  const blob = await getDownloadedBlob(record.id);
   if (directoryAccess.error) return { record, folderError: directoryAccess.error };
   if (!directoryAccess.directory && !directoryAccess.nativePath) return { record };
   try {

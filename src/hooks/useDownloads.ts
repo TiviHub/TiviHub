@@ -9,6 +9,7 @@ import {
   getDownloadDirectoryPath,
   getDownloads,
   removeDownload,
+  removeOrphanedParts,
   type DownloadableMedia,
   type DownloadProgress,
   type DownloadRecord,
@@ -36,7 +37,7 @@ export function useDownloads({ notify, openPlayback }: Options) {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([getDownloads(), getDownloadDirectoryPath()]).then(([savedDownloads, directoryPath]) => {
+    void Promise.all([removeOrphanedParts().then(getDownloads), getDownloadDirectoryPath()]).then(([savedDownloads, directoryPath]) => {
       if (!active) return;
       setDownloads(savedDownloads);
       setDownloadDirectoryPath(directoryPath);
