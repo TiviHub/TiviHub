@@ -7821,7 +7821,8 @@ button.icon-button.is-favorite {
 }
 
 .browse-layout .playback-dialog.playback-inline:not(.playback-mini) > .playback-header {
-  min-height: 56px;
+  box-sizing: border-box;
+  height: 56px;
   align-items: center;
   padding: 14px 16px 9px;
 }
