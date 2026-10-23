@@ -1,4 +1,4 @@
-import type { MdblistRateLimitState } from "./types";
+import type { MdblistRateLimitState } from "../types";
 import { MdblistError } from "./mdblistError";
 
 const RATE_LIMIT_STATE_KEY = "account";

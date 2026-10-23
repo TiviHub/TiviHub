@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { sortCatalogItems } from "../catalogSorting";
+import { sortCatalogItems } from "../lib/catalogSorting";
 import { parseM3uCatalogAsync } from "../providers/m3u";
 import { loadXtreamCatalog } from "../providers/xtream";
 import type { Playlist } from "../types";

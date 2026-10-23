@@ -41,7 +41,7 @@ await page.getByRole("button", { name: "Add source" }).click();
 await page.getByRole("button", { name: "Import demo" }).click();
 await page.getByRole("button", { name: "Open settings" }).first().click();
 await page.evaluate(async ({ titles }) => {
-  const [db, { DEMO_PLAYLIST_ID: id, createDemoPlaylist }] = await Promise.all([import("/src/storage/database.ts"), import("/src/demo.ts")]);
+  const [db, { DEMO_PLAYLIST_ID: id, createDemoPlaylist }] = await Promise.all([import("/src/storage/database.ts"), import("/src/lib/demo.ts")]);
   const now = Date.now();
   const hour = 3600000;
   const base = { drmLicenseUrl: "", drmSystem: "com.widevine.alpha", username: "", password: "", createdAt: now };

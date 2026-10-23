@@ -1,5 +1,5 @@
 import { RowSkeletons } from "./Skeleton";
-import type { DownloadRecord, DownloadTask } from "../downloads";
+import type { DownloadRecord, DownloadTask } from "../services/downloads";
 import { Icon } from "./common";
 import { HomeEmptyState } from "./HomeEmptyState";
 import { NoSourceEmptyState } from "./NoSourceEmptyState";

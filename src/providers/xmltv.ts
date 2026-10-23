@@ -1,5 +1,5 @@
 import type { EpgProgram } from "../types";
-import { recordDiagnosticFailure } from "../diagnosticLog";
+import { recordDiagnosticFailure } from "../lib/diagnosticLog";
 import { validateHttpUrl } from "./m3u";
 import { readResponseText } from "./http";
 import { providerFetch } from "./transport";

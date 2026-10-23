@@ -5,9 +5,9 @@ import type {
   LiveChannel,
   Movie,
   Series,
-} from "./types";
+} from "../types";
 
-export type { CatalogChangeSummary } from "./types";
+export type { CatalogChangeSummary } from "../types";
 
 export interface CatalogSnapshot {
   channels: LiveChannel[];

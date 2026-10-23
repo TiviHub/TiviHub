@@ -1,5 +1,5 @@
-import { xtreamTimeshiftUrl } from "./providers/xtream";
-import type { CatchupMode, ChannelCatchup, EpgProgram, LiveChannel, Playlist } from "./types";
+import { xtreamTimeshiftUrl } from "../providers/xtream";
+import type { CatchupMode, ChannelCatchup, EpgProgram, LiveChannel, Playlist } from "../types";
 
 const DAY_MILLIS = 86_400_000;
 const PLACEHOLDER = /\$?\{(start|end|timestamp|duration|offset|utc|utcend|lutc)\}/g;

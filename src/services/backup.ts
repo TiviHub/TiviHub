@@ -1,4 +1,4 @@
-import type { UserDataSnapshot } from "./types";
+import type { UserDataSnapshot } from "../types";
 
 const BACKUP_FORMAT = "tivihub-web-backup";
 const BACKUP_VERSION = 1;

@@ -2,7 +2,7 @@ import {
   downloadOpenSubtitle,
   searchOpenSubtitles,
   type SubtitleResult,
-} from "./providers/opensubtitles";
+} from "../providers/opensubtitles";
 import {
   clearOpenSubtitleCache,
   countOpenSubtitleFiles,
@@ -12,12 +12,12 @@ import {
   saveOpenSubtitleChoices,
   saveOpenSubtitleFileCacheEntry,
   saveOpenSubtitleSearchCacheEntry,
-} from "./storage/database";
+} from "../storage/database";
 import type {
   OpenSubtitleChoices,
   OpenSubtitleFileCacheEntry,
   OpenSubtitleSearchCacheEntry,
-} from "./types";
+} from "../types";
 
 export const SUBTITLE_SEARCH_TTL_MILLIS = 24 * 60 * 60 * 1000;
 // Subtitle files never change once published, so they are kept until the user clears the cache.

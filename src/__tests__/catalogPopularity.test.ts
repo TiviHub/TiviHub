@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rankLocalCatalogByPopularity } from "../catalogPopularity";
+import { rankLocalCatalogByPopularity } from "../lib/catalogPopularity";
 import type { MdblistPopularItem, Movie } from "../types";
 
 const localMovies: Movie[] = [

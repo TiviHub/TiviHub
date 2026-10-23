@@ -1,4 +1,4 @@
-import type { Movie, RatingsMediaType, Series } from "./types";
+import type { Movie, RatingsMediaType, Series } from "../types";
 
 export interface TitleIdentity {
   /** Stable cache key; never derived from playlist or catalog IDs. */

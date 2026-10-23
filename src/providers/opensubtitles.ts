@@ -1,4 +1,4 @@
-import { recordDiagnosticFailure } from "../diagnosticLog";
+import { recordDiagnosticFailure } from "../lib/diagnosticLog";
 import type { OpenSubtitleSearchResult } from "../types";
 
 export type SubtitleResult = OpenSubtitleSearchResult;

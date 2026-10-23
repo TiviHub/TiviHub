@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPopularCatalogService, POPULAR_CATALOG_TTL_MILLIS, type PopularCatalogCache } from "../popularCatalogService";
+import { createPopularCatalogService, POPULAR_CATALOG_TTL_MILLIS, type PopularCatalogCache } from "../services/popularCatalogService";
 import type { MdblistPopularCacheEntry, MdblistPopularItem } from "../types";
 
 function memoryCache(): PopularCatalogCache & { map: Map<string, MdblistPopularCacheEntry> } {

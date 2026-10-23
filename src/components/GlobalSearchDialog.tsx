@@ -3,7 +3,7 @@ import {
   searchCatalog,
   type GlobalSearchCommand,
   type GlobalSearchMatch,
-} from "../globalSearch";
+} from "../lib/globalSearch";
 import type { LiveChannel, Movie, Series } from "../types";
 import { Icon, type IconName } from "./common";
 

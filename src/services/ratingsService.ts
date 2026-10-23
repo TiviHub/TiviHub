@@ -1,6 +1,6 @@
-import { fetchMdblistRatings } from "./providers/mdblist";
-import type { TitleIdentity } from "./ratings";
-import type { ExternalRatings, RatingsCacheEntry } from "./types";
+import { fetchMdblistRatings } from "../providers/mdblist";
+import type { TitleIdentity } from "../lib/ratings";
+import type { ExternalRatings, RatingsCacheEntry } from "../types";
 
 export const RATINGS_TTL_MILLIS = 30 * 24 * 60 * 60 * 1000;
 export const RATINGS_NOT_FOUND_TTL_MILLIS = 24 * 60 * 60 * 1000;

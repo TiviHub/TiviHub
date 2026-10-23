@@ -1,4 +1,4 @@
-import type { CatalogCandidate, CatalogSnapshot } from "./catalogRefresh";
+import type { CatalogCandidate, CatalogSnapshot } from "../services/catalogRefresh";
 
 interface Item {
   id: string;

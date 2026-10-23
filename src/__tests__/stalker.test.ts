@@ -14,8 +14,8 @@ import {
   stalkerLink,
   STALKER_LIBRARY_LIMIT,
 } from "../providers/stalker";
-import { rankLocalCatalogByPopularity } from "../catalogPopularity";
-import { createTitleIdentity } from "../ratings";
+import { rankLocalCatalogByPopularity } from "../lib/catalogPopularity";
+import { createTitleIdentity } from "../lib/ratings";
 import type { Playlist } from "../types";
 
 const MAC = "00:1A:79:12:34:56";

@@ -7,7 +7,7 @@ import userEvent from "@testing-library/user-event";
 import App from "../App";
 import { MovieDetail, SeriesDetail } from "../components/ContentPages";
 import { MdblistError } from "../providers/mdblist";
-import type { RatingsResult, RatingsService } from "../ratingsService";
+import type { RatingsResult, RatingsService } from "../services/ratingsService";
 import { saveCatalog, savePlaylist } from "../storage/database";
 import type { Movie, Playlist, Series } from "../types";
 

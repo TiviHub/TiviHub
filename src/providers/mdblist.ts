@@ -4,12 +4,12 @@ import {
   normalizeTitle,
   normalizeTmdbId,
   type TitleIdentity,
-} from "../ratings";
-import { mdblistRateLimiter, type MdblistRateLimiter } from "../mdblistRateLimit";
-import { MdblistError } from "../mdblistError";
+} from "../lib/ratings";
+import { mdblistRateLimiter, type MdblistRateLimiter } from "../lib/mdblistRateLimit";
+import { MdblistError } from "../lib/mdblistError";
 import type { ExternalRating, ExternalRatings } from "../types";
 
-export { MdblistError } from "../mdblistError";
+export { MdblistError } from "../lib/mdblistError";
 
 export interface MdblistRequest {
   url: string;

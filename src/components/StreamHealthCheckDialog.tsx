@@ -4,7 +4,7 @@ import {
   checkStreamGroupAvailability,
   type StreamHealthEntryResult,
   type StreamHealthStatus,
-} from "../streamHealth";
+} from "../services/streamHealth";
 import { Icon, type IconName } from "./common";
 import { ProgressIndicator } from "./ProgressIndicator";
 

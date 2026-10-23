@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../../package.json";
-import { checkForUpdate, type AvailableUpdate } from "../updates";
+import { checkForUpdate, type AvailableUpdate } from "../services/updates";
 
 export type UpdateStatus = "idle" | "checking" | "current" | "available" | "error";
 

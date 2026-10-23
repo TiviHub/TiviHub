@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CatalogPage } from "../components/ContentPages";
-import type { PopularCatalogService } from "../popularCatalogService";
+import type { PopularCatalogService } from "../services/popularCatalogService";
 import type { MdblistPopularItem, RatingsMediaType } from "../types";
 import type { LiveChannel, Movie, Series } from "../types";
 

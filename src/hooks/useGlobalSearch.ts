@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { GlobalSearchCommand, GlobalSearchMatch, SearchSection } from "../globalSearch";
+import type { GlobalSearchCommand, GlobalSearchMatch, SearchSection } from "../lib/globalSearch";
 import type { Episode, Movie, PlayableItem, Series } from "../types";
-import { visibleButton } from "../visibleButton";
+import { visibleButton } from "../lib/visibleButton";
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
 

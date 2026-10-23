@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchMdblistPopularCatalog, parseMdblistPopularCatalog } from "../providers/mdblistCatalog";
-import type { MdblistRateLimiter } from "../mdblistRateLimit";
+import type { MdblistRateLimiter } from "../lib/mdblistRateLimit";
 
 const noRateLimit: MdblistRateLimiter = {
   acquire: async () => () => undefined,

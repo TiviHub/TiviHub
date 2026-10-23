@@ -11,14 +11,14 @@ import { useGlobalSearch } from "./hooks/useGlobalSearch";
 import { useStalkerKeepAlive } from "./hooks/useStalkerKeepAlive";
 import { useSources } from "./hooks/useSources";
 import { useNotifications } from "./hooks/useNotifications";
-import { isAdultContent } from "./adultContent";
-import { getCatalogImportLogSnapshot } from "./catalogImportLog";
-import { getDiagnosticLogSnapshot } from "./diagnosticLog";
+import { isAdultContent } from "./lib/adultContent";
+import { getCatalogImportLogSnapshot } from "./lib/catalogImportLog";
+import { getDiagnosticLogSnapshot } from "./lib/diagnosticLog";
 import {
   isPlaylistExpired,
-} from "./catalogCache";
-import type { SearchSection } from "./globalSearch";
-import { visibleButton } from "./visibleButton";
+} from "./services/catalogCache";
+import type { SearchSection } from "./lib/globalSearch";
+import { visibleButton } from "./lib/visibleButton";
 import { loadStalkerEpisodes } from "./providers/stalker";
 import {
   loadXtreamEpisodes,
@@ -47,9 +47,9 @@ import type {
   Playlist,
   Series,
 } from "./types";
-import { createRatingsService } from "./ratingsService";
-import { createPopularCatalogService } from "./popularCatalogService";
-import { configureMdblistRateLimiter } from "./mdblistRateLimit";
+import { createRatingsService } from "./services/ratingsService";
+import { createPopularCatalogService } from "./services/popularCatalogService";
+import { configureMdblistRateLimiter } from "./lib/mdblistRateLimit";
 import { CatalogPage, LibraryPage, MovieDetail, playableChannel, SeriesDetail } from "./components/ContentPages";
 import { Icon, TooltipLayer, type IconName } from "./components/common";
 import { MobileNav, Sidebar, Topbar } from "./components/AppShell";

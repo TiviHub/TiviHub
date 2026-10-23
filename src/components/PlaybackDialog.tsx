@@ -1,12 +1,12 @@
-import { soundIsMissing } from "../playbackAudio";
+import { soundIsMissing } from "../lib/playbackAudio";
 import { proxiedUrl, proxyBase, usesNativeTransport } from "../providers/transport";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import webPackage from "../../package.json";
 import type { PlayableItem } from "../types";
 import type { SubtitleResult } from "../providers/opensubtitles";
-import { subtitleService } from "../subtitleService";
-import { playbackErrorMessage } from "../playbackErrors";
+import { subtitleService } from "../services/subtitleService";
+import { playbackErrorMessage } from "../lib/playbackErrors";
 import {
   browserSummary,
   createPlaybackDiagnosticReport,
@@ -16,7 +16,7 @@ import {
   type BackendDiagnosticEvent,
   type PlaybackDiagnosticFailure,
   type PlaybackPath,
-} from "../playbackDiagnostics";
+} from "../lib/playbackDiagnostics";
 import { CustomSelect, Icon } from "./common";
 import { RowSkeletons, Skeleton } from "./Skeleton";
 

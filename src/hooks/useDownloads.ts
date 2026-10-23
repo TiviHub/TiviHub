@@ -14,7 +14,7 @@ import {
   type DownloadProgress,
   type DownloadRecord,
   type DownloadTask,
-} from "../downloads";
+} from "../services/downloads";
 import type { PlayableItem, Playlist } from "../types";
 
 interface Options {

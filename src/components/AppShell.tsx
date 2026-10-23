@@ -1,4 +1,4 @@
-import type { SearchSection } from "../globalSearch";
+import type { SearchSection } from "../lib/globalSearch";
 import { DesktopWindowControls } from "./DesktopWindowControls";
 import { Icon, type IconName } from "./common";
 

@@ -2,8 +2,8 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path";
 import { open as openFile, remove as removeFile } from "@tauri-apps/plugin-fs";
-import { proxiedUrl, proxyBase, usesNativeTransport } from "./providers/transport";
-import type { ContentType } from "./types";
+import { proxiedUrl, proxyBase, usesNativeTransport } from "../providers/transport";
+import type { ContentType } from "../types";
 
 export type DownloadContentType = Extract<ContentType, "MOVIE" | "EPISODE">;
 

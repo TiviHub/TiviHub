@@ -14,7 +14,7 @@ import {
   removeOrphanedParts,
   type DownloadableMedia,
   type DownloadTask,
-} from "../downloads";
+} from "../services/downloads";
 import { DownloadsPage } from "../components/DownloadsPage";
 
 const media: DownloadableMedia = {

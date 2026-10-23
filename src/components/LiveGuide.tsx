@@ -1,8 +1,8 @@
 import { Skeleton } from "./Skeleton";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { EpgProgram, LiveChannel } from "../types";
-import { canReplay, canStartOver } from "../catchup";
-import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../liveGuideLayout";
+import { canReplay, canStartOver } from "../lib/catchup";
+import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../lib/liveGuideLayout";
 import { CustomSelect, Icon } from "./common";
 
 const CHANNEL_COLUMN_WIDTH = 214;

@@ -1,5 +1,5 @@
-import { fetchMdblistPopularCatalog } from "./providers/mdblistCatalog";
-import type { MdblistPopularCacheEntry, MdblistPopularItem, RatingsMediaType } from "./types";
+import { fetchMdblistPopularCatalog } from "../providers/mdblistCatalog";
+import type { MdblistPopularCacheEntry, MdblistPopularItem, RatingsMediaType } from "../types";
 
 export const POPULAR_CATALOG_TTL_MILLIS = 24 * 60 * 60 * 1000;
 

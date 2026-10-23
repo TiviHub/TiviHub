@@ -18,7 +18,7 @@ describe("sanitized diagnostic log", () => {
   });
 
   it("stores only bounded safe request metadata", async () => {
-    const { getDiagnosticLogSnapshot, recordDiagnosticFailure } = await import("../diagnosticLog");
+    const { getDiagnosticLogSnapshot, recordDiagnosticFailure } = await import("../lib/diagnosticLog");
 
     for (let index = 0; index < 105; index += 1) {
       recordDiagnosticFailure("m3u-playlist", "http", 403);

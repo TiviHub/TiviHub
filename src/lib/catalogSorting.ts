@@ -1,4 +1,4 @@
-import type { Movie, Series } from "./types";
+import type { Movie, Series } from "../types";
 
 export type CatalogSort = "name" | "added" | "year" | "rating";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMdblistRateLimiter, type MdblistRateLimitStore } from "../mdblistRateLimit";
+import { createMdblistRateLimiter, type MdblistRateLimitStore } from "../lib/mdblistRateLimit";
 import type { MdblistRateLimitState } from "../types";
 
 function setup(nowValue = 1_000_000) {

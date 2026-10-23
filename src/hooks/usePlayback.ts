@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { replayUrl } from "../catchup";
-import { canOpenExternally, openInExternalPlayer } from "../externalPlayer";
+import { replayUrl } from "../lib/catchup";
+import { canOpenExternally, openInExternalPlayer } from "../services/externalPlayer";
 import { isStalkerLink, isStalkerVideoLink, resolveStalkerLink, stalkerUserAgent, warmStalkerSession } from "../providers/stalker";
 import { getLibraryItems, saveLibraryItem } from "../storage/database";
 import type { EpgProgram, LibraryItem, LiveChannel, PlayableItem, Playlist } from "../types";

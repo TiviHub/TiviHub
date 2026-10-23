@@ -1,21 +1,21 @@
 import { useEffect, useRef } from "react";
-import { recordCatalogImportSummary } from "../catalogImportLog";
+import { recordCatalogImportSummary } from "../lib/catalogImportLog";
 import {
   canAutoRefreshCatalog,
   catalogRefreshDueAt,
   isCatalogRefreshDue,
   isPlaylistExpired,
-} from "../catalogCache";
+} from "../services/catalogCache";
 import {
   formatCatalogChangeSummary,
   isSuspiciousCatalogDrop,
   summarizeCatalogChanges,
   validateCatalogForSource,
   type CatalogCandidate,
-} from "../catalogRefresh";
-import type { SearchSection } from "../globalSearch";
-import { keepM3uIds } from "../m3uIds";
-import { visibleButton } from "../visibleButton";
+} from "../services/catalogRefresh";
+import type { SearchSection } from "../lib/globalSearch";
+import { keepM3uIds } from "../lib/m3uIds";
+import { visibleButton } from "../lib/visibleButton";
 import { fetchM3u, parseM3uCatalog, parseM3uCatalogAsync } from "../providers/m3u";
 import { loadStalkerCatalog, loadStalkerEpg } from "../providers/stalker";
 import { fetchXmltv } from "../providers/xmltv";
@@ -340,7 +340,7 @@ export function useSources(deps: SourceDeps) {
 
   async function loadDemoLibrary() {
     if (import.meta.env.DEV) {
-      const { createDemoPlaylist, DEMO_PLAYLIST_CONTENT, DEMO_PLAYLIST_ID } = await import("../demo");
+      const { createDemoPlaylist, DEMO_PLAYLIST_CONTENT, DEMO_PLAYLIST_ID } = await import("../lib/demo");
       clearNotifications();
       const existing = sources.find((source) => source.id === DEMO_PLAYLIST_ID);
       const shouldActivate = !existing || activeSourceId === null;
@@ -397,7 +397,7 @@ export function useSources(deps: SourceDeps) {
       let serverTimeZone = source.serverTimeZone;
       if (source.demo) {
         if (import.meta.env.DEV) {
-          const { DEMO_PLAYLIST_CONTENT } = await import("../demo");
+          const { DEMO_PLAYLIST_CONTENT } = await import("../lib/demo");
           const importedCatalog = parseM3uCatalog(DEMO_PLAYLIST_CONTENT, {
             id: source.id,
             name: source.name,

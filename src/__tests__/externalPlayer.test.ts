@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { canOpenExternally, openInExternalPlayer } from "../externalPlayer";
-import { soundIsMissing } from "../playbackAudio";
+import { canOpenExternally, openInExternalPlayer } from "../services/externalPlayer";
+import { soundIsMissing } from "../lib/playbackAudio";
 
 afterEach(() => vi.unstubAllGlobals());
 

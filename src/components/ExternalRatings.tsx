@@ -1,8 +1,8 @@
 import { Skeleton } from "./Skeleton";
 import { useEffect, useState } from "react";
 import { MdblistError } from "../providers/mdblist";
-import { createTitleIdentity } from "../ratings";
-import type { RatingsService } from "../ratingsService";
+import { createTitleIdentity } from "../lib/ratings";
+import type { RatingsService } from "../services/ratingsService";
 import type { ExternalRating, Movie, RatingsMediaType, Series } from "../types";
 
 type RatingsState =

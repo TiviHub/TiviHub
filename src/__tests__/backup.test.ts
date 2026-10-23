@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decryptBackup, encryptBackup } from "../backup";
+import { decryptBackup, encryptBackup } from "../services/backup";
 import type { UserDataSnapshot } from "../types";
 
 const snapshot: UserDataSnapshot = {

@@ -1,9 +1,9 @@
 import { ProgressIndicator } from "./ProgressIndicator";
 import { CardSkeletons, RowSkeletons, Skeleton } from "./Skeleton";
 import { ExternalRatingsPanel } from "./ExternalRatings";
-import type { RatingsService } from "../ratingsService";
+import type { RatingsService } from "../services/ratingsService";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
-import { isAdultContent } from "../adultContent";
+import { isAdultContent } from "../lib/adultContent";
 import type {
   ContentType,
   EpgProgram,
@@ -20,10 +20,10 @@ import {
   canDownloadMedia,
   downloadIdFor,
   type DownloadableMedia,
-} from "../downloads";
-import { rankLocalCatalogByPopularity } from "../catalogPopularity";
-import type { PopularCatalogService } from "../popularCatalogService";
-import { sortCatalogItems, topCatalogItems, type CatalogSort } from "../catalogSorting";
+} from "../services/downloads";
+import { rankLocalCatalogByPopularity } from "../lib/catalogPopularity";
+import type { PopularCatalogService } from "../services/popularCatalogService";
+import { sortCatalogItems, topCatalogItems, type CatalogSort } from "../lib/catalogSorting";
 import { CustomSelect, Icon, type CustomSelectOption } from "./common";
 import { HomeEmptyState } from "./HomeEmptyState";
 import { NoSourceEmptyState } from "./NoSourceEmptyState";

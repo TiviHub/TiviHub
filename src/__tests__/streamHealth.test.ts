@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkStreamAvailability, checkStreamGroupAvailability, type StreamHealthTarget } from "../streamHealth";
+import { checkStreamAvailability, checkStreamGroupAvailability, type StreamHealthTarget } from "../services/streamHealth";
 
 const streamUrl = "https://provider.example/live/1.m3u8";
 const channels: StreamHealthTarget[] = Array.from({ length: 5 }, (_, index) => ({

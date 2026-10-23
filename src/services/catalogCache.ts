@@ -1,4 +1,4 @@
-import type { Playlist } from "./types";
+import type { Playlist } from "../types";
 
 export const CATALOG_REFRESH_INTERVAL = 24 * 60 * 60 * 1000;
 

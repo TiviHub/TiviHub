@@ -1,4 +1,4 @@
-import type { EpgProgram } from "./types";
+import type { EpgProgram } from "../types";
 
 const HALF_HOUR_MILLIS = 30 * 60 * 1000;
 

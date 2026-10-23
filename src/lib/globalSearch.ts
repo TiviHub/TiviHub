@@ -1,5 +1,5 @@
 import { isAdultContent } from "./adultContent";
-import type { LiveChannel, Movie, Series } from "./types";
+import type { LiveChannel, Movie, Series } from "../types";
 
 export type SearchSection = "Home" | "Live TV" | "TV Guide" | "Movies" | "Series" | "Library" | "Downloads" | "Settings";
 export type GlobalSearchCommand =

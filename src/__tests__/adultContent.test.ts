@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAdultContent } from "../adultContent";
+import { isAdultContent } from "../lib/adultContent";
 
 describe("adult content detection", () => {
   it("matches adult keywords in titles and category labels", () => {

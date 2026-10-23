@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchMdblistRatings, MdblistError, parseMdblistRatings, type MdblistTransport } from "../providers/mdblist";
-import { createTitleIdentity } from "../ratings";
-import type { MdblistRateLimiter } from "../mdblistRateLimit";
+import { createTitleIdentity } from "../lib/ratings";
+import type { MdblistRateLimiter } from "../lib/mdblistRateLimit";
 
 const SECRET = "test-key-123";
 const noRateLimit: MdblistRateLimiter = {

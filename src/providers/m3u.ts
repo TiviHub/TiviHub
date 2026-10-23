@@ -1,6 +1,6 @@
 import type { DrmSystem, Episode, LiveChannel, Movie, Series } from "../types";
-import { catchupFromAttributes } from "../catchup";
-import { recordDiagnosticFailure } from "../diagnosticLog";
+import { catchupFromAttributes } from "../lib/catchup";
+import { recordDiagnosticFailure } from "../lib/diagnosticLog";
 import { readResponseText, validateHttpsUrl } from "./http";
 import { providerFetch } from "./transport";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keepM3uIds } from "../m3uIds";
+import { keepM3uIds } from "../lib/m3uIds";
 import { parseM3uCatalog } from "../providers/m3u";
 
 const context = { id: "p", name: "P" };

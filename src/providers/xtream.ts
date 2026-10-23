@@ -1,4 +1,4 @@
-import { normalizeImdbId, normalizeTmdbId } from "../ratings";
+import { normalizeImdbId, normalizeTmdbId } from "../lib/ratings";
 import type {
   Episode,
   EpgProgram,
@@ -7,8 +7,8 @@ import type {
   Playlist,
   Series,
 } from "../types";
-import { recordDiagnosticFailure } from "../diagnosticLog";
-import { formatServerTime } from "../serverTime";
+import { recordDiagnosticFailure } from "../lib/diagnosticLog";
+import { formatServerTime } from "../lib/serverTime";
 import { readResponseText, validateHttpsUrl } from "./http";
 import { providerFetch } from "./transport";
 

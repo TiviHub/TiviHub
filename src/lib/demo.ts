@@ -1,5 +1,5 @@
-import demoPlaylistContent from "./fixtures/demo.m3u?raw";
-import type { Playlist } from "./types";
+import demoPlaylistContent from "../fixtures/demo.m3u?raw";
+import type { Playlist } from "../types";
 
 export const DEMO_PLAYLIST_ID = "tivihub-demo";
 export const DEMO_PLAYLIST_CONTENT = demoPlaylistContent;

@@ -1,6 +1,6 @@
-import { normalizeImdbId, normalizeTmdbId } from "../ratings";
-import { MdblistError } from "../mdblistError";
-import { mdblistRateLimiter, type MdblistRateLimiter } from "../mdblistRateLimit";
+import { normalizeImdbId, normalizeTmdbId } from "../lib/ratings";
+import { MdblistError } from "../lib/mdblistError";
+import { mdblistRateLimiter, type MdblistRateLimiter } from "../lib/mdblistRateLimit";
 import type { MdblistPopularItem, RatingsMediaType } from "../types";
 
 export type MdblistCatalogTransport = (url: string) => Promise<Response>;

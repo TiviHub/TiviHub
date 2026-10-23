@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   getCatalogImportLogSnapshot,
   recordCatalogImportSummary,
-} from "../catalogImportLog";
+} from "../lib/catalogImportLog";
 
 beforeEach(() => {
   window.localStorage.clear();

@@ -1,6 +1,6 @@
-import { recordDiagnosticFailure } from "../diagnosticLog";
+import { recordDiagnosticFailure } from "../lib/diagnosticLog";
 import type { Episode, EpgProgram, LiveChannel, Movie, Playlist, Series } from "../types";
-import { normalizeImdbId, normalizeTmdbId } from "../ratings";
+import { normalizeImdbId, normalizeTmdbId } from "../lib/ratings";
 import { readResponseText } from "./http";
 import { providerFetch } from "./transport";
 import { catalogYear } from "./xtream";

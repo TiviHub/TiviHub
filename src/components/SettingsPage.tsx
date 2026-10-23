@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { decryptBackup, encryptBackup } from "../backup";
-import { formatCatalogChangeSummary } from "../catalogRefresh";
+import { decryptBackup, encryptBackup } from "../services/backup";
+import { formatCatalogChangeSummary } from "../services/catalogRefresh";
 import { createSnapshot, restoreSnapshot } from "../storage/database";
-import { clearSubtitleCache, countSavedSubtitles } from "../subtitleService";
+import { clearSubtitleCache, countSavedSubtitles } from "../services/subtitleService";
 import type { Playlist, UserDataSnapshot } from "../types";
 import { Icon } from "./common";
 

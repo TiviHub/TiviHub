@@ -1,5 +1,5 @@
 import { normalizeCatalogTitle, normalizeImdbId, normalizeTitle, normalizeTmdbId } from "./ratings";
-import type { MdblistPopularItem, Movie, Series } from "./types";
+import type { MdblistPopularItem, Movie, Series } from "../types";
 
 export function rankLocalCatalogByPopularity<T extends Movie | Series>(
   localItems: T[],

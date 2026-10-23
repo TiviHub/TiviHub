@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../App";
-import { getCatalogImportLogSnapshot } from "../catalogImportLog";
+import { getCatalogImportLogSnapshot } from "../lib/catalogImportLog";
 
 beforeEach(() => {
   vi.stubGlobal("crypto", webcrypto);

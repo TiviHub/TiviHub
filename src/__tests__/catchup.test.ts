@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { canReplay, canStartOver, catchupFromAttributes, replayUrl } from "../catchup";
+import { canReplay, canStartOver, catchupFromAttributes, replayUrl } from "../lib/catchup";
 import { parseM3uCatalog } from "../providers/m3u";
-import { formatServerTime } from "../serverTime";
+import { formatServerTime } from "../lib/serverTime";
 import type { EpgProgram, LiveChannel, Playlist } from "../types";
 
 const HOUR = 3_600_000;
