@@ -82,7 +82,7 @@ import { createPopularCatalogService } from "./popularCatalogService";
 import { configureMdblistRateLimiter } from "./mdblistRateLimit";
 import { CatalogPage, LibraryPage, MovieDetail, playableChannel, SeriesDetail } from "./components/ContentPages";
 import { Icon, TooltipLayer, type IconName } from "./components/common";
-import { DesktopWindowControls } from "./components/DesktopWindowControls";
+import { MobileNav, Sidebar, Topbar } from "./components/AppShell";
 import { DownloadsPage } from "./components/DownloadsPage";
 import { HomeEmptyState } from "./components/HomeEmptyState";
 import { LiveGuide } from "./components/LiveGuide";
@@ -166,17 +166,6 @@ configureMdblistRateLimiter({
   put: saveMdblistRateLimitState,
 });
 const ASSET_BASE_URL = import.meta.env.BASE_URL;
-
-const sections: { label: Section; icon: IconName }[] = [
-  { label: "Home", icon: "home" },
-  { label: "Live TV", icon: "live_tv" },
-  { label: "TV Guide", icon: "schedule" },
-  { label: "Movies", icon: "theaters" },
-  { label: "Series", icon: "tv" },
-  { label: "Library", icon: "bookmark_border" },
-  { label: "Downloads", icon: "download" },
-  { label: "Settings", icon: "settings" },
-];
 
 function readThemePreference(): ThemePreference {
   try {
@@ -1343,132 +1332,29 @@ function App() {
       inert={!ready}
     >
       <TooltipLayer />
-      <aside
-        className="sidebar"
-        aria-label="Primary navigation"
+      <Sidebar
+        activeDownloads={activeDownloadIds.size > 0}
+        collapsed={sidebarCollapsed}
         inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}
-      >
-        <div className="sidebar-header">
-          <button aria-label="TiviHub home" className="brand" onClick={() => navigateToSection("Home")} type="button">
-            <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
-            <span>TiviHub</span>
-          </button>
-        </div>
-        <nav className="desktop-nav" id="desktop-navigation">
-          {sections.slice(0, -1).map((item) => (
-            <NavItem
-              key={item.label}
-              icon={item.icon}
-              label={item.label}
-              active={section === item.label}
-              downloading={item.label === "Downloads" && activeDownloadIds.size > 0}
-              onClick={() => navigateToSection(item.label)}
-            />
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <button
-            aria-current={section === "Settings" ? "page" : undefined}
-            aria-label="Open settings"
-            className={`nav-item sidebar-settings-button${section === "Settings" ? " active" : ""}`}
-            onClick={() => navigateToSection("Settings")}
-            data-tooltip="Settings"
-            type="button"
-          >
-            <Icon name="settings" />
-            <span>Settings</span>
-          </button>
-          <div className="sidebar-footer-controls">
-            <button
-              aria-controls="desktop-navigation"
-              aria-expanded={!sidebarCollapsed}
-              aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
-              className="sidebar-collapse sidebar-collapse-footer"
-              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-              data-tooltip={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
-              type="button"
-            >
-              <Icon name={sidebarCollapsed ? "chevron_right" : "chevron_left"} />
-            </button>
-          </div>
-        </div>
-      </aside>
+        onNavigate={navigateToSection}
+        onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
+        section={section}
+      />
 
       <main className="main-content" inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}>
-        <header className="topbar">
-          <button className="mobile-brand" onClick={() => navigateToSection("Home")} type="button">
-            <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
-            <span>TiviHub</span>
-          </button>
-          <button
-            aria-keyshortcuts="Control+K Meta+K"
-            aria-label="Search your library"
-            className="topbar-global-search topbar-desktop-only global-search-button"
-            disabled={!canOpenGlobalSearch}
-            onClick={openGlobalSearch}
-            type="button"
-          >
-            <Icon name="search" />
-            <span>Search in your library…</span>
-            <kbd>Ctrl K</kbd>
-          </button>
-          <div aria-hidden="true" className="titlebar-drag-region" data-tauri-drag-region />
-          <div className="topbar-desktop-actions topbar-desktop-only">
-            <button
-              aria-label="Add playlist"
-              className="icon-button topbar-action-button"
-              disabled={refreshing || sourceDialogOpen}
-              onClick={openAddSource}
-              data-tooltip="Add playlist"
-              type="button"
-            >
-              <Icon name="add" />
-            </button>
-            <button
-              aria-label="Refresh playlist"
-              className="icon-button topbar-action-button refresh-button"
-              disabled={!activeSource || refreshing || sourceDialogOpen}
-              onClick={() => void refreshCurrentSource()}
-              data-tooltip="Refresh playlist"
-              type="button"
-            >
-              <Icon name="refresh" />
-            </button>
-          </div>
-          <div className="topbar-actions topbar-mobile-only">
-            {activeSourceExpired && (
-              <button
-                aria-label={`Playlist expired. Edit ${activeSource?.name ?? "playlist"}`}
-                className="icon-button topbar-expiry-warning topbar-expiry-warning-mobile"
-                data-tooltip="Playlist expired. Edit playlist"
-                onClick={openExpiredPlaylist}
-                type="button"
-              >
-                <Icon name="error_outline" />
-              </button>
-            )}
-            <button
-              aria-keyshortcuts="Control+K Meta+K"
-              aria-label="Search your library"
-              className="icon-button global-search-button"
-              disabled={!canOpenGlobalSearch}
-              onClick={openGlobalSearch}
-              type="button"
-            >
-              <Icon name="search" />
-            </button>
-            <button
-              aria-label="Open settings"
-              aria-current={section === "Settings" ? "page" : undefined}
-              className={`icon-button settings-shortcut${section === "Settings" ? " selected" : ""}`}
-              onClick={() => navigateToSection("Settings")}
-              type="button"
-            >
-              <Icon name="settings" />
-            </button>
-          </div>
-          <DesktopWindowControls />
-        </header>
+        <Topbar
+          activeSourceExpired={activeSourceExpired}
+          activeSourceName={activeSource?.name}
+          canOpenGlobalSearch={canOpenGlobalSearch}
+          canRefresh={Boolean(activeSource) && !refreshing && !sourceDialogOpen}
+          canAdd={!refreshing && !sourceDialogOpen}
+          onAddSource={openAddSource}
+          onNavigate={navigateToSection}
+          onOpenExpiredPlaylist={openExpiredPlaylist}
+          onOpenGlobalSearch={openGlobalSearch}
+          onRefresh={() => void refreshCurrentSource()}
+          section={section}
+        />
         {activeSourceExpired && (
           <button
             className="topbar-expiry-warning topbar-expiry-floating"
@@ -1808,23 +1694,12 @@ function App() {
         </div>
       )}
 
-      <nav
-        className="mobile-nav"
-        aria-label="Primary navigation"
+      <MobileNav
+        activeDownloads={activeDownloadIds.size > 0}
         inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}
-      >
-        {sections.filter((item) => item.label !== "Settings").map((item) => (
-          <NavItem
-        key={item.label}
-        icon={item.icon}
-        label={item.label}
-        active={section === item.label}
-        downloading={item.label === "Downloads" && activeDownloadIds.size > 0}
-        onClick={() => navigateToSection(item.label)}
-        compact
-          />
-        ))}
-      </nav>
+        onNavigate={navigateToSection}
+        section={section}
+      />
 
       {sourceDialogOpen && (
         <div className="refresh-dialog-host" inert={refreshing || globalSearchOpen || Boolean(deletingSource)}>
@@ -1906,34 +1781,6 @@ function App() {
       />
     )}
     </>
-  );
-}
-
-function NavItem({
-  icon,
-  label,
-  active,
-  downloading = false,
-  onClick,
-  compact = false,
-}: {
-  icon: IconName;
-  label: Section;
-  active: boolean;
-  downloading?: boolean;
-  onClick: () => void;
-  compact?: boolean;
-}) {
-  return (
-    <button
-      aria-current={active ? "page" : undefined}
-      className={`nav-item${active ? " active" : ""}${compact ? " compact" : ""}${downloading ? " is-downloading" : ""}`}
-      onClick={onClick}
-      type="button"
-    >
-      <Icon name={icon} />
-      <span>{label === "Live TV" && compact ? "Live" : label}</span>
-    </button>
   );
 }
 
