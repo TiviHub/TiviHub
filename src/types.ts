@@ -51,6 +51,8 @@ export interface LiveChannel {
   streamUrl: string;
   logoUrl?: string;
   tvgId?: string;
+  /** An audio station: played without a video picture and listed under the Radio filter. */
+  radio?: boolean;
   /** Present when the provider keeps a recording of this channel for replay. */
   catchup?: ChannelCatchup;
   drmLicenseUrl?: string;
@@ -194,6 +196,7 @@ export interface PlayableItem {
   drmSystem?: DrmSystem;
   drmCertificateUrl?: string;
   live: boolean;
+  radio?: boolean;
   /** A recorded programme of a live channel: seekable, but not saved to the library. */
   replay?: boolean;
   offline?: boolean;

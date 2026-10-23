@@ -62,6 +62,10 @@ function titleOf(item: CatalogItem): string {
   return item.name;
 }
 
+// Not a real group name: picks every channel marked as a radio station.
+const RADIO_FILTER = "@@radio";
+const categoryLabel = (value: string) => value === RADIO_FILTER ? "Radio" : value;
+
 function categoryOf(item: CatalogItem): string {
   return "group" in item ? item.group : item.category || "Uncategorized";
 }
@@ -81,6 +85,7 @@ export function playableChannel(channel: LiveChannel): PlayableItem {
     drmLicenseUrl: channel.drmLicenseUrl,
     drmSystem: channel.drmSystem,
     live: true,
+    radio: channel.radio,
   };
 }
 
@@ -249,7 +254,7 @@ export function CatalogPage({
     return () => { active = false; };
   }, [deferredQuery, featuredMediaType, items.length, mdblistApiKey, popularCatalogService]);
   const selectedGroupChannels = section === "Live TV" && category !== "All"
-    ? channels.filter((channel) => channel.group === category)
+    ? channels.filter((channel) => category === RADIO_FILTER ? channel.radio : channel.group === category)
     : [];
   const favoriteIds = useMemo(() => new Set(favorites.map((favorite) => favorite.contentId)), [favorites]);
   const liveFavorites = useMemo(() => {
@@ -288,10 +293,11 @@ export function CatalogPage({
     const names = new Set(items.map(categoryOf).filter((value) => value !== "Uncategorized"));
     return [
       "All",
+      ...(section === "Live TV" && channels.some((channel) => channel.radio) ? [RADIO_FILTER] : []),
       ...[...names].sort((left, right) =>
         left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" })),
     ];
-  }, [items]);
+  }, [channels, items, section]);
   const sortedItems = useMemo(() => section === "Movies"
     ? sortCatalogItems(movies, sort)
     : section === "Series"
@@ -301,15 +307,21 @@ export function CatalogPage({
   const searchableItems = useMemo(
     () => sortedItems.map((item) => {
       const categoryName = categoryOf(item);
-      return { item, category: categoryName, searchText: `${item.name} ${categoryName}`.toLowerCase() };
+      return {
+        item,
+        category: categoryName,
+        radio: "group" in item && Boolean(item.radio),
+        searchText: `${item.name} ${categoryName}`.toLowerCase(),
+      };
     }),
     [sortedItems],
   );
   const filtered = useMemo(() => {
     const normalizedQuery = deferredQuery.trim().toLowerCase();
     return searchableItems
-      .filter(({ category: itemCategory, searchText }) =>
-        searchText.includes(normalizedQuery) && (category === "All" || itemCategory === category),
+      .filter(({ category: itemCategory, radio, searchText }) =>
+        searchText.includes(normalizedQuery) &&
+        (category === "All" || (category === RADIO_FILTER ? radio : itemCategory === category)),
       )
       .map(({ item }) => item);
   }, [category, deferredQuery, searchableItems]);
@@ -396,7 +408,7 @@ export function CatalogPage({
           <h1>{section}</h1>
           <p>
             {filtersActive
-              ? `${filtered.length.toLocaleString()} of ${items.length.toLocaleString()} ${section === "Live TV" ? "channels" : section.toLowerCase()}${category !== "All" ? ` in ${category}` : ""}`
+              ? `${filtered.length.toLocaleString()} of ${items.length.toLocaleString()} ${section === "Live TV" ? "channels" : section.toLowerCase()}${category !== "All" ? ` in ${categoryLabel(category)}` : ""}`
               : `${items.length.toLocaleString()} ${section === "Live TV" ? "channels" : section.toLowerCase()} in this source`}
             {filtersActive && (
               <>
@@ -464,7 +476,7 @@ export function CatalogPage({
                 setCategory(value);
                 setPage(1);
               }}
-              options={categories.map((value) => ({ label: value, value }))}
+              options={categories.map((value) => ({ label: categoryLabel(value), value }))}
               value={category}
               variant="embedded"
             />
@@ -563,7 +575,7 @@ export function CatalogPage({
                       <span className="live-channel-list-art">
                         {channel.logoUrl ? (
                           <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={channel.logoUrl} />
-                        ) : <Icon name="live_tv" />}
+                        ) : <Icon name={channel.radio ? "radio" : "live_tv"} />}
                       </span>
                       <span className="live-channel-list-copy">
                         <strong>{channel.name}</strong>

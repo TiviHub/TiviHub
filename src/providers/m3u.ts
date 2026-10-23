@@ -94,6 +94,14 @@ function episodeDetails(entry: PendingEntry, index: number): {
   };
 }
 
+// `radio="true"` marks a station; without the attribute a group named "Radio" does the same. `radio="false"` opts out.
+function isRadio(attributes: Record<string, string>, group: string): boolean {
+  const declared = attributes.radio?.trim().toLowerCase();
+  if (declared === "true") return true;
+  if (declared === "false") return false;
+  return /\bradio\b/i.test(group);
+}
+
 function itemKind(group: string): "live" | "movie" | "series" {
   if (/\b(series|tv shows|tv-show|tvshows|shows)\b/i.test(group)) return "series";
   if (/\b(movie|movies|film|films|vod)\b/i.test(group)) return "movie";
@@ -217,6 +225,7 @@ function createM3uCatalogParser(context: PlaylistContext) {
         streamUrl,
         logoUrl,
         tvgId: metadata.attributes["tvg-id"] || undefined,
+        ...(isRadio(metadata.attributes, group) ? { radio: true } : {}),
         catchup: catchupFromAttributes(metadata.attributes),
         drmLicenseUrl,
         drmSystem: context.drmSystem,

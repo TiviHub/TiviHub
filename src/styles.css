@@ -7811,3 +7811,36 @@ button.icon-button.is-favorite {
   font-size: 0.8rem;
   font-weight: 400;
 }
+
+/* Radio: a station plays as audio, so the video box shrinks to its control bar and the logo takes its place. */
+.playback-dialog.is-radio > video,
+.playback-dialog.playback-inline.is-radio > video,
+.playback-dialog.playback-inline.playback-mini.is-radio > video {
+  height: 56px;
+  max-height: 56px;
+  aspect-ratio: auto;
+  background: var(--surface-raised);
+}
+
+.playback-radio-art {
+  display: grid;
+  justify-items: center;
+  padding: 22px 0 10px;
+}
+
+.playback-radio-art img,
+.playback-radio-art > .material-icons {
+  display: grid;
+  width: 132px;
+  height: 132px;
+  place-items: center;
+  border: 1px solid var(--outline-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--muted);
+  object-fit: contain;
+}
+
+.playback-radio-art > .material-icons {
+  font-size: 27px;
+}

@@ -502,6 +502,15 @@ export function StyleGuide() {
             </button>
           </div>
         </Block>
+        <Block title="playback-dialog.is-radio" note="A station plays as audio: the logo (or the radio icon) replaces the picture and the video box shrinks to its control bar.">
+          <div className="playback-dialog playback-inline is-radio" style={{ maxWidth: 520, position: "static" }}>
+            <header className="playback-header">
+              <div><h2><span className="playback-badge">Radio</span>Jazz FM</h2></div>
+            </header>
+            <div className="playback-radio-art"><Icon name="radio" /></div>
+            <video controls />
+          </div>
+        </Block>
         </div>
       </section>
 

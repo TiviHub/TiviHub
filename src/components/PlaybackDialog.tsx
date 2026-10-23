@@ -902,14 +902,14 @@ export function PlaybackDialog({
       <section
         aria-labelledby="playback-title"
         aria-modal={inline ? undefined : true}
-        className={`playback-dialog${inline ? " playback-inline" : ""}${mini ? " playback-mini" : ""}`}
+        className={`playback-dialog${inline ? " playback-inline" : ""}${mini ? " playback-mini" : ""}${item.radio ? " is-radio" : ""}`}
         ref={dialogRef}
         role={inline ? "region" : "dialog"}
       >
         <header className="playback-header">
           <div>
             <h2 id="playback-title">
-              {item.live && <span className="playback-badge">Live</span>}
+              {item.live && <span className="playback-badge">{item.radio ? "Radio" : "Live"}</span>}
               {item.title}
             </h2>
             <p aria-live="polite" className="playback-status" role="status">
@@ -939,6 +939,13 @@ export function PlaybackDialog({
             </button>
           </div>
         </header>
+        {item.radio && !mini && (
+          <div className="playback-radio-art">
+            {item.artworkUrl ? (
+              <img alt="" onError={(event) => { event.currentTarget.hidden = true; }} src={item.artworkUrl} />
+            ) : <Icon name="radio" />}
+          </div>
+        )}
         <video
           autoPlay
           controls
