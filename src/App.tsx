@@ -5,6 +5,7 @@ import webPackage from "../package.json";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useDownloads } from "./hooks/useDownloads";
 import { useLocalData } from "./hooks/useLocalData";
+import { usePlayback } from "./hooks/usePlayback";
 import { useLibrary } from "./hooks/useLibrary";
 import { useGlobalSearch } from "./hooks/useGlobalSearch";
 import { useSources } from "./hooks/useSources";
@@ -22,7 +23,6 @@ import {
 } from "./providers/xtream";
 import {
   getEpisodes,
-  getLibraryItems,
   getMdblistApiKey,
   getMdblistPopularCacheEntry,
   getMdblistRateLimitState,
@@ -32,7 +32,6 @@ import {
   saveMdblistRateLimitState,
   saveRatingsCacheEntry,
   saveEpisodes,
-  saveLibraryItem,
   saveOpenSubtitlesApiKey,
 } from "./storage/database";
 import type {
@@ -166,15 +165,8 @@ function App() {
   const [guideLoadCount, setGuideLoadCount] = useState(0);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
-  const [streamHealthRequest, setStreamHealthRequest] = useState<{
-    channels: LiveChannel[];
-    groupName: string;
-  } | null>(null);
   const [episodeLoading, setEpisodeLoading] = useState(false);
   const [episodeError, setEpisodeError] = useState<string | null>(null);
-  const [playableItem, setPlayableItem] = useState<PlayableItem | null>(null);
-  const [inlineLivePlayback, setInlineLivePlayback] = useState(false);
-  const [resumePosition, setResumePosition] = useState(0);
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Playlist | undefined>();
   const [refreshing, setRefreshing] = useState(false);
@@ -196,6 +188,10 @@ function App() {
     sources, activeSourceId, channels, movies, series, epg, setEpg, subtitleApiKey, setSubtitleApiKey,
     mdblistApiKey, setMdblistApiKey, ready, reloadLocalData,
   } = useLocalData({ notify, setFavorites, setLibrary });
+  const {
+    playableItem, inlineLivePlayback, resumePosition, streamHealthRequest, setStreamHealthRequest,
+    openPlayback, closePlayback, recordWatchedChannel,
+  } = usePlayback({ notify, setLibrary, sources });
   const {
     downloads, downloadTasks, downloadDirectoryPath, downloadsLoaded, downloadedIds, activeDownloadIds,
     startDownload, cancelDownload, removeFailedDownload, deleteDownload, clearDownloads,
@@ -454,22 +450,6 @@ function App() {
     }
   }
 
-  // Offline blob URLs are revoked only when the player leaves; the player effect re-runs on seek/resume.
-  function revokeOfflineUrl() {
-    if (playableItem?.offline) URL.revokeObjectURL(playableItem.streamUrl);
-  }
-
-  function openPlayback(item: PlayableItem, position = 0) {
-    revokeOfflineUrl();
-    setResumePosition(position);
-    setInlineLivePlayback(item.live);
-    const source = sources.find((entry) => entry.id === item.playlistId);
-    setPlayableItem({
-      ...item,
-      drmCertificateUrl: item.drmCertificateUrl || source?.drmCertificateUrl,
-    });
-  }
-
   function navigateToSection(next: Section) {
     setSection(next);
   }
@@ -504,36 +484,6 @@ function App() {
   }
 
   navigationActionRef.current = navigateAppHistory;
-
-  function closePlayback() {
-    revokeOfflineUrl();
-    setPlayableItem(null);
-    setInlineLivePlayback(false);
-  }
-
-  async function recordWatchedChannel(item: PlayableItem) {
-    if (!item.live) return;
-    try {
-      await saveLibraryItem({
-        id: `${item.playlistId}:LIVE:${item.id}`,
-        contentId: item.id,
-        contentType: "LIVE",
-        playlistId: item.playlistId,
-        title: item.title,
-        streamUrl: item.streamUrl,
-        artworkUrl: item.artworkUrl,
-        drmLicenseUrl: item.drmLicenseUrl,
-        drmSystem: item.drmSystem,
-        status: "WATCHED",
-        positionMillis: 0,
-        durationMillis: 0,
-        updatedAt: Date.now(),
-      });
-      setLibrary(await getLibraryItems());
-    } catch (cause) {
-      notify(cause instanceof Error ? cause.message : `Could not save ${item.title} to recently watched channels.`, "error");
-    }
-  }
 
   const adultContentIds = {
     LIVE: new Set(channels.filter((item) => isAdultContent(item.name, item.group)).map((item) => item.id)),
