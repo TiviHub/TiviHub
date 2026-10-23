@@ -107,6 +107,9 @@ export interface Series {
   imdbId?: string;
   tmdbId?: string;
   addedAtMillis?: number;
+  /** Stalker portals: the command and episode numbers kept with a series listed in the video library. */
+  stalkerCmd?: string;
+  stalkerEpisodes?: number[];
 }
 
 export interface Episode {

@@ -1,5 +1,5 @@
 import { recordDiagnosticFailure } from "../diagnosticLog";
-import type { EpgProgram, LiveChannel, Movie, Playlist } from "../types";
+import type { Episode, EpgProgram, LiveChannel, Movie, Playlist, Series } from "../types";
 import { normalizeImdbId, normalizeTmdbId } from "../ratings";
 import { readResponseText } from "./http";
 import { providerFetch } from "./transport";
@@ -42,8 +42,10 @@ export function stalkerApiUrl(portalUrl: string): string {
   return url.toString();
 }
 
-export function stalkerLink(cmd: string, type: LinkType): string {
-  return `http://${STALKER_LINK_HOST}/link?type=${type}&cmd=${encodeURIComponent(cmd)}`;
+/** `series` is the episode number for portals that keep every episode of a season under one command. */
+export function stalkerLink(cmd: string, type: LinkType, series?: number): string {
+  const episode = series === undefined ? "" : `&series=${series}`;
+  return `http://${STALKER_LINK_HOST}/link?type=${type}&cmd=${encodeURIComponent(cmd)}${episode}`;
 }
 
 export function isStalkerLink(url: string): boolean {
@@ -54,12 +56,12 @@ export function isStalkerLink(url: string): boolean {
   }
 }
 
-function parseLink(url: string): { type: LinkType; cmd: string } | null {
+function parseLink(url: string): { type: LinkType; cmd: string; series: string } | null {
   try {
     const parsed = new URL(url);
     const cmd = parsed.searchParams.get("cmd");
     return parsed.hostname === STALKER_LINK_HOST && cmd
-      ? { type: parsed.searchParams.get("type") === "vod" ? "vod" : "itv", cmd }
+      ? { type: parsed.searchParams.get("type") === "vod" ? "vod" : "itv", cmd, series: parsed.searchParams.get("series") ?? "" }
       : null;
   } catch {
     return null;
@@ -231,7 +233,7 @@ function absolute(playlist: Playlist, value: unknown): string | undefined {
 export interface StalkerCatalog {
   channels: LiveChannel[];
   movies: Movie[];
-  series: never[];
+  series: Series[];
 }
 
 async function loadChannels(playlist: Playlist, signal?: AbortSignal): Promise<LiveChannel[]> {
@@ -261,76 +263,247 @@ async function loadChannels(playlist: Playlist, signal?: AbortSignal): Promise<L
   });
 }
 
-async function loadMovies(playlist: Playlist, signal?: AbortSignal): Promise<Movie[]> {
-  const categories = records(await call(playlist, { type: "vod", action: "get_categories" }, signal))
-    .flatMap((category) => {
+interface Category {
+  id: string;
+  title: string;
+}
+
+/** The categories of the video library or of the series library; a portal without one answers with an error or nothing. */
+async function categoriesOf(playlist: Playlist, type: "vod" | "series", signal?: AbortSignal): Promise<Category[]> {
+  try {
+    return records(await call(playlist, { type, action: "get_categories" }, signal)).flatMap((category) => {
       const id = stringValue(category.id);
-      return id && id !== "*" ? [{ id, title: stringValue(category.title) ?? "Movies" }] : [];
+      return id && id !== "*" ? [{ id, title: stringValue(category.title) ?? (type === "vod" ? "Movies" : "Series") }] : [];
     });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    return [];
+  }
+}
+
+/** Every page of one category, at most `budget.left` pages in total across all categories. */
+async function listCategory(
+  playlist: Playlist,
+  type: "vod" | "series",
+  category: Category,
+  budget: { left: number },
+  signal?: AbortSignal,
+): Promise<Payload[]> {
+  const params = (page: number) => ({ type, action: "get_ordered_list", category: category.id, p: String(page), sortby: "added" });
+  const first = await call(playlist, params(1), signal) as Payload | null;
+  const items = records(first?.data);
+  const total = numberValue(first?.total_items) ?? 0;
+  const perPage = numberValue(first?.max_page_items) ?? items.length;
+  const pages = perPage > 0 ? Math.ceil(total / perPage) : 1;
+  const remaining = Array.from({ length: Math.max(0, Math.min(pages, budget.left) - 1) }, (_, index) => index + 2);
+  budget.left -= 1 + remaining.length;
+  for (let start = 0; start < remaining.length; start += VOD_PAGE_CONCURRENCY) {
+    const batch = remaining.slice(start, start + VOD_PAGE_CONCURRENCY);
+    const results = await Promise.all(batch.map((page) => call(playlist, params(page), signal) as Promise<Payload | null>));
+    for (const result of results) items.push(...records(result?.data));
+  }
+  return items;
+}
+
+/** Episode numbers listed inline on an item, as older portals do (`series: [1, 2, 3]`). */
+function inlineEpisodes(item: Payload): number[] {
+  return Array.isArray(item.series)
+    ? item.series.flatMap((value) => {
+      const number = numberValue(value);
+      return number !== undefined && number > 0 ? [number] : [];
+    })
+    : [];
+}
+
+function movieFrom(playlist: Playlist, item: Payload, category: Category, id: string, name: string, cmd: string): Movie {
+  // Ratings and the Top 5 lists match a title by id or by name and year, so a missing year is filled in from the name.
+  const year = catalogYear(item.year, name);
+  const rating = numberValue(item.rating_imdb) ?? numberValue(item.rating_kinopoisk);
+  // Portals keep local time as "2021-05-01 12:34:56"; the "Recently added" list sorts on it.
+  const added = Date.parse(String(stringValue(item.added) ?? "").replace(" ", "T"));
+  return {
+    id: `${playlist.id}:movie:${id}`,
+    playlistId: playlist.id,
+    providerId: id,
+    name,
+    streamUrl: stalkerLink(cmd, "vod"),
+    posterUrl: absolute(playlist, item.screenshot_uri),
+    overview: stringValue(item.description),
+    year,
+    rating: rating && rating > 0 ? rating : undefined,
+    imdbId: normalizeImdbId(item.imdb_id ?? item.imdb ?? item.imdbid),
+    tmdbId: normalizeTmdbId(item.tmdb_id ?? item.tmdb),
+    addedAtMillis: Number.isFinite(added) ? added : undefined,
+    categoryId: category.id,
+    category: category.title,
+  };
+}
+
+function seriesFrom(playlist: Playlist, item: Payload, category: Category, providerId: string, name: string): Series {
+  const movie = movieFrom(playlist, item, category, providerId, name, "");
+  return {
+    id: `${playlist.id}:series:${providerId}`,
+    playlistId: playlist.id,
+    providerId,
+    name,
+    posterUrl: movie.posterUrl,
+    overview: movie.overview,
+    seasons: 0,
+    categoryId: category.id,
+    category: category.title,
+    year: movie.year,
+    rating: movie.rating,
+    imdbId: movie.imdbId,
+    tmdbId: movie.tmdbId,
+    addedAtMillis: movie.addedAtMillis,
+  };
+}
+
+/**
+ * Movies and series. Portals keep series in one of two ways: in the video library as an item with a
+ * list of episode numbers, or in a library of their own with seasons and episodes opened one level at a time.
+ */
+async function loadVideoLibrary(playlist: Playlist, signal?: AbortSignal): Promise<{ movies: Movie[]; series: Series[] }> {
   const movies: Movie[] = [];
+  const series: Series[] = [];
   const seen = new Set<string>();
-  const add = (items: Payload[], categoryName: string, categoryId: string) => {
-    for (const item of items) {
+  const budget = { left: MAX_VOD_PAGES };
+
+  for (const category of await categoriesOf(playlist, "vod", signal)) {
+    if (budget.left <= 0) break;
+    for (const item of await listCategory(playlist, "vod", category, budget, signal)) {
       const id = stringValue(item.id);
       const name = stringValue(item.name);
       const cmd = stringValue(item.cmd);
-      // Series come as items with episode lists; only plain movies are listed for now.
-      const isSeries = (Array.isArray(item.series) && item.series.length > 0) || ["1", "true"].includes(String(item.is_series));
-      if (!id || !name || !cmd || isSeries || seen.has(id)) continue;
-      seen.add(id);
-      // Ratings and the Top 5 lists match a title by id or by name and year, so a missing year is filled in from the name.
-      const year = catalogYear(item.year, name);
-      const rating = numberValue(item.rating_imdb) ?? numberValue(item.rating_kinopoisk);
-      // Portals keep local time as "2021-05-01 12:34:56"; the "Recently added" list sorts on it.
-      const added = Date.parse(String(stringValue(item.added) ?? "").replace(" ", "T"));
-      movies.push({
-        id: `${playlist.id}:movie:${id}`,
-        playlistId: playlist.id,
-        providerId: id,
-        name,
-        streamUrl: stalkerLink(cmd, "vod"),
-        posterUrl: absolute(playlist, item.screenshot_uri),
-        overview: stringValue(item.description),
-        year,
-        rating: rating && rating > 0 ? rating : undefined,
-        imdbId: normalizeImdbId(item.imdb_id ?? item.imdb ?? item.imdbid),
-        tmdbId: normalizeTmdbId(item.tmdb_id ?? item.tmdb),
-        addedAtMillis: Number.isFinite(added) ? added : undefined,
-        categoryId,
-        category: categoryName,
-      });
+      if (!id || !name || !cmd || seen.has(`vod:${id}`)) continue;
+      seen.add(`vod:${id}`);
+      const episodes = inlineEpisodes(item);
+      if (episodes.length > 0 || ["1", "true"].includes(String(item.is_series))) {
+        series.push({ ...seriesFrom(playlist, item, category, `vod:${id}`, name), stalkerCmd: cmd, stalkerEpisodes: episodes });
+      } else {
+        movies.push(movieFrom(playlist, item, category, id, name, cmd));
+      }
     }
-  };
-
-  let pagesLeft = MAX_VOD_PAGES;
-  for (const category of categories) {
-    const first = await call(playlist, { type: "vod", action: "get_ordered_list", category: category.id, p: "1", sortby: "added" }, signal) as Payload | null;
-    add(records(first?.data), category.title, category.id);
-    const total = numberValue(first?.total_items) ?? 0;
-    const perPage = numberValue(first?.max_page_items) ?? records(first?.data).length;
-    const pages = perPage > 0 ? Math.ceil(total / perPage) : 1;
-    const remaining = Array.from({ length: Math.max(0, Math.min(pages, pagesLeft) - 1) }, (_, index) => index + 2);
-    pagesLeft -= 1 + remaining.length;
-    for (let start = 0; start < remaining.length; start += VOD_PAGE_CONCURRENCY) {
-      const batch = remaining.slice(start, start + VOD_PAGE_CONCURRENCY);
-      const results = await Promise.all(batch.map((page) =>
-        call(playlist, { type: "vod", action: "get_ordered_list", category: category.id, p: String(page), sortby: "added" }, signal) as Promise<Payload | null>));
-      for (const result of results) add(records(result?.data), category.title, category.id);
-    }
-    if (pagesLeft <= 0) break;
   }
-  return movies;
+
+  for (const category of await categoriesOf(playlist, "series", signal)) {
+    if (budget.left <= 0) break;
+    for (const item of await listCategory(playlist, "series", category, budget, signal)) {
+      const id = stringValue(item.id);
+      const name = stringValue(item.name);
+      if (!id || !name || seen.has(`series:${id}`)) continue;
+      seen.add(`series:${id}`);
+      series.push(seriesFrom(playlist, item, category, `series:${id}`, name));
+    }
+  }
+  return { movies, series };
 }
 
 export async function loadStalkerCatalog(playlist: Playlist, signal?: AbortSignal): Promise<StalkerCatalog> {
   const channels = await loadChannels(playlist, signal);
-  const movies = await loadMovies(playlist, signal).catch((error: unknown) => {
+  const library = await loadVideoLibrary(playlist, signal).catch((error: unknown) => {
     // Many portals only carry live TV; a missing video library must not fail the whole connection.
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    return [];
+    return { movies: [], series: [] };
   });
-  if (channels.length + movies.length === 0) throw new Error("The portal returned no channels or movies.");
-  return { channels, movies, series: [] };
+  if (channels.length + library.movies.length + library.series.length === 0) {
+    throw new Error("The portal returned no channels, movies or series.");
+  }
+  return { channels, ...library };
+}
+
+const SEASON_NAME = /season/i;
+const MAX_EPISODE_PAGES = 50;
+
+function digitsIn(value: unknown): number | undefined {
+  const match = stringValue(value)?.match(/\d+/);
+  return match ? Number(match[0]) : undefined;
+}
+
+/** One level of a series: its seasons, or the episodes of a season. */
+async function openSeriesLevel(
+  playlist: Playlist,
+  movieId: string,
+  seasonId: string,
+  signal?: AbortSignal,
+): Promise<Payload[]> {
+  const items: Payload[] = [];
+  for (let page = 1; page <= MAX_EPISODE_PAGES; page += 1) {
+    const response = await call(playlist, {
+      type: "series",
+      action: "get_ordered_list",
+      movie_id: movieId,
+      season_id: seasonId,
+      episode_id: "0",
+      p: String(page),
+    }, signal) as Payload | null;
+    const data = records(response?.data);
+    items.push(...data);
+    const total = numberValue(response?.total_items) ?? 0;
+    const perPage = numberValue(response?.max_page_items) ?? data.length;
+    if (data.length === 0 || perPage <= 0 || items.length >= total) break;
+  }
+  return items;
+}
+
+/** The episodes of a series, read when it is opened. */
+export async function loadStalkerEpisodes(playlist: Playlist, series: Series, signal?: AbortSignal): Promise<Episode[]> {
+  const [model, id] = (series.providerId ?? "").split(/:(.*)/s);
+  const episodes: Episode[] = [];
+  const used = new Set<string>();
+  const add = (season: number, number: number, name: string | undefined, cmd: string, item: Payload | null, linkSeries?: number) => {
+    let key = `s${season}e${number}`;
+    while (used.has(key)) key += "x";
+    used.add(key);
+    episodes.push({
+      id: `${series.id}:${key}`,
+      playlistId: playlist.id,
+      providerId: stringValue(item?.id),
+      seriesId: series.id,
+      season,
+      number,
+      name: name ?? `Episode ${number}`,
+      streamUrl: stalkerLink(cmd, "vod", linkSeries),
+      overview: stringValue(item?.description),
+      posterUrl: absolute(playlist, item?.screenshot_uri),
+    });
+  };
+
+  if (model === "vod") {
+    if (!series.stalkerCmd) throw new Error("This series has no episode information from the portal.");
+    for (const number of series.stalkerEpisodes ?? []) add(1, number, undefined, series.stalkerCmd, null, number);
+  } else if (model === "series" && id) {
+    const top = await openSeriesLevel(playlist, id, "0", signal);
+    for (const [position, item] of top.entries()) {
+      const isSeason = ["1", "true"].includes(String(item.is_season)) || SEASON_NAME.test(stringValue(item.name) ?? "");
+      if (!isSeason) {
+        // The portal lists episodes straight away.
+        add(1, digitsIn(item.series_number ?? item.episode_num ?? item.name) ?? position + 1, stringValue(item.name), stringValue(item.cmd) ?? "", item);
+        continue;
+      }
+      const season = numberValue(item.season_num ?? item.season_number) ?? digitsIn(item.name) ?? position + 1;
+      const seasonId = stringValue(item.id) ?? "";
+      const seasonCmd = stringValue(item.cmd);
+      const inline = inlineEpisodes(item);
+      if (inline.length > 0 && seasonCmd) {
+        for (const number of inline) add(season, number, undefined, seasonCmd, item, number);
+        continue;
+      }
+      // Portals differ in which id names the season, so the second form is tried when the first is empty.
+      let list = await openSeriesLevel(playlist, id, seasonId, signal);
+      if (list.length === 0) list = await openSeriesLevel(playlist, seasonId, "0", signal);
+      for (const [index, episode] of list.entries()) {
+        const cmd = stringValue(episode.cmd) ?? seasonCmd;
+        if (!cmd) continue;
+        const number = numberValue(episode.series_number ?? episode.episode_num ?? episode.episode_number) ?? digitsIn(episode.name) ?? index + 1;
+        const numbers = inlineEpisodes(episode);
+        if (numbers.length > 0) for (const n of numbers) add(season, n, undefined, cmd, episode, n);
+        else add(season, number, stringValue(episode.name), cmd, episode);
+      }
+    }
+  }
+  if (episodes.length === 0) throw new Error("The portal returned no episodes for this series.");
+  return episodes.sort((left, right) => left.season - right.season || left.number - right.number);
 }
 
 /** The next hours of programmes for every channel, in one request. */
@@ -364,7 +537,7 @@ export async function resolveStalkerLink(playlist: Playlist, link: string, signa
     type: parsed.type,
     action: "create_link",
     cmd: parsed.cmd,
-    series: "",
+    series: parsed.series,
     forced_storage: "",
     disable_ad: "0",
     download: "0",

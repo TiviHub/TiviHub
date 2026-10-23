@@ -5,6 +5,7 @@ import {
   isStalkerLink,
   loadStalkerCatalog,
   loadStalkerEpg,
+  loadStalkerEpisodes,
   normalizeMac,
   resolveStalkerLink,
   stalkerApiUrl,
@@ -214,6 +215,103 @@ describe("Stalker catalog", () => {
     portal();
     await loadStalkerCatalog(source({ userAgent: "Custom/1" }));
     expect(calls[0].headers["user-agent"]).toBe("Custom/1");
+  });
+});
+
+describe("Stalker series", () => {
+  const seriesPortal = () => portal({
+    "vod:get_categories": () => [],
+    "series:get_categories": () => [{ id: "7", title: "Drama" }],
+    "series:get_ordered_list": (params) => {
+      if (!params.get("movie_id")) {
+        return { total_items: 1, max_page_items: 10, data: [{ id: "500", name: "Big Show (2018)", screenshot_uri: "/s.jpg", description: "Plot" }] };
+      }
+      if (params.get("season_id") === "0") {
+        return {
+          total_items: 2,
+          max_page_items: 10,
+          data: [
+            { id: "500:1", name: "Season 1", is_season: "1", cmd: "season-one" },
+            { id: "500:2", name: "Season 2", is_season: "1", cmd: "season-two", series: [1, 2] },
+          ],
+        };
+      }
+      return {
+        total_items: 2,
+        max_page_items: 10,
+        data: [
+          { id: "e1", name: "Pilot", cmd: "episode-one", series_number: "1" },
+          { id: "e2", name: "The second", cmd: "episode-two", series_number: "2" },
+        ],
+      };
+    },
+    "vod:create_link": (params) => ({ cmd: `ffmpeg http://stream.example/${params.get("cmd")}-${params.get("series")}` }),
+  });
+
+  it("lists the series of the portal's series library with a year taken from the name", async () => {
+    seriesPortal();
+    const playlist = source();
+    const { series } = await loadStalkerCatalog(playlist);
+
+    expect(series.map((item) => item.name)).toEqual(["Big Show (2018)"]);
+    expect(series[0]).toMatchObject({
+      id: `${playlist.id}:series:series:500`,
+      providerId: "series:500",
+      year: 2018,
+      category: "Drama",
+      posterUrl: "http://portal.example/s.jpg",
+      overview: "Plot",
+    });
+  });
+
+  it("opens seasons and episodes one level at a time and keeps each episode's stream request", async () => {
+    seriesPortal();
+    const playlist = source();
+    const [show] = (await loadStalkerCatalog(playlist)).series;
+    const episodes = await loadStalkerEpisodes(playlist, show);
+
+    expect(episodes.map((episode) => `S${episode.season}E${episode.number} ${episode.name}`)).toEqual([
+      "S1E1 Pilot", "S1E2 The second", "S2E1 Episode 1", "S2E2 Episode 2",
+    ]);
+    expect(new Set(episodes.map((episode) => episode.id)).size).toBe(4);
+    expect(await resolveStalkerLink(playlist, episodes[0].streamUrl)).toBe("http://stream.example/episode-one-");
+    // Episodes listed under one season command are told apart by their number.
+    expect(await resolveStalkerLink(playlist, episodes[3].streamUrl)).toBe("http://stream.example/season-two-2");
+  });
+
+  it("treats a video-library item with a list of episode numbers as a one-season series", async () => {
+    portal({
+      "vod:get_ordered_list": () => ({
+        total_items: 2,
+        max_page_items: 10,
+        data: [
+          { id: "90", name: "Old Show", cmd: "/media/90.mpg", series: [1, 2, 3] },
+          { id: "91", name: "A Film", cmd: "/media/91.mpg" },
+        ],
+      }),
+      "vod:create_link": (params) => ({ cmd: `ffmpeg http://stream.example/${params.get("series")}` }),
+    });
+    const playlist = source();
+    const catalog = await loadStalkerCatalog(playlist);
+
+    expect(catalog.movies.map((movie) => movie.name)).toEqual(["A Film"]);
+    expect(catalog.series[0]).toMatchObject({ providerId: "vod:90", stalkerCmd: "/media/90.mpg", stalkerEpisodes: [1, 2, 3] });
+    const episodes = await loadStalkerEpisodes(playlist, catalog.series[0]);
+    expect(episodes.map((episode) => episode.number)).toEqual([1, 2, 3]);
+    expect(await resolveStalkerLink(playlist, episodes[1].streamUrl)).toBe("http://stream.example/2");
+  });
+
+  it("explains a series the portal returns no episodes for", async () => {
+    portal({
+      "vod:get_categories": () => [],
+      "series:get_categories": () => [{ id: "7", title: "Drama" }],
+      "series:get_ordered_list": (params) => params.get("movie_id")
+        ? { total_items: 0, max_page_items: 10, data: [] }
+        : { total_items: 1, max_page_items: 10, data: [{ id: "1", name: "Empty" }] },
+    });
+    const playlist = source();
+    const [show] = (await loadStalkerCatalog(playlist)).series;
+    await expect(loadStalkerEpisodes(playlist, show)).rejects.toThrow(/no episodes/);
   });
 });
 

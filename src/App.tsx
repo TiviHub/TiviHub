@@ -18,6 +18,7 @@ import {
 } from "./catalogCache";
 import type { SearchSection } from "./globalSearch";
 import { visibleButton } from "./visibleButton";
+import { loadStalkerEpisodes } from "./providers/stalker";
 import {
   loadXtreamEpisodes,
 } from "./providers/xtream";
@@ -436,10 +437,12 @@ function App() {
       let savedEpisodes = await getEpisodes(item.playlistId, item.id);
       if (savedEpisodes.length === 0) {
         const source = sources.find((entry) => entry.id === item.playlistId);
-        if (!source || source.type !== "XTREAM") {
+        if (!source || source.type === "M3U") {
           throw new Error("Episode details are available only when the source provides series episodes.");
         }
-        savedEpisodes = await loadXtreamEpisodes(source, item);
+        savedEpisodes = source.type === "STALKER"
+          ? await loadStalkerEpisodes(source, item)
+          : await loadXtreamEpisodes(source, item);
         await saveEpisodes(item.playlistId, item.id, savedEpisodes);
       }
       setEpisodes(savedEpisodes);
