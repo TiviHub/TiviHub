@@ -35,6 +35,7 @@ import {
   type DownloadRecord,
   type DownloadTask,
 } from "./downloads";
+import { keepM3uIds } from "./m3uIds";
 import { fetchM3u, parseM3uCatalog, parseM3uCatalogAsync } from "./providers/m3u";
 import { fetchXmltv } from "./providers/xmltv";
 import {
@@ -774,6 +775,7 @@ function App() {
     const previousCatalog = isNewSource
       ? { channels: [], movies: [], series: [], episodes: [] }
       : await getCatalogSnapshot(playlist.id);
+    if (playlist.type === "M3U") keepM3uIds(catalog, previousCatalog);
     const changeSummary = summarizeCatalogChanges(previousCatalog, catalog);
     if (!isNewSource && isSuspiciousCatalogDrop(previousCatalog, catalog) &&
       !window.confirm(
@@ -1038,6 +1040,7 @@ function App() {
       }
 
       const previousCatalog = await getCatalogSnapshot(source.id);
+      if (source.type === "M3U") keepM3uIds(catalog, previousCatalog);
       const changeSummary = summarizeCatalogChanges(previousCatalog, catalog);
       const suspicious = isSuspiciousCatalogDrop(previousCatalog, catalog);
       if (suspicious) {
