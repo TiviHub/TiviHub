@@ -43,7 +43,7 @@ providers/*  ->  storage/*  ->  hooks/*  ->  components/*  ->  App.tsx
 
 ## Size limits
 
-`App.tsx` (~940 lines, mostly the `App()` function) and `PlaybackDialog.tsx` (~1,100, one component) are still too big: split their hooks and sub-views out before adding to them. `ContentPages`, `DetailPages`, `LibraryPage`, `HomePage`, `CastPanel` and `SubtitlePanel` were already split from them. Any change that touches an oversized file extracts the part it touches into its own file or hook instead of growing it. New files stay under ~500 lines.
+`App.tsx` (~860 lines, mostly the `App()` function) and `PlaybackDialog.tsx` (~1,100, one component) are still too big: split their hooks and sub-views out before adding to them. `ContentPages`, `DetailPages`, `LibraryPage`, `HomePage`, `CastPanel` and `SubtitlePanel` were already split from them. Any change that touches an oversized file extracts the part it touches into its own file or hook instead of growing it. New files stay under ~500 lines.
 
 ## Speed rules (see `testing-and-ci` for how to measure)
 
