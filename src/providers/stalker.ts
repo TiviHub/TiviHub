@@ -306,11 +306,13 @@ export interface StalkerCatalog {
 }
 
 /**
- * Most rows can be played from the address stored in `cmd` ("ffrt http://host/…"). Only a row that says
- * it does not need a temporary link, and points at another host than the portal, is played that way;
- * anything else asks the portal for a fresh address when you press play.
+ * Most rows can be played from the address stored in `cmd` ("ffmpeg http://host/play/live.php?…"). A row
+ * that says it does not need a temporary link (both flags present and off) is played that way, even when
+ * the address is on the portal's own host: a fresh link from the portal is not always accepted by the
+ * stream server, while the row's own address is. Anything else asks the portal when you press play.
+ * Live rows ask for `extension=m3u8` instead of `ts`: the built-in player plays an HLS playlist, not a raw TS stream.
  */
-function staticStreamUrl(playlist: Playlist, item: Payload, cmd: string): string | null {
+function staticStreamUrl(item: Payload, cmd: string, live = false): string | null {
   const flags = [item.use_http_tmp_link, item.use_load_balancing];
   if (flags.every((flag) => flag === undefined) || flags.some((flag) => ["1", "true"].includes(String(flag)))) return null;
   const address = cmd.match(/https?:[/][/]\S+/)?.[0];
@@ -318,7 +320,8 @@ function staticStreamUrl(playlist: Playlist, item: Payload, cmd: string): string
   try {
     const host = new URL(address).hostname;
     const local = host === "localhost" || host.startsWith("127.") || host === "[::1]" || host.endsWith(".local");
-    return local || host === new URL(playlist.url).hostname ? null : address;
+    if (local) return null;
+    return live ? address.replace(/([?&]extension=)ts(?=&|$)/, "$1m3u8") : address;
   } catch {
     return null;
   }
@@ -344,7 +347,7 @@ async function loadChannels(playlist: Playlist, signal?: AbortSignal): Promise<L
       providerId: id,
       name,
       group,
-      streamUrl: staticStreamUrl(playlist, item, cmd) ?? stalkerLink(cmd, "itv"),
+      streamUrl: staticStreamUrl(item, cmd, true) ?? stalkerLink(cmd, "itv"),
       logoUrl: absolute(playlist, item.logo),
       ...(/\bradio\b/i.test(group) ? { radio: true } : {}),
     }];
@@ -445,7 +448,7 @@ function movieFrom(playlist: Playlist, item: Payload, category: Category, id: st
     playlistId: playlist.id,
     providerId: id,
     name,
-    streamUrl: staticStreamUrl(playlist, item, cmd) ?? stalkerLink(cmd, "vod"),
+    streamUrl: staticStreamUrl(item, cmd) ?? stalkerLink(cmd, "vod"),
     posterUrl: absolute(playlist, item.screenshot_uri),
     overview: stringValue(item.description),
     year,
@@ -699,4 +702,9 @@ export function startStalkerKeepAlive(playlist: Playlist): () => void {
     controller.abort();
     clearTimeout(timer);
   };
+}
+
+/** Logs the box in if it is not yet, so a stream address that belongs to the portal is asked for with a live session. */
+export async function warmStalkerSession(playlist: Playlist): Promise<void> {
+  await session(playlist);
 }

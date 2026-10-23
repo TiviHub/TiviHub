@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { replayUrl } from "../catchup";
 import { canOpenExternally, openInExternalPlayer } from "../externalPlayer";
-import { isStalkerLink, isStalkerVideoLink, resolveStalkerLink, stalkerUserAgent } from "../providers/stalker";
+import { isStalkerLink, isStalkerVideoLink, resolveStalkerLink, stalkerUserAgent, warmStalkerSession } from "../providers/stalker";
 import { getLibraryItems, saveLibraryItem } from "../storage/database";
 import type { EpgProgram, LibraryItem, LiveChannel, PlayableItem, Playlist } from "../types";
 
@@ -43,7 +43,10 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     if (source?.type === "STALKER") {
       // Every stream of a portal goes through the desktop proxy: it sets the set-top-box User-Agent and needs no CORS.
       const plainFile = !item.live && !/[.](?:m3u8|mpd)(?:[?#]|$)/i.test(item.streamUrl);
-      start({ ...item, userAgent: stalkerUserAgent(source), direct: item.direct ?? plainFile }, position);
+      // A stored address on the portal's own host is played as it is, after making sure the box is logged in.
+      void warmStalkerSession(source)
+        .catch(() => undefined)
+        .then(() => start({ ...item, userAgent: stalkerUserAgent(source), direct: item.direct ?? plainFile }, position));
       return;
     }
     start(item, position);

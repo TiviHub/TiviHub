@@ -381,13 +381,14 @@ describe("Stalker stream addresses", () => {
     "vod:get_ordered_list": () => ({ total_items: 0, max_page_items: 10, data: [] }),
   });
 
-  it("plays a row from its stored address only when it says it needs no temporary link and lives on another host", async () => {
+  it("plays a row from its stored address when it says it needs no temporary link, and asks the portal for the others", async () => {
     channelsWith([
       { id: "1", name: "Static", cmd: "ffmpeg http://cdn.example/live/1.m3u8", use_http_tmp_link: "0", use_load_balancing: "0" },
       { id: "2", name: "Temporary", cmd: "ffmpeg http://cdn.example/live/2.m3u8", use_http_tmp_link: "1", use_load_balancing: "0" },
       { id: "3", name: "Balanced", cmd: "ffmpeg http://cdn.example/live/3.m3u8", use_http_tmp_link: "0", use_load_balancing: "1" },
       { id: "4", name: "No flags", cmd: "ffmpeg http://cdn.example/live/4.m3u8" },
-      { id: "5", name: "Portal host", cmd: "ffmpeg http://portal.example/live/5.m3u8", use_http_tmp_link: "0", use_load_balancing: "0" },
+      { id: "5", name: "Portal host", cmd: "ffmpeg http://portal.example/play/live.php?mac=00:1A:79:00:00:01&stream=5&extension=ts&play_token=abc", use_http_tmp_link: "0", use_load_balancing: "0" },
+      { id: "8", name: "Keeps ts elsewhere", cmd: "ffmpeg http://cdn.example/live/8.ts?extension=ts", use_http_tmp_link: 0, use_load_balancing: 0 },
       { id: "6", name: "Localhost", cmd: "ffrt http://localhost/ch/6", use_http_tmp_link: "0", use_load_balancing: "0" },
       { id: "7", name: "Relative", cmd: "/media/7", use_http_tmp_link: "0", use_load_balancing: "0" },
     ]);
@@ -395,7 +396,10 @@ describe("Stalker stream addresses", () => {
     const byName = Object.fromEntries(channels.map((channel) => [channel.name, channel.streamUrl]));
 
     expect(byName.Static).toBe("http://cdn.example/live/1.m3u8");
-    for (const name of ["Temporary", "Balanced", "No flags", "Portal host", "Localhost", "Relative"]) {
+    // The portal's own address is played as stored, with the HLS form asked for instead of raw TS.
+    expect(byName["Portal host"]).toBe("http://portal.example/play/live.php?mac=00:1A:79:00:00:01&stream=5&extension=m3u8&play_token=abc");
+    expect(byName["Keeps ts elsewhere"]).toBe("http://cdn.example/live/8.ts?extension=m3u8");
+    for (const name of ["Temporary", "Balanced", "No flags", "Localhost", "Relative"]) {
       expect(isStalkerLink(byName[name]), name).toBe(true);
     }
   });
