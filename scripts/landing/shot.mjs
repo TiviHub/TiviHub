@@ -1,3 +1,4 @@
+/* global window */
 // Captures the real app (browser mode) with an invented catalog and typographic posters, for the landing page.
 // Usage: node scripts/landing/shot.mjs [outDir]   (dev server must be running)
 import { chromium } from "@playwright/test";
@@ -90,7 +91,6 @@ const shot = async (name) => {
   await page.screenshot({ path: `${outDir}/${name}.png` });
   console.log("wrote", name);
 };
-const open = (name) => page.getByRole("button", { name, exact: true }).first().click();
 
 await page.getByRole("button", { name: /^Movies/ }).first().click();
 await shot("app-hero");

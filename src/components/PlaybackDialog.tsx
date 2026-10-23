@@ -723,7 +723,7 @@ export function PlaybackDialog({
     setSavedSubtitles(await subtitleService.saved(item.id));
   }
 
-  async function useSavedSubtitle(fileId: number) {
+  async function applySavedSubtitle(fileId: number) {
     setSubtitleError(null);
     try {
       const subtitle = await subtitleService.cachedFile(fileId);
@@ -1222,7 +1222,7 @@ export function PlaybackDialog({
                         aria-label={`Use ${saved.name}`}
                         className="icon-button"
                         data-tooltip="Use this subtitle"
-                        onClick={() => void useSavedSubtitle(saved.fileId)}
+                        onClick={() => void applySavedSubtitle(saved.fileId)}
                         type="button"
                       >
                         <Icon name="subtitles" />
