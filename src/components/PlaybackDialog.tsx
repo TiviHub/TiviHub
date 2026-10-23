@@ -357,7 +357,7 @@ export function PlaybackDialog({
         watched,
       );
       setSaveError(null);
-    } catch (cause) {
+    } catch {
       setSaveError("Couldn't save playback progress. Your video can keep playing.");
     }
   }
@@ -730,7 +730,7 @@ export function PlaybackDialog({
       if (!subtitle) throw new Error("Subtitle is no longer cached.");
       await attachSubtitle(subtitle.name, subtitle.contents, fileId);
       setSubtitleOpen(false);
-    } catch (cause) {
+    } catch {
       setSubtitleError("Couldn't add this saved subtitle. Search for it again.");
     }
   }
@@ -751,7 +751,7 @@ export function PlaybackDialog({
     }
     try {
       await attachSubtitle(file.name, await file.text());
-    } catch (cause) {
+    } catch {
       setSubtitleError("Couldn't add this subtitle file. Check the file and try again.");
     }
   }
@@ -764,7 +764,7 @@ export function PlaybackDialog({
       await attachSubtitle(subtitle.name, subtitle.contents, result.fileId);
       await subtitleService.rememberChoice(item.id, result.fileId);
       setSubtitleOpen(false);
-    } catch (cause) {
+    } catch {
       setSubtitleError("Couldn't download this subtitle. Please try again.");
     } finally {
       setSubtitleBusy(false);
@@ -783,7 +783,7 @@ export function PlaybackDialog({
     setCastDevices([]);
     try {
       setCastDevices(await invoke<CastDeviceInfo[]>("discover_cast_devices"));
-    } catch (cause) {
+    } catch {
       setCastError("Couldn't search for casting devices. Check that they're on the same network and try again.");
     } finally {
       setCastBusy(false);
@@ -826,7 +826,7 @@ export function PlaybackDialog({
       if (localStopFailed) {
         setCastError("Casting started, but playback on this device may still be active.");
       }
-    } catch (cause) {
+    } catch {
       if (!castStarted && wasPlaying && video) {
         try {
           await video.play();
@@ -850,7 +850,7 @@ export function PlaybackDialog({
       setCastingDevice(null);
       setStatus("Connecting to your source…");
       return true;
-    } catch (cause) {
+    } catch {
       setCastError("Couldn't stop casting on that device. Please try again.");
       setCastOpen(true);
       return false;

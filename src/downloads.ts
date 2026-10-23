@@ -129,6 +129,7 @@ export function canDownloadMedia(media: DownloadableMedia): boolean {
 }
 
 function safeFileName(title: string, id: string, extension: string): string {
+  // eslint-disable-next-line no-control-regex -- control characters are not allowed in file names
   const clean = (value: string) => value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "");
   const safeTitle = clean(title).replace(/[. ]+$/g, "").trim().slice(0, 150);
   // The id keeps two titles that match from overwriting each other's file.

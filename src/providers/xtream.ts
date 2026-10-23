@@ -126,6 +126,7 @@ async function requestJson(
     recordDiagnosticFailure("xtream-catalog", "network");
     throw new Error(
       `${operation} could not be reached. The provider may block cross-origin access (CORS), or be offline. The request went directly from this app to the provider.`,
+      { cause: error },
     );
   }
   if (!response.ok) {
@@ -400,6 +401,7 @@ function decodeXtreamText(value: unknown): string | undefined {
     const binary = atob(base64);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
     const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
+    // eslint-disable-next-line no-control-regex -- detecting binary data is the point
     if (!decoded || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(decoded)) return text;
     return decoded;
   } catch {

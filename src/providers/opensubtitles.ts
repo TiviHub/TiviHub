@@ -63,6 +63,7 @@ async function request(
     recordDiagnosticFailure("subtitle-search", "network");
     throw new Error(
       "OpenSubtitles could not be reached from TiviHub. Check your API key and cross-origin access.",
+      { cause: error },
     );
   }
 }
@@ -203,7 +204,7 @@ async function downloadOpenSubtitleRequest(
   } catch (error) {
     if (error instanceof Error && error.message === "Subtitle file exceeds the 5 MB limit.") throw error;
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-    throw new Error("Subtitle download was interrupted.");
+    throw new Error("Subtitle download was interrupted.", { cause: error });
   } finally {
     reader.releaseLock();
   }

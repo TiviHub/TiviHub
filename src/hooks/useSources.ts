@@ -541,6 +541,7 @@ export function useSources(deps: SourceDeps) {
         throw new AggregateError(
           [cause, statusError],
           "The catalog refresh failed, and its status could not be saved locally.",
+          { cause: statusError },
         );
       }
       if (cause instanceof XtreamAccountExpiredError) {

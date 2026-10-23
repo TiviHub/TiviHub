@@ -25,7 +25,7 @@ export function normalizeTitle(title: string): string {
 
 export function normalizeCatalogTitle(title: string, year?: number): string {
   let cleaned = title.replace(/^\s*[a-z]{2,3}\s*-\s*/i, "").trim();
-  const videoQualitySuffix = /(?:\s+|\s*[\[(])(?:4k|2160p|1080p|720p|480p|uhd|fhd|hd|hdr10?|dolby\s+vision|dv|hevc|x26[45])(?:\s*[\])])?\s*$/i;
+  const videoQualitySuffix = /(?:\s+|\s*[[(])(?:4k|2160p|1080p|720p|480p|uhd|fhd|hd|hdr10?|dolby\s+vision|dv|hevc|x26[45])(?:\s*[\])])?\s*$/i;
   while (videoQualitySuffix.test(cleaned)) {
     cleaned = cleaned.replace(videoQualitySuffix, "").trim();
   }

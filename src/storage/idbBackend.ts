@@ -181,7 +181,7 @@ async function decrypt(sealed: Sealed): Promise<string> {
     return decoder.decode(cleartext);
   } catch (error) {
     console.error("Could not decrypt local TiviHub data", error);
-    throw new Error("Local encrypted data could not be opened in this TiviHub installation.");
+    throw new Error("Local encrypted data could not be opened in this TiviHub installation.", { cause: error });
   }
 }
 
