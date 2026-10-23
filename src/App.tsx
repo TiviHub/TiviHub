@@ -554,6 +554,51 @@ function App() {
       .sort((a, b) => b.updatedAt - a.updatedAt)[0]
     : undefined;
 
+  const openMovie = (movie: Movie) => {
+    setSelectedMovie(movie);
+    setSelectedSeries(null);
+    navigateToSection("Movies");
+  };
+  const checkStreamGroup = (groupChannels: LiveChannel[], groupName: string) =>
+    setStreamHealthRequest({ channels: groupChannels, groupName });
+  const catalogProps = {
+    channels: visibleChannels,
+    epg: visibleEpg,
+    favorites: visibleFavorites,
+    library: visibleLibrary,
+    loading: refreshing,
+    movies: visibleMovies,
+    onAddToLibrary: (item: Movie | Series, type: "MOVIE" | "SERIES") => void addToWatchlist(item, type),
+    onLoadGuideForChannels: (guideChannels: LiveChannel[]) => void loadGuideForChannels(guideChannels),
+    onOpenMovie: openMovie,
+    onOpenSeries: (item: Series) => void openSeries(item),
+    onPlay: (item: PlayableItem) => openPlayback(item),
+    onToggleFavorite: (item: LiveChannel | Movie | Series, type: "LIVE" | "MOVIE" | "SERIES") =>
+      void toggleFavorite(item, type),
+    series: visibleSeries,
+  };
+
+  function openFavorite(favorite: Favorite) {
+    if (favorite.contentType === "MOVIE") {
+      const movie = visibleMovies.find((item) =>
+        item.id === favorite.contentId && item.playlistId === favorite.playlistId,
+      );
+      if (movie) {
+        navigateToSection("Movies");
+        setSelectedMovie(movie);
+        setSelectedSeries(null);
+      } else {
+        notify("This movie isn't available in the currently loaded catalog.", "error");
+      }
+    } else if (favorite.contentType === "SERIES") {
+      const show = visibleSeries.find((item) =>
+        item.id === favorite.contentId && item.playlistId === favorite.playlistId,
+      );
+      if (show) void openSeries(show);
+      else notify("This series isn't available in the currently loaded catalog.", "error");
+    }
+  }
+
   return (
     <>
     <div
@@ -603,11 +648,8 @@ function App() {
                 className={`live-tv-persistent${section === "Live TV" ? "" : " is-mini"}`}
               >
                 <CatalogPage
-                  channels={visibleChannels}
-                  epg={visibleEpg}
-                  favorites={visibleFavorites}
+                  {...catalogProps}
                   guideLoading={guideLoadCount > 0}
-                  library={visibleLibrary}
                   livePlaybackItemId={inlineLivePlayback && playableItem?.live ? playableItem.id : undefined}
                   livePlayer={inlineLivePlayback && playableItem?.live ? (
                     <PlaybackDialog
@@ -624,24 +666,8 @@ function App() {
                     />
                   ) : undefined}
                   livePlayerMini={section !== "Live TV"}
-                  loading={refreshing}
-                  movies={visibleMovies}
-                  onAddToLibrary={(item, type) => void addToWatchlist(item, type)}
-                  onCheckStreamGroup={(groupChannels, groupName) => setStreamHealthRequest({
-                    channels: groupChannels,
-                    groupName,
-                  })}
-                  onLoadGuideForChannels={(visibleChannels) => void loadGuideForChannels(visibleChannels)}
-                  onOpenMovie={(movie) => {
-                    setSelectedMovie(movie);
-                    setSelectedSeries(null);
-                    navigateToSection("Movies");
-                  }}
-                  onOpenSeries={(item) => void openSeries(item)}
-                  onPlay={(item) => openPlayback(item)}
-                  onToggleFavorite={(item, type) => void toggleFavorite(item, type)}
+                  onCheckStreamGroup={checkStreamGroup}
                   section="Live TV"
-                  series={visibleSeries}
                 />
               </div>
             )}
@@ -658,11 +684,7 @@ function App() {
                 sourceCount={sources.length}
                 continueWatching={continueWatching}
                 onAddSource={openAddSource}
-                onOpenMovie={(movie) => {
-                  setSelectedMovie(movie);
-                  setSelectedSeries(null);
-                  navigateToSection("Movies");
-                }}
+                onOpenMovie={openMovie}
                 onOpenSeries={(item) => void openSeries(item)}
                 onNavigate={navigateToSection}
                 onPlay={(item, position) => openPlayback(item, position)}
@@ -778,31 +800,12 @@ function App() {
               />
             ) : section === "Movies" ? (
               <CatalogPage
+                {...catalogProps}
                 key="Movies"
-                channels={visibleChannels}
-                epg={visibleEpg}
-                favorites={visibleFavorites}
-                library={visibleLibrary}
-                loading={refreshing}
-                movies={visibleMovies}
-                onAddToLibrary={(item, type) => void addToWatchlist(item, type)}
-                onCheckStreamGroup={(groupChannels, groupName) => setStreamHealthRequest({
-                  channels: groupChannels,
-                  groupName,
-                })}
-                onLoadGuideForChannels={(visibleChannels) => void loadGuideForChannels(visibleChannels)}
-                onOpenMovie={(movie) => {
-                  setSelectedMovie(movie);
-                  setSelectedSeries(null);
-                  navigateToSection("Movies");
-                }}
-                onOpenSeries={(item) => void openSeries(item)}
-                onPlay={(item) => openPlayback(item)}
-                onToggleFavorite={(item, type) => void toggleFavorite(item, type)}
-                section="Movies"
-                series={visibleSeries}
                 mdblistApiKey={mdblistApiKey}
+                onCheckStreamGroup={checkStreamGroup}
                 popularCatalogService={popularCatalogService}
+                section="Movies"
               />
             ) : section === "Series" ? (
               selectedSeries && (showAdultContent || !isAdultContent(selectedSeries.name, selectedSeries.category)) ? (
@@ -853,23 +856,12 @@ function App() {
                 />
               ) : (
                 <CatalogPage
+                  {...catalogProps}
                   key="Series"
-                  channels={visibleChannels}
-                  epg={visibleEpg}
-                  favorites={visibleFavorites}
-                  library={visibleLibrary}
-                  loading={refreshing}
-                  movies={visibleMovies}
-                  onAddToLibrary={(item, type) => void addToWatchlist(item, type)}
-                  onLoadGuideForChannels={(visibleChannels) => void loadGuideForChannels(visibleChannels)}
-                  onOpenMovie={setSelectedMovie}
-                  onOpenSeries={(item) => void openSeries(item)}
-                  onPlay={(item) => openPlayback(item)}
-                  onToggleFavorite={(item, type) => void toggleFavorite(item, type)}
-                  section="Series"
-                  series={visibleSeries}
                   mdblistApiKey={mdblistApiKey}
+                  onOpenMovie={setSelectedMovie}
                   popularCatalogService={popularCatalogService}
+                  section="Series"
                 />
               )
             ) : (
@@ -883,26 +875,7 @@ function App() {
                 onRemove={(id, title) => void deleteLibraryItem(id, title)}
                 onRemoveFavorite={(favorite) => void removeFavorite(favorite)}
                 onBrowseMovies={() => navigateToSection("Movies")}
-                onOpenFavorite={(favorite) => {
-                  if (favorite.contentType === "MOVIE") {
-                    const movie = visibleMovies.find((item) =>
-                      item.id === favorite.contentId && item.playlistId === favorite.playlistId,
-                    );
-                    if (movie) {
-                      navigateToSection("Movies");
-                      setSelectedMovie(movie);
-                      setSelectedSeries(null);
-                    } else {
-                      notify("This movie isn't available in the currently loaded catalog.", "error");
-                    }
-                  } else if (favorite.contentType === "SERIES") {
-                    const show = visibleSeries.find((item) =>
-                      item.id === favorite.contentId && item.playlistId === favorite.playlistId,
-                    );
-                    if (show) void openSeries(show);
-                    else notify("This series isn't available in the currently loaded catalog.", "error");
-                  }
-                }}
+                onOpenFavorite={openFavorite}
               />
             )}
           </>
