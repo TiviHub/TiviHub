@@ -1,6 +1,6 @@
 # Baseline findings (module `baseline`)
 
-Spec: `docs/specs/SPEC-baseline.md`. Raw data: `docs/plans/baseline-results/`. Re-run with `npm run perf:build`, then `npm run perf:all -- --sizes M,L,XL --runs 5 --label <name>` and `node scripts/perf/summarize.mjs`.
+Spec: `tasks/baseline/spec.md`. Raw data: `tasks/baseline/results/`. Re-run with `npm run perf:build`, then `npm run perf:all -- --sizes M,L,XL --runs 5 --label <name>` and `node scripts/perf/summarize.mjs`.
 
 ## Setup
 

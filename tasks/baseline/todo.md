@@ -1,18 +1,18 @@
 # Tasks: baseline
 
-Plan: `tasks/plan.md`. Spec: `docs/specs/SPEC-baseline.md`. Sizes: XS 1 file, S 1-2, M 3-5. No task touches more than 5 files.
+Plan: `tasks/baseline/plan.md`. Spec: `tasks/baseline/spec.md`. Sizes: XS 1 file, S 1-2, M 3-5. No task touches more than 5 files.
 
 ## Phase 1: Harness
 
 - [x] **T1: CDP feasibility spike** (S, risk first)
   - Description: Launch the desktop app with an isolated profile and `--remote-debugging-port`, attach with Playwright `connectOverCDP`, and read the page.
   - Acceptance:
-    - A script starts the perf build (identifier `nl.tivihub.perf`, separate data folders) and the maintainer's real data is untouched. (Changed from overriding `APPDATA`, which Tauri ignores; see `docs/plans/baseline-results/cdp-spike.md`.)
+    - A script starts the perf build (identifier `nl.tivihub.perf`, separate data folders) and the maintainer's real data is untouched. (Changed from overriding `APPDATA`, which Tauri ignores; see `tasks/baseline/results/cdp-spike.md`.)
     - It attaches over CDP and detects that the "Opening your library" dialog appeared and went away.
-    - It records which launch mode worked (`tauri:dev` or the installed exe) in `docs/plans/baseline-results/cdp-spike.md`.
+    - It records which launch mode worked (`tauri:dev` or the installed exe) in `tasks/baseline/results/cdp-spike.md`.
   - Verify: run `node scripts/perf/launch.mjs --check`; it prints the time to ready and exits 0. Confirm `%APPDATA%\nl.tivihub.desktop` modified time did not change.
   - Dependencies: none
-  - Files: `scripts/perf/launch.mjs`, `docs/plans/baseline-results/cdp-spike.md`
+  - Files: `scripts/perf/launch.mjs`, `tasks/baseline/results/cdp-spike.md`
 
 - [x] **T2: Seeded dataset generator** (S)
   - Description: Deterministic catalogs for sizes S, M, L, XL, shaped like the Xtream responses the importer reads.
@@ -88,7 +88,7 @@ l.tivihub.desktop`, see the spike note)
     - A one-paragraph reading: read and parse, hydrate, React state, or render.
   - Verify: the profile JSON is saved and the summary is reproducible with `npm run perf:baseline -- --size L --profile`.
   - Dependencies: T5
-  - Files: `scripts/perf/profile-startup.mjs`, `docs/plans/baseline-results/startup-profile.md`
+  - Files: `scripts/perf/profile-startup.mjs`, `tasks/baseline/results/startup-profile.md`
 
 ### Checkpoint 2: numbers are trustworthy
 - [x] Datasets M, L, XL measured with 5 runs each (S only used for the accessibility scan)
@@ -97,10 +97,10 @@ l.tivihub.desktop`, see the spike note)
 
 - [x] **T9: Full matrix M, L, XL** (S)
   - Description: Run T5 to T7 for M, L and XL and store the raw JSON.
-  - Acceptance: results for all three sizes, at least 5 runs per figure, committed under `docs/plans/baseline-results/`, small files only.
+  - Acceptance: results for all three sizes, at least 5 runs per figure, committed under `tasks/baseline/results/`, small files only.
   - Verify: `npm run perf:baseline -- --all`; the folder lists three sizes with per-run files.
   - Dependencies: T5, T6, T7
-  - Files: `docs/plans/baseline-results/*.json`
+  - Files: `tasks/baseline/results/*.json`
 
 ## Phase 3: Audit
 
@@ -118,35 +118,35 @@ l.tivihub.desktop`, see the spike note)
   - Acceptance: a pass or fail per flow with the failing step named; contrast ratios listed for the light and dark themes.
   - Verify: `npm run perf:a11y -- --keyboard`.
   - Dependencies: T10
-  - Files: `scripts/perf/keyboard.mjs`, `docs/plans/baseline-results/keyboard.md`
+  - Files: `scripts/perf/keyboard.mjs`, `tasks/baseline/results/keyboard.md`
 
 - [ ] **T12: Screen reader pass** (S, maintainer, optional)
   - Description: A short checklist for NVDA (or another reader) over add source, browse, play, favorite, settings.
   - Acceptance: notes recorded, or the findings note says "not performed".
-  - Verify: filled checklist in `docs/plans/baseline-results/screen-reader.md`.
+  - Verify: filled checklist in `tasks/baseline/results/screen-reader.md`.
   - Dependencies: none
-  - Files: `docs/plans/baseline-results/screen-reader.md`
+  - Files: `tasks/baseline/results/screen-reader.md`
 
 - [x] **T13a: Filesystem permission reach** (S)
   - Description: Find out what `fs:allow-write` and `fs:allow-remove` allow without a scope, by reading the plugin permission definitions and by a controlled test that writes and deletes a file inside a temp folder through the webview.
   - Acceptance: a short statement of what the webview can write or delete, with evidence; the test never touches a path outside its own temp folder.
   - Verify: the test passes and the temp folder is gone afterwards.
   - Dependencies: T1
-  - Files: `docs/plans/baseline-results/fs-scope.md`, `scripts/perf/fs-scope.mjs`
+  - Files: `tasks/baseline/results/fs-scope.md`, `scripts/perf/fs-scope.mjs`
 
 - [x] **T13b: Playback features review** (S)
   - Description: Read `PlaybackDialog.tsx` and settle: audio-track and quality selection (what the UI offers), the full list of keyboard shortcuts, playback rate, and Picture-in-Picture.
   - Acceptance: a table of each capability as present, partial or absent, with line references.
   - Verify: references open at the stated lines.
   - Dependencies: none
-  - Files: `docs/plans/baseline-results/playback-capabilities.md`
+  - Files: `tasks/baseline/results/playback-capabilities.md`
 
 - [x] **T13c: Credential leak scan** (S)
   - Description: Add a source with sentinel credentials (M3U with a token in the URL, Xtream), play, favorite, cast-prepare, export diagnostics, create a backup, then search the exports and the profile for the sentinels.
   - Acceptance: a table of places checked (diagnostics export, logs, localStorage, SQLite files, backup file, cast request) and whether the sentinel appears.
   - Verify: the scan script's output matches the table.
   - Dependencies: T1
-  - Files: `scripts/perf/credential-scan.mjs`, `docs/plans/baseline-results/credential-scan.md`
+  - Files: `scripts/perf/credential-scan.mjs`, `tasks/baseline/results/credential-scan.md`
 
 ### Checkpoint 3: every "to verify" marker has an answer
 - [x] fs permissions, audio-track, shortcuts, credential leaks, startup breakdown all resolved
@@ -155,14 +155,14 @@ l.tivihub.desktop`, see the spike note)
 ## Phase 4: Findings
 
 - [x] **T14: Findings note and plan update** (M)
-  - Description: Write `docs/plans/app-improvements-baseline.md` with machine specs, tables for S, M, L, XL, the long-task table, accessibility results and the resolved "to verify" items. Apply the decision rules and reorder the phases in `docs/plans/app-improvements.md`.
+  - Description: Write `tasks/baseline/findings.md` with machine specs, tables for S, M, L, XL, the long-task table, accessibility results and the resolved "to verify" items. Apply the decision rules and reorder the phases in `tasks/app-improvements/plan.md`.
   - Acceptance:
     - All six success criteria in the spec are met, or the gap is stated.
     - Each "to verify" marker in `app-improvements.md` is replaced with confirmed or refuted.
     - A recommendation says which module is next and why.
-  - Verify: re-read against `docs/specs/SPEC-baseline.md`; `npm test`, `npm run typecheck`, `cargo test` pass; `git diff --stat` shows no file under `src/` except `perfDataset.test.ts` and `mockXtream.test.ts`.
+  - Verify: re-read against `tasks/baseline/spec.md`; `npm test`, `npm run typecheck`, `cargo test` pass; `git diff --stat` shows no file under `src/` except `perfDataset.test.ts` and `mockXtream.test.ts`.
   - Dependencies: T9, T11, T13a, T13b, T13c (T12 if done)
-  - Files: `docs/plans/app-improvements-baseline.md`, `docs/plans/app-improvements.md`
+  - Files: `tasks/baseline/findings.md`, `tasks/app-improvements/plan.md`
 
 ### Checkpoint: Complete
 - [ ] All acceptance criteria in the spec met (gaps: repeatability within 15 percent not met; T12 screen reader pass is the maintainer's and not done; cast and backup files not exercised)

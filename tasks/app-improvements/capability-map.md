@@ -1,6 +1,6 @@
 # Capability map: TiviHub improvements after v1.8.0
 
-Source: `docs/plans/app-improvements.md`. Status: approved by the maintainer. Module ids are stable; do not rename them.
+Source: `tasks/app-improvements/plan.md`. Status: approved by the maintainer. Module ids are stable; do not rename them.
 
 | Module id | Responsibility | Depends on |
 |---|---|---|
@@ -16,6 +16,6 @@ Source: `docs/plans/app-improvements.md`. Status: approved by the maintainer. Mo
 | query-engine | Page, sort and search in SQLite with full-text search, lazy startup | baseline, app-split |
 | library-features | EPG reminders, parental PIN, source merge, watchlist | query-engine |
 
-Build order (updated after the baseline, see `docs/plans/app-improvements-baseline.md`): baseline (done) and ci-quality, then the cheap hardening fixes, then app-split, then query-engine, then a11y-fixes and release-trust, then playback-split and playback-features, native-network, then library-features.
+Build order (updated after the baseline, see `tasks/baseline/findings.md`): baseline (done) and ci-quality, then the cheap hardening fixes, then app-split, then query-engine, then a11y-fixes and release-trust, then playback-split and playback-features, native-network, then library-features.
 
 Each module has its own `SPEC-<id>.md` in this folder, written and approved before its plan and code.

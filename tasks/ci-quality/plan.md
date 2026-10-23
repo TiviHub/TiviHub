@@ -1,6 +1,6 @@
 # Implementation Plan: ci-quality
 
-Spec: `docs/specs/SPEC-ci-quality.md` (approved). Task list: `tasks/ci-quality/todo.md`. The older `tasks/plan.md` and `tasks/todo.md` belong to the finished `baseline` module and still have unchecked items, so this plan lives in its own folder instead of replacing them.
+Spec: `tasks/ci-quality/spec.md` (approved). Task list: `tasks/ci-quality/todo.md`. The older `tasks/baseline/plan.md` and `tasks/baseline/todo.md` belong to the finished `baseline` module and still have unchecked items, so this plan lives in its own folder (`tasks/ci-quality/`) instead of replacing them.
 
 ## Overview
 

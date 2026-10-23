@@ -1,10 +1,10 @@
 # Implementation Plan: baseline (measure before changing anything)
 
-Spec: `docs/specs/SPEC-baseline.md`. Capability map: `docs/specs/CAPABILITY-MAP.md`. Task list: `tasks/todo.md` (default target, no external tracker).
+Spec: `tasks/baseline/spec.md`. Capability map: `tasks/app-improvements/capability-map.md`. Task list: `tasks/baseline/todo.md` (default target, no external tracker).
 
 ## Overview
 
-Build a small, re-runnable measurement harness that drives the real Windows desktop app, run it on seeded synthetic catalogs of four sizes, audit accessibility, settle the plan's "to verify" items, and write a findings note that reorders `docs/plans/app-improvements.md` using the approved decision rules (cold start over 3 s, a long task over 200 ms, or memory over 1.5 GB on the large dataset moves `query-engine` up).
+Build a small, re-runnable measurement harness that drives the real Windows desktop app, run it on seeded synthetic catalogs of four sizes, audit accessibility, settle the plan's "to verify" items, and write a findings note that reorders `tasks/app-improvements/plan.md` using the approved decision rules (cold start over 3 s, a long task over 200 ms, or memory over 1.5 GB on the large dataset moves `query-engine` up).
 
 No application code under `src/` changes. All new code is in `scripts/perf/`, plus one generator test and docs.
 

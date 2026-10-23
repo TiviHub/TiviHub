@@ -1,6 +1,6 @@
 # Tasks: ci-quality
 
-Plan: `tasks/ci-quality/plan.md`. Spec: `docs/specs/SPEC-ci-quality.md`. No task touches more than 5 files.
+Plan: `tasks/ci-quality/plan.md`. Spec: `tasks/ci-quality/spec.md`. No task touches more than 5 files.
 
 ## Phase 1: clean slate
 

@@ -16,6 +16,6 @@ Read from `src/components/PlaybackDialog.tsx` at commit of this branch. "Present
 | Next-episode prompt or autoplay | Absent | No match for "next episode" anywhere in `src/` |
 | Casting | Present | `invoke("cast_media")` and `invoke("stop_cast")` (lines 749 and 797) |
 
-## Corrections to `docs/plans/app-improvements.md`
+## Corrections to `tasks/plans/app-improvements.md`
 
 The improvement plan said playback speed was a single reference and audio-track support was unchecked. Both were wrong: speed, audio-track and quality selection already exist. Items D2 (speed) and D5 (audio and quality) are removed from the playback-features module. What remains there: keyboard shortcuts, a sleep timer, next-episode prompt and autoplay, channel zapping, clearer error messages, and a check of whether Picture-in-Picture works from the native controls.

@@ -1,10 +1,10 @@
 # Spec: baseline (measure before changing anything)
 
-Module of `CAPABILITY-MAP.md`. Status: draft, waiting for approval.
+Module of `capability-map.md`. Status: draft, waiting for approval.
 
 ## Objective
 
-Turn the guesses in `docs/plans/app-improvements.md` into numbers, so later modules (`hardening`, `query-engine`, `playback-split`) are chosen and sized from data. Nothing about the app's behavior changes in this module.
+Turn the guesses in `tasks/app-improvements/plan.md` into numbers, so later modules (`hardening`, `query-engine`, `playback-split`) are chosen and sized from data. Nothing about the app's behavior changes in this module.
 
 Who it is for: the maintainer, deciding what to build next. Success is a findings note plus a script that can be re-run later to prove an improvement (the `query-engine` gate needs the same measurements again).
 
@@ -63,9 +63,8 @@ The `perf:*` scripts are new and live outside `npm test`, so they never slow CI.
 
 ```
 scripts/perf/                  new: dataset generator, mock Xtream server, baseline runner, results writer
-docs/specs/                    this spec and the capability map
-docs/plans/                    app-improvements.md, plus app-improvements-baseline.md (the findings note, new)
-docs/plans/baseline-results/   raw JSON per run (new, small files only)
+tasks/baseline/                 this spec, plan, todo and findings.md (the findings note)
+tasks/baseline/results/         raw JSON per run (new, small files only)
 src/                           unchanged in this module
 ```
 
@@ -101,7 +100,7 @@ export function generateCatalog(size: DatasetSize, seed = 1): Catalog {
 
 ## Success criteria
 
-1. `docs/plans/app-improvements-baseline.md` exists with, for datasets M, L and XL: startup (median, worst), memory at ready and after interactions, and the long-task table for the 6 interactions. Each number comes from at least 5 runs.
+1. `tasks/baseline/findings.md` exists with, for datasets M, L and XL: startup (median, worst), memory at ready and after interactions, and the long-task table for the 6 interactions. Each number comes from at least 5 runs.
 2. Every "to verify" item in `app-improvements.md` is marked confirmed or refuted, with evidence, and the plan's wording is updated to match.
 3. The accessibility section lists axe violations by severity for 8 named screens, the keyboard walkthrough results, and screen reader notes for the main flows.
 4. `npm run perf:baseline` reproduces the numbers on a clean checkout, and two runs agree within 15 percent.

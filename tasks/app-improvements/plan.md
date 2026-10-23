@@ -16,7 +16,7 @@ Every item says what the evidence is. **Verified** means I read the code or conf
 - CI (`ci.yml`) runs on Windows only. Linux and macOS are first built and tested by the Release workflow.
 - No ESLint or Prettier config. Dependabot covers npm only. 39 test files (238 tests, one benchmark skipped), 1 Playwright spec, and Rust tests for storage only (none for `chromecast.rs`).
 - Installers are unsigned (no signing or checksum step in the scripts or workflows). Updates are a manual download.
-- Playback already has text tracks, audio-track selection, quality selection and playback speed (verified in the baseline: `docs/plans/baseline-results/playback-capabilities.md`). It has no custom keyboard shortcuts beyond Escape and Tab, no sleep timer, no next-episode logic and no custom Picture-in-Picture button.
+- Playback already has text tracks, audio-track selection, quality selection and playback speed (verified in the baseline: `tasks/baseline/results/playback-capabilities.md`). It has no custom keyboard shortcuts beyond Escape and Tab, no sleep timer, no next-episode logic and no custom Picture-in-Picture button.
 - No i18n layer. Strings are hard-coded English.
 
 ## A. Security and trust
@@ -109,7 +109,7 @@ Product direction matters here. Pick two or three after B and D, based on what u
 
 | Phase | Work | Gate |
 |-------|------|------|
-| 0 | Measure and audit: B1, H1, A2, check D5 and I1 | **Done.** Findings in `docs/plans/app-improvements-baseline.md`; the order below is updated from them |
+| 0 | Measure and audit: B1, H1, A2, check D5 and I1 | **Done.** Findings in `tasks/baseline/findings.md`; the order below is updated from them |
 | 1 | Quick wins: A3, A6, F3, F5, G1 to G3, plus the two cheap security fixes from the baseline (no HTTP cache for calls that carry the login; autofill off on the add-source form) and A2 narrowing | CI green on three platforms; checksums on a release; the credential scan shows no login in the WebView cache or autofill data |
 | 2 | Code health that the next phase needs: F1 (`App.tsx`) in slices | `appFlow` and `userActions` untouched and green after every slice |
 | 3 | Performance, triggered by the baseline: B2, B3, B4 (`query-engine`), then B5 with C1/C2 for refresh | Re-run the baseline: L cold start under 3 s, no long task over 200 ms in the six interactions, refresh without a UI freeze over 200 ms; contract suite green |

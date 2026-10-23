@@ -1,6 +1,6 @@
 # Spec: ci-quality (a pull request proves it works on every platform)
 
-Module of `CAPABILITY-MAP.md`. Depends on: nothing. Status: draft, waiting for approval.
+Module of `capability-map.md`. Depends on: nothing. Status: draft, waiting for approval.
 
 ## Objective
 
