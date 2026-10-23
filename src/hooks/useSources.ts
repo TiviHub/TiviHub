@@ -80,6 +80,10 @@ export interface SourceDeps {
   setEpg: Setter<EpgProgram[]>;
 }
 
+// rtmp://, rtsp:// and udp:// entries cannot play in TiviHub, so the M3U parser leaves them out.
+const skippedLabel = (count: number) =>
+  count > 0 ? `${count.toLocaleString()} skipped (not HTTP or HTTPS)` : "";
+
 export function useSources(deps: SourceDeps) {
   const {
     notify,
@@ -199,6 +203,7 @@ export function useSources(deps: SourceDeps) {
     const importStartedAt = performance.now();
     let catalog: CatalogCandidate;
     let importedEpisodes: Episode[] | undefined;
+    let skippedStreams = 0;
     if (playlist.type === "M3U") {
       const content = draft.fileContent ??
         (playlist.fileName
@@ -220,6 +225,7 @@ export function useSources(deps: SourceDeps) {
         episodes: importedCatalog.episodes,
       };
       importedEpisodes = importedCatalog.episodes;
+      skippedStreams = importedCatalog.skipped;
     } else {
       try {
         const result = await loadXtreamCatalog(playlist, draft.signal);
@@ -294,7 +300,8 @@ export function useSources(deps: SourceDeps) {
       `${catalog.channels.length.toLocaleString()} live channels`,
       `${catalog.movies.length.toLocaleString()} movies`,
       `${catalog.series.length.toLocaleString()} series`,
-    ].join(", ");
+      skippedLabel(skippedStreams),
+    ].filter(Boolean).join(", ");
     if (shouldActivate) {
       if (isNewSource) setSection("Live TV");
       try {
@@ -374,6 +381,7 @@ export function useSources(deps: SourceDeps) {
     try {
       let catalog: CatalogCandidate;
       let importedEpisodes: Episode[] | undefined;
+      let skippedStreams = 0;
       let expiresAtMillis = source.expiresAtMillis;
       if (source.demo) {
         if (import.meta.env.DEV) {
@@ -412,6 +420,7 @@ export function useSources(deps: SourceDeps) {
           episodes: importedCatalog.episodes,
         };
         importedEpisodes = importedCatalog.episodes;
+        skippedStreams = importedCatalog.skipped;
       } else {
         const result = await loadXtreamCatalog(source);
         expiresAtMillis = result.expiresAtMillis;
@@ -494,7 +503,8 @@ export function useSources(deps: SourceDeps) {
         if (!background) notify("Demo playlist restored from its bundled M3U fixture.", "notice");
         return;
       }
-      const summaryText = formatCatalogChangeSummary(changeSummary);
+      const summaryText = formatCatalogChangeSummary(changeSummary) +
+        (skippedStreams > 0 ? ` ${skippedLabel(skippedStreams)}.` : "");
       try {
         const count = await loadGuide(source);
         notify(count === null
