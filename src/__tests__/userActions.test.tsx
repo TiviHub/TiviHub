@@ -294,6 +294,19 @@ describe("playlist dialog user actions", () => {
     expect((screen.getByLabelText(/Password/) as HTMLInputElement).required).toBe(true);
   });
 
+  it("warns that an HTTP source address is unencrypted, but not an HTTPS one", async () => {
+    const user = userEvent.setup();
+    render(<PlaylistDialog onClose={vi.fn()} onConnect={vi.fn(async () => undefined)} />);
+    const url = screen.getByLabelText(/Playlist URL/);
+
+    await user.type(url, "https://provider.example/live.m3u");
+    expect(screen.queryByText(/unencrypted \(HTTP\)/)).toBeNull();
+
+    await user.clear(url);
+    await user.type(url, "http://provider.example/live.m3u");
+    expect(screen.getByText(/unencrypted \(HTTP\)/)).toBeTruthy();
+  });
+
   it("closes the source dialog on Escape", async () => {
     const onClose = vi.fn();
     render(<PlaylistDialog onClose={onClose} onConnect={vi.fn(async () => undefined)} />);
