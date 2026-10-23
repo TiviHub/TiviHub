@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
+import { useAppPreferences } from "./hooks/useAppPreferences";
 import { useAppUpdate } from "./hooks/useAppUpdate";
+import { useRefreshOverlay } from "./hooks/useRefreshOverlay";
 import { useDownloads } from "./hooks/useDownloads";
 import { useLocalData } from "./hooks/useLocalData";
 import { usePlayback } from "./hooks/usePlayback";
@@ -18,7 +20,6 @@ import {
   isPlaylistExpired,
 } from "./services/catalogCache";
 import type { SearchSection } from "./lib/globalSearch";
-import { visibleButton } from "./lib/visibleButton";
 import { loadStalkerEpisodes } from "./providers/stalker";
 import {
   loadXtreamEpisodes,
@@ -59,7 +60,6 @@ import { StartupScreen } from "./components/StartupScreen";
 import { StreamHealthCheckDialog } from "./components/StreamHealthCheckDialog";
 
 type Section = SearchSection;
-type ThemePreference = "system" | "light" | "dark";
 type NavigationEntry = {
   section: Section;
   movieId: string | null;
@@ -80,32 +80,10 @@ configureMdblistRateLimiter({
 });
 const ASSET_BASE_URL = import.meta.env.BASE_URL;
 
-function readThemePreference(): ThemePreference {
-  try {
-    const saved = window.localStorage.getItem("tivihub.web.theme");
-    return saved === "system" || saved === "light" || saved === "dark" ? saved : "dark";
-  } catch (error) {
-    console.error("Could not read the local theme preference", error);
-    return "dark";
-  }
-}
-
-function readShowAdultContent(): boolean {
-  try {
-    return window.localStorage.getItem("tivihub.web.show-adult-content") === "true";
-  } catch (error) {
-    console.error("Could not read the local adult-content preference", error);
-    return false;
-  }
-}
-
-
 function App() {
   const isDesktopApp = isTauri();
   const [section, setSection] = useState<Section>("Home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [theme, setTheme] = useState<ThemePreference>(readThemePreference);
-  const [showAdultContent, setShowAdultContent] = useState(readShowAdultContent);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [guideLoadCount, setGuideLoadCount] = useState(0);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
@@ -115,6 +93,7 @@ function App() {
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Playlist | undefined>();
   const [refreshing, setRefreshing] = useState(false);
+  const { refreshOverlayRef, refreshReturnFocusRef } = useRefreshOverlay(refreshing);
   const [deletingSource, setDeletingSource] = useState<{
     name: string;
     completed: number;
@@ -125,6 +104,7 @@ function App() {
     () => isDesktopApp && !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const { error, notice, notificationKey, notify, clearNotifications } = useNotifications();
+  const { theme, showAdultContent, chooseTheme, chooseShowAdultContent } = useAppPreferences(notify);
   const {
     favorites, library, setFavorites, setLibrary, toggleFavorite, addToWatchlist, saveProgress,
     changeLibraryStatus, deleteLibraryItem, removeFromLibrary, removeFavorite,
@@ -149,8 +129,6 @@ function App() {
   const activeSourceIdRef = useRef(activeSourceId);
   activeSourceIdRef.current = activeSourceId;
   const startupOverlayRef = useRef<HTMLDivElement>(null);
-  const refreshOverlayRef = useRef<HTMLDivElement>(null);
-  const refreshReturnFocusRef = useRef<HTMLElement | null>(null);
   const catalogRefreshInFlight = useRef(new Set<string>());
   const navigationHistoryRef = useRef<NavigationEntry[]>([]);
   const navigationHistoryIndexRef = useRef(-1);
@@ -281,67 +259,6 @@ function App() {
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     return localDiagnostics.storageAvailable;
-  }
-
-  useEffect(() => {
-    if (refreshing) {
-      refreshOverlayRef.current?.focus();
-      return;
-    }
-    const returnFocus = refreshReturnFocusRef.current;
-    if (!returnFocus) return;
-    refreshReturnFocusRef.current = null;
-    if (returnFocus.isConnected) returnFocus.focus();
-    else visibleButton(".settings-source-refresh")?.focus();
-  }, [refreshing]);
-
-  useEffect(() => {
-    if (!refreshing) return;
-    const root = document.documentElement;
-    const previousRootOverflow = root.style.overflow;
-    const previousBodyOverflow = document.body.style.overflow;
-    root.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
-    return () => {
-      root.style.overflow = previousRootOverflow;
-      document.body.style.overflow = previousBodyOverflow;
-    };
-  }, [refreshing]);
-
-  useEffect(() => {
-    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
-    const applyTheme = () => {
-      const dark = theme === "system" ? systemTheme.matches : theme === "dark";
-      document.documentElement.dataset.theme = dark ? "dark" : "light";
-      document.querySelector('meta[name="theme-color"]')?.setAttribute(
-        "content",
-        dark ? "#09080f" : "#f8f8fa",
-      );
-    };
-    applyTheme();
-    if (theme !== "system") return;
-    systemTheme.addEventListener("change", applyTheme);
-    return () => systemTheme.removeEventListener("change", applyTheme);
-  }, [theme]);
-
-  function chooseTheme(value: ThemePreference) {
-    setTheme(value);
-    try {
-      window.localStorage.setItem("tivihub.web.theme", value);
-    } catch (cause) {
-      console.error("Could not save the local theme preference", cause);
-      notify("Could not save the theme preference on this device.", "error");
-    }
-  }
-
-  function chooseShowAdultContent(value: boolean) {
-    setShowAdultContent(value);
-    try {
-      window.localStorage.setItem("tivihub.web.show-adult-content", String(value));
-    } catch (cause) {
-      console.error("Could not save the local adult-content preference", cause);
-      notify("Could not save the adult-content preference on this device.", "error");
-    }
   }
 
   function openAddSource() {
