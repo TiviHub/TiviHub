@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { replayUrl } from "../catchup";
-import { isStalkerLink, resolveStalkerLink, stalkerUserAgent } from "../providers/stalker";
+import { isStalkerLink, isStalkerVideoLink, resolveStalkerLink, stalkerUserAgent } from "../providers/stalker";
 import { getLibraryItems, saveLibraryItem } from "../storage/database";
 import type { EpgProgram, LibraryItem, LiveChannel, PlayableItem, Playlist } from "../types";
 
@@ -29,7 +29,13 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     if (source?.type === "STALKER" && isStalkerLink(item.streamUrl)) {
       // A portal hands out the stream address when you press play, and it only works for a short while.
       resolveStalkerLink(source, item.streamUrl)
-        .then((streamUrl) => start({ ...item, streamUrl, sourceUrl: item.streamUrl, userAgent: stalkerUserAgent(source) }, position))
+        .then((streamUrl) => start({
+          ...item,
+          streamUrl,
+          sourceUrl: item.streamUrl,
+          userAgent: stalkerUserAgent(source),
+          direct: isStalkerVideoLink(item.streamUrl) && !/[.](?:m3u8|mpd)(?:[?#]|$)/i.test(streamUrl),
+        }, position))
         .catch((cause: unknown) => notify(cause instanceof Error ? cause.message : "The portal could not start this stream.", "error"));
       return;
     }

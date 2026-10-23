@@ -99,6 +99,20 @@ pub fn check_target(url: &Url, policy: Policy) -> Result<(), String> {
     }
 }
 
+/// The failure and the reasons behind it ("error sending request" is rarely the whole story), without the address.
+fn describe(error: reqwest::Error) -> String {
+    use std::error::Error;
+    let error = error.without_url();
+    let mut parts = vec![error.to_string()];
+    let mut source = error.source();
+    while let Some(inner) = source {
+        parts.push(inner.to_string());
+        source = inner.source();
+    }
+    parts.dedup();
+    parts.join(": ")
+}
+
 fn client(policy: Policy) -> Result<Client, String> {
     Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
@@ -167,7 +181,7 @@ pub fn fetch(request: FetchRequest, policy: Policy) -> Result<FetchResponse, Str
     if let Some(body) = request.body {
         builder = builder.body(body);
     }
-    let response = builder.send().map_err(|e| e.to_string())?;
+    let response = builder.send().map_err(describe)?;
     let status = response.status().as_u16();
     if response
         .content_length()
@@ -284,7 +298,7 @@ fn cors_headers() -> Vec<tiny_http::Header> {
     vec![
         header("Access-Control-Allow-Origin", "*"),
         header("Access-Control-Allow-Headers", "range, content-type"),
-        header("Access-Control-Allow-Methods", "GET, OPTIONS"),
+        header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS"),
         header(
             "Access-Control-Expose-Headers",
             "content-length, content-range, accept-ranges, content-type, x-final-url",
@@ -315,7 +329,9 @@ fn handle(request: tiny_http::Request, profiles: &Profiles, port: u16, policy: P
             && (h.value.as_str() == format!("127.0.0.1:{port}")
                 || h.value.as_str() == format!("localhost:{port}"))
     });
-    if !host_ok || *request.method() != tiny_http::Method::Get {
+    // Players ask for the file type with HEAD before they download.
+    let is_head = *request.method() == tiny_http::Method::Head;
+    if !host_ok || (*request.method() != tiny_http::Method::Get && !is_head) {
         return refuse(request, 403);
     }
     let Ok(url) = Url::parse(&format!("http://127.0.0.1{}", request.url())) else {
@@ -347,27 +363,81 @@ fn handle(request: tiny_http::Request, profiles: &Profiles, port: u16, policy: P
     let Ok(client) = client(policy) else {
         return refuse(request, 502);
     };
-    let mut upstream = client.get(target);
-    for (name, value) in headers {
-        upstream = upstream.header(name, value);
-    }
-    for h in request.headers() {
-        if h.field.equiv("Range") {
-            upstream = upstream.header("Range", h.value.as_str());
+    let build = |head: bool, range: Option<&str>| {
+        let mut upstream = if head {
+            client.head(target.clone())
+        } else {
+            client.get(target.clone())
+        };
+        for (name, value) in &headers {
+            upstream = upstream.header(name, value);
+        }
+        if let Some(range) = range {
+            upstream = upstream.header("Range", range);
+        }
+        upstream
+    };
+    let requested_range = request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("Range"))
+        .map(|h| h.value.as_str().to_string());
+    let mut response = match build(is_head, requested_range.as_deref()).send() {
+        Ok(response) => response,
+        Err(error) => {
+            let reason: String = describe(error)
+                .chars()
+                .filter(|c| c.is_ascii() && !c.is_ascii_control())
+                .take(200)
+                .collect();
+            let _ = request.respond(
+                tiny_http::Response::empty(tiny_http::StatusCode(502))
+                    .with_header(header("Access-Control-Allow-Origin", "*"))
+                    .with_header(header("X-Proxy-Error", &reason)),
+            );
+            return;
+        }
+    };
+    // Some servers refuse HEAD; their answer to a one-byte read tells the player the same thing.
+    let mut head_by_range = false;
+    if is_head && matches!(response.status().as_u16(), 400 | 403 | 405 | 501) {
+        if let Ok(fallback) = build(false, Some("bytes=0-0")).send() {
+            if fallback.status().is_success() {
+                response = fallback;
+                head_by_range = true;
+            }
         }
     }
-    let Ok(response) = upstream.send() else {
-        return refuse(request, 502);
+    let status = if head_by_range {
+        200
+    } else {
+        response.status().as_u16()
     };
-    let status = response.status().as_u16();
-    let length = response.content_length().map(|length| length as usize);
+    let length = if head_by_range {
+        None
+    } else {
+        response.content_length().map(|length| length as usize)
+    };
     let mut headers = cors_headers();
     // The player resolves relative segment addresses against where the playlist really came from.
     headers.push(header("X-Final-Url", response.url().as_str()));
     for name in PASSED_BACK_HEADERS {
+        if head_by_range && *name == "content-range" {
+            continue;
+        }
         if let Some(value) = response.headers().get(*name).and_then(|v| v.to_str().ok()) {
             headers.push(header(name, value));
         }
+    }
+    if head_by_range {
+        let _ = request.respond(tiny_http::Response::new(
+            tiny_http::StatusCode(status),
+            headers,
+            std::io::empty(),
+            None,
+            None,
+        ));
+        return;
     }
     let _ = request.respond(tiny_http::Response::new(
         tiny_http::StatusCode(status),
@@ -401,6 +471,16 @@ mod tests {
                         .map(|h| h.value.to_string())
                         .unwrap_or_default()
                 };
+                if request.url() == "/nohead" && *request.method() == tiny_http::Method::Head {
+                    let _ = request.respond(tiny_http::Response::empty(405));
+                    continue;
+                }
+                if request.url() == "/typed" || request.url() == "/nohead" {
+                    let response = tiny_http::Response::from_string("video-bytes")
+                        .with_header(header("Content-Type", "video/mp4"));
+                    let _ = request.respond(response);
+                    continue;
+                }
                 let body = match request.url() {
                     "/echo" => format!("ua={};cookie={}", value("User-Agent"), value("Cookie")),
                     "/big" => "x".repeat(4096),
@@ -551,6 +631,27 @@ mod tests {
         assert_eq!(partial.status(), 206);
         assert_eq!(partial.headers()["content-range"], "bytes 0-9/100");
         assert_eq!(partial.text().unwrap(), "0123456789");
+    }
+
+    #[test]
+    fn the_proxy_answers_head_requests_even_for_servers_that_refuse_them() {
+        let port = upstream();
+        let state = ProxyState::default();
+        let registration = state.register(&[], LOOPBACK).unwrap();
+        let client = reqwest::blocking::Client::new();
+        for path in ["/typed", "/nohead"] {
+            let reply = client
+                .head(format!(
+                    "{}?u={}",
+                    registration.base_url,
+                    encoded(&format!("http://127.0.0.1:{port}{path}"))
+                ))
+                .send()
+                .unwrap();
+            assert_eq!(reply.status(), 200, "{path}");
+            assert_eq!(reply.headers()["content-type"], "video/mp4", "{path}");
+            assert!(reply.text().unwrap().is_empty(), "{path}");
+        }
     }
 
     #[test]

@@ -525,7 +525,7 @@ export function PlaybackDialog({
         if (
           item.offline ||
           !item.drmLicenseUrl &&
-          (directMediaUrl(item.streamUrl) || (!proxy && nativeHlsUrl(item.streamUrl, video)))
+          (directMediaUrl(item.streamUrl) || item.direct || (!proxy && nativeHlsUrl(item.streamUrl, video)))
         ) {
           selectedPlaybackPath = "Native media element";
           playbackPathRef.current = selectedPlaybackPath;

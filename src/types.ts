@@ -205,6 +205,8 @@ export interface PlayableItem {
   live: boolean;
   /** The address kept in the catalog when `streamUrl` was resolved just before playing (Stalker portals). */
   sourceUrl?: string;
+  /** Load the address as a plain media file, without asking the server what it is first. */
+  direct?: boolean;
   radio?: boolean;
   /** The source's custom User-Agent; the player sends it through the desktop proxy. */
   userAgent?: string;

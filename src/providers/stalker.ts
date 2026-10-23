@@ -12,8 +12,6 @@ export const STALKER_DEFAULT_USER_AGENT =
   "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG250 stbapp ver: 2 rev: 250 Safari/533.3";
 const STB_MODEL = "Model: MAG250; Link: WiFi";
 const MAX_PORTAL_RESPONSE_BYTES = 200 * 1024 * 1024;
-const MAX_VOD_PAGES = 500;
-const VOD_PAGE_CONCURRENCY = 3;
 const EPG_PERIOD_HOURS = 6;
 
 /** Stream addresses are only known when you press play, so the catalog keeps this stand-in. */
@@ -54,6 +52,11 @@ export function isStalkerLink(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Movies and episodes come back as one plain video file; live channels may be a stream playlist. */
+export function isStalkerVideoLink(link: string): boolean {
+  return parseLink(link)?.type === "vod";
 }
 
 function parseLink(url: string): { type: LinkType; cmd: string; series: string } | null {
@@ -268,38 +271,64 @@ interface Category {
   title: string;
 }
 
-/** The categories of the video library or of the series library; a portal without one answers with an error or nothing. */
-async function categoriesOf(playlist: Playlist, type: "vod" | "series", signal?: AbortSignal): Promise<Category[]> {
+/** Large portals list hundreds of thousands of titles, 14 per request; TiviHub imports the newest of each kind. */
+export const STALKER_LIBRARY_LIMIT = 3000;
+const LIBRARY_CONCURRENCY = 8;
+
+/** Category names by id for the video library or the series library; a portal without one answers with an error or nothing. */
+async function categoryNames(playlist: Playlist, type: "vod" | "series", signal?: AbortSignal): Promise<Map<string, string>> {
   try {
-    return records(await call(playlist, { type, action: "get_categories" }, signal)).flatMap((category) => {
+    return new Map(records(await call(playlist, { type, action: "get_categories" }, signal)).flatMap((category) => {
       const id = stringValue(category.id);
-      return id && id !== "*" ? [{ id, title: stringValue(category.title) ?? (type === "vod" ? "Movies" : "Series") }] : [];
-    });
+      const title = stringValue(category.title);
+      return id && id !== "*" && title ? [[id, title] as const] : [];
+    }));
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    return [];
+    return new Map();
   }
 }
 
-/** Every page of one category, at most `budget.left` pages in total across all categories. */
-async function listCategory(
+async function fetchPages(
   playlist: Playlist,
   type: "vod" | "series",
-  category: Category,
-  budget: { left: number },
+  category: string,
+  limit: number,
   signal?: AbortSignal,
 ): Promise<Payload[]> {
-  const params = (page: number) => ({ type, action: "get_ordered_list", category: category.id, p: String(page), sortby: "added" });
+  const params = (page: number) => ({ type, action: "get_ordered_list", category, p: String(page), sortby: "added" });
   const first = await call(playlist, params(1), signal) as Payload | null;
   const items = records(first?.data);
-  const total = numberValue(first?.total_items) ?? 0;
+  const total = Math.min(numberValue(first?.total_items) ?? 0, limit);
   const perPage = numberValue(first?.max_page_items) ?? items.length;
   const pages = perPage > 0 ? Math.ceil(total / perPage) : 1;
-  const remaining = Array.from({ length: Math.max(0, Math.min(pages, budget.left) - 1) }, (_, index) => index + 2);
-  budget.left -= 1 + remaining.length;
-  for (let start = 0; start < remaining.length; start += VOD_PAGE_CONCURRENCY) {
-    const batch = remaining.slice(start, start + VOD_PAGE_CONCURRENCY);
+  const remaining = Array.from({ length: Math.max(0, pages - 1) }, (_, index) => index + 2);
+  for (let start = 0; start < remaining.length; start += LIBRARY_CONCURRENCY) {
+    const batch = remaining.slice(start, start + LIBRARY_CONCURRENCY);
     const results = await Promise.all(batch.map((page) => call(playlist, params(page), signal) as Promise<Payload | null>));
+    for (const result of results) items.push(...records(result?.data));
+  }
+  return items;
+}
+
+/**
+ * The newest titles of one library. The portal's "all" category lists everything newest first; a portal
+ * that does not answer it is read category by category, taking the first page of each.
+ */
+async function listNewest(
+  playlist: Playlist,
+  type: "vod" | "series",
+  names: Map<string, string>,
+  signal?: AbortSignal,
+): Promise<Payload[]> {
+  const everything = await fetchPages(playlist, type, "*", STALKER_LIBRARY_LIMIT, signal);
+  if (everything.length > 0) return everything;
+  const items: Payload[] = [];
+  const ids = [...names.keys()];
+  for (let start = 0; start < ids.length && items.length < STALKER_LIBRARY_LIMIT; start += LIBRARY_CONCURRENCY) {
+    const batch = ids.slice(start, start + LIBRARY_CONCURRENCY);
+    const results = await Promise.all(batch.map((id) =>
+      call(playlist, { type, action: "get_ordered_list", category: id, p: "1", sortby: "added" }, signal) as Promise<Payload | null>));
     for (const result of results) items.push(...records(result?.data));
   }
   return items;
@@ -313,6 +342,11 @@ function inlineEpisodes(item: Payload): number[] {
       return number !== undefined && number > 0 ? [number] : [];
     })
     : [];
+}
+
+function categoryOf(item: Payload, names: Map<string, string>, fallback: string): Category {
+  const id = stringValue(item.category_id) ?? "";
+  return { id, title: names.get(id) ?? fallback };
 }
 
 function movieFrom(playlist: Playlist, item: Payload, category: Category, id: string, name: string, cmd: string): Movie {
@@ -334,7 +368,7 @@ function movieFrom(playlist: Playlist, item: Payload, category: Category, id: st
     imdbId: normalizeImdbId(item.imdb_id ?? item.imdb ?? item.imdbid),
     tmdbId: normalizeTmdbId(item.tmdb_id ?? item.tmdb),
     addedAtMillis: Number.isFinite(added) ? added : undefined,
-    categoryId: category.id,
+    categoryId: category.id || undefined,
     category: category.title,
   };
 }
@@ -349,7 +383,7 @@ function seriesFrom(playlist: Playlist, item: Payload, category: Category, provi
     posterUrl: movie.posterUrl,
     overview: movie.overview,
     seasons: 0,
-    categoryId: category.id,
+    categoryId: movie.categoryId,
     category: category.title,
     year: movie.year,
     rating: movie.rating,
@@ -362,21 +396,31 @@ function seriesFrom(playlist: Playlist, item: Payload, category: Category, provi
 /**
  * Movies and series. Portals keep series in one of two ways: in the video library as an item with a
  * list of episode numbers, or in a library of their own with seasons and episodes opened one level at a time.
+ * Each library is read on its own, so one that fails does not take the other with it.
  */
-async function loadVideoLibrary(playlist: Playlist, signal?: AbortSignal): Promise<{ movies: Movie[]; series: Series[] }> {
+export async function loadVideoLibrary(playlist: Playlist, signal?: AbortSignal): Promise<{ movies: Movie[]; series: Series[] }> {
   const movies: Movie[] = [];
   const series: Series[] = [];
   const seen = new Set<string>();
-  const budget = { left: MAX_VOD_PAGES };
+  const guarded = async (read: () => Promise<void>) => {
+    try {
+      await read();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      recordDiagnosticFailure("stalker-portal", "invalid-response");
+    }
+  };
 
-  for (const category of await categoriesOf(playlist, "vod", signal)) {
-    if (budget.left <= 0) break;
-    for (const item of await listCategory(playlist, "vod", category, budget, signal)) {
+  // Portals answer slowly (seconds per page), so the two libraries are read side by side.
+  await Promise.all([guarded(async () => {
+    const names = await categoryNames(playlist, "vod", signal);
+    for (const item of await listNewest(playlist, "vod", names, signal)) {
       const id = stringValue(item.id);
       const name = stringValue(item.name);
       const cmd = stringValue(item.cmd);
       if (!id || !name || !cmd || seen.has(`vod:${id}`)) continue;
       seen.add(`vod:${id}`);
+      const category = categoryOf(item, names, "Movies");
       const episodes = inlineEpisodes(item);
       if (episodes.length > 0 || ["1", "true"].includes(String(item.is_series))) {
         series.push({ ...seriesFrom(playlist, item, category, `vod:${id}`, name), stalkerCmd: cmd, stalkerEpisodes: episodes });
@@ -384,28 +428,22 @@ async function loadVideoLibrary(playlist: Playlist, signal?: AbortSignal): Promi
         movies.push(movieFrom(playlist, item, category, id, name, cmd));
       }
     }
-  }
-
-  for (const category of await categoriesOf(playlist, "series", signal)) {
-    if (budget.left <= 0) break;
-    for (const item of await listCategory(playlist, "series", category, budget, signal)) {
+  }), guarded(async () => {
+    const names = await categoryNames(playlist, "series", signal);
+    for (const item of await listNewest(playlist, "series", names, signal)) {
       const id = stringValue(item.id);
       const name = stringValue(item.name);
       if (!id || !name || seen.has(`series:${id}`)) continue;
       seen.add(`series:${id}`);
-      series.push(seriesFrom(playlist, item, category, `series:${id}`, name));
+      series.push(seriesFrom(playlist, item, categoryOf(item, names, "Series"), `series:${id}`, name));
     }
-  }
+  })]);
   return { movies, series };
 }
 
 export async function loadStalkerCatalog(playlist: Playlist, signal?: AbortSignal): Promise<StalkerCatalog> {
   const channels = await loadChannels(playlist, signal);
-  const library = await loadVideoLibrary(playlist, signal).catch((error: unknown) => {
-    // Many portals only carry live TV; a missing video library must not fail the whole connection.
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
-    return { movies: [], series: [] };
-  });
+  const library = await loadVideoLibrary(playlist, signal);
   if (channels.length + library.movies.length + library.series.length === 0) {
     throw new Error("The portal returned no channels, movies or series.");
   }
