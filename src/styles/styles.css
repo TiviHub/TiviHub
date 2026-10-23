@@ -2758,9 +2758,6 @@ button:disabled {
   backdrop-filter: blur(12px);
 }
 
-.stream-health-backdrop {
-  z-index: 35;
-}
 
 .dialog-card {
   width: min(100%, 600px);
@@ -2775,123 +2772,24 @@ button:disabled {
   box-shadow: 0 28px 90px rgb(0 0 0 / 45%);
 }
 
-.stream-health-dialog {
-  width: min(100%, 460px);
-}
 
-.stream-health-channel {
-  margin: -8px 0 12px;
-  color: var(--secondary);
-  font-weight: 600;
-}
 
-.stream-health-progress,
-.stream-health-result {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin: 18px 0;
-  padding: 14px;
-  border: 1px solid var(--outline-soft);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  color: var(--text);
-  font-size: 0.84rem;
-}
 
-.stream-health-progress {
-  align-items: center;
-}
 
-.stream-health-progress-track {
-  margin-top: 6px;
-}
 
-.stream-health-group-summary {
-  margin-top: 16px;
-  font-size: 0.82rem;
-}
 
-.stream-health-group-summary p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
 
-.stream-health-results {
-  display: grid;
-  max-height: min(32vh, 280px);
-  gap: 5px;
-  margin: 12px 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
 
-.stream-health-results li {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--outline-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  font-size: 0.75rem;
-}
 
-.stream-health-results li > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.stream-health-item-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--secondary);
-  white-space: nowrap;
-}
 
-.stream-health-results li.available .stream-health-item-status {
-  color: var(--success);
-}
 
-.stream-health-results li.unavailable .stream-health-item-status {
-  color: #ff9ba9;
-}
 
-.stream-health-item-status .material-icons {
-  font-size: 16px;
-}
 
-.stream-health-result .material-icons {
-  flex: 0 0 auto;
-  color: var(--secondary);
-  font-size: 21px;
-}
 
-.stream-health-result.available .material-icons {
-  color: var(--success);
-}
 
-.stream-health-result.unavailable .material-icons {
-  color: #ff9ba9;
-}
 
-.stream-health-result strong {
-  display: block;
-  margin-bottom: 4px;
-}
 
-.stream-health-result p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
-}
 
 .global-search-overlay {
   position: fixed;
@@ -3815,9 +3713,6 @@ button:disabled {
   font-size: 0.78rem;
 }
 
-.catalog-group-check {
-  white-space: nowrap;
-}
 
 .catalog-grid {
   display: grid;
@@ -6750,10 +6645,6 @@ button:disabled {
     grid-column: 2;
   }
 
-  .catalog-group-check {
-    grid-column: 2;
-    justify-self: end;
-  }
 
   .catalog-view-switch {
     grid-column: 1 / -1;
@@ -7917,12 +7808,6 @@ button.icon-button.is-favorite {
   align-items: center;
   gap: 8px;
   padding: 0 9px 9px;
-}
-
-.browse-panel-tools .icon-button {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
 }
 
 .live-channel-list.browse-list {

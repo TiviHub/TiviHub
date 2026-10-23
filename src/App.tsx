@@ -58,7 +58,6 @@ import { ProgressIndicator } from "./components/ProgressIndicator";
 import { PlaylistDialog } from "./components/PlaylistDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { StartupScreen } from "./components/StartupScreen";
-import { StreamHealthCheckDialog } from "./components/StreamHealthCheckDialog";
 
 type Section = SearchSection;
 type NavigationEntry = {
@@ -115,7 +114,7 @@ function App() {
     mdblistApiKey, setMdblistApiKey, ready, reloadLocalData,
   } = useLocalData({ notify, setFavorites, setLibrary });
   const {
-    playableItem, inlineLivePlayback, resumePosition, streamHealthRequest, setStreamHealthRequest,
+    playableItem, inlineLivePlayback, resumePosition,
     openPlayback, openReplay, openExternal, closePlayback, recordWatchedChannel,
   } = usePlayback({ notify, setLibrary, sources });
   const {
@@ -183,8 +182,7 @@ function App() {
     isPlaylistExpired(activeSource, expiryCheckTime) || expiredSourceIds.has(activeSource.id)
   ));
   const blockingDialogOpen = sourceDialogOpen ||
-    Boolean(playableItem && !(inlineLivePlayback && playableItem.live)) ||
-    Boolean(streamHealthRequest);
+    Boolean(playableItem && !(inlineLivePlayback && playableItem.live));
   const canOpenGlobalSearch = ready &&
     !refreshing &&
     !sourceDialogOpen &&
@@ -425,8 +423,6 @@ function App() {
     setSelectedSeries(null);
     navigateToSection("Movies");
   };
-  const checkStreamGroup = (groupChannels: LiveChannel[], groupName: string) =>
-    setStreamHealthRequest({ channels: groupChannels, groupName });
   const catalogProps = {
     channels: visibleChannels,
     epg: visibleEpg,
@@ -540,7 +536,6 @@ function App() {
                     />
                   ) : undefined}
                   livePlayerMini={section !== "Live TV"}
-                  onCheckStreamGroup={checkStreamGroup}
                 />
               </div>
             )}
@@ -677,7 +672,6 @@ function App() {
                 {...catalogProps}
                 key="Movies"
                 mdblistApiKey={mdblistApiKey}
-                onCheckStreamGroup={checkStreamGroup}
                 popularCatalogService={popularCatalogService}
                 section="Movies"
               />
@@ -798,14 +792,6 @@ function App() {
                       onProgress={saveProgress}
           resumePositionMillis={resumePosition}
           subtitleApiKey={subtitleApiKey}
-        />
-      )}
-      {streamHealthRequest && (
-        <StreamHealthCheckDialog
-          channels={streamHealthRequest.channels}
-          groupName={streamHealthRequest.groupName}
-          key={`${streamHealthRequest.groupName}:${streamHealthRequest.channels.map((channel) => channel.id).join("|")}`}
-          onClose={() => setStreamHealthRequest(null)}
         />
       )}
       {refreshing && (

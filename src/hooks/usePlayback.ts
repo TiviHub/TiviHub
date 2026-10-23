@@ -15,10 +15,6 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
   const [playableItem, setPlayableItem] = useState<PlayableItem | null>(null);
   const [inlineLivePlayback, setInlineLivePlayback] = useState(false);
   const [resumePosition, setResumePosition] = useState(0);
-  const [streamHealthRequest, setStreamHealthRequest] = useState<{
-    channels: LiveChannel[];
-    groupName: string;
-  } | null>(null);
 
   // Offline blob URLs are revoked only when the player leaves; the player effect re-runs on seek/resume.
   function revokeOfflineUrl() {
@@ -136,8 +132,6 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     playableItem,
     inlineLivePlayback,
     resumePosition,
-    streamHealthRequest,
-    setStreamHealthRequest,
     openPlayback,
     openReplay,
     openExternal: canOpenExternally() ? openExternal : undefined,

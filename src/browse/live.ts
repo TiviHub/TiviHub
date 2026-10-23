@@ -11,10 +11,7 @@ export const RADIO_CATEGORY_ID = "@@radio";
  * Live TV read per category, one batch at a time, instead of copied into the database first.
  * Whatever a source returns for a category is kept in memory for the session, so paging back and forth is free.
  */
-export interface LiveBrowser extends Browser<LiveChannel> {
-  /** Every channel of a category, for actions on the whole group (stream health check). */
-  channelsOf(categoryId: string | null, signal?: AbortSignal): Promise<LiveChannel[]>;
-}
+export type LiveBrowser = Browser<LiveChannel>;
 
 /** A source that lists every channel in one answer (M3U, portal): read once, then grouped here. */
 function fromChannels(load: (signal?: AbortSignal) => Promise<LiveChannel[]>): LiveBrowser {
@@ -26,18 +23,16 @@ function fromChannels(load: (signal?: AbortSignal) => Promise<LiveChannel[]>): L
     },
     inCategory: (channel, categoryId) => categoryId === RADIO_CATEGORY_ID ? Boolean(channel.radio) : channel.group === categoryId,
   });
-  return { categories: browser.categories, page: browser.page, channelsOf: browser.itemsOf };
+  return { categories: browser.categories, page: browser.page };
 }
 
 function xtreamBrowser(playlist: Playlist): LiveBrowser {
   const categories = remember((signal) => loadXtreamLiveCategories(playlist, signal));
   const list = rememberByKey(async (key, signal) =>
     loadXtreamLiveChannels(playlist, key || null, await categories(signal), signal));
-  const channelsOf = (categoryId: string | null, signal?: AbortSignal) => list(categoryId ?? "", signal);
   return {
     categories,
-    page: async (categoryId, cursor, query, signal) => slicePage(await channelsOf(categoryId, signal), cursor, query),
-    channelsOf,
+    page: async (categoryId, cursor, query, signal) => slicePage(await list(categoryId ?? "", signal), cursor, query),
   };
 }
 

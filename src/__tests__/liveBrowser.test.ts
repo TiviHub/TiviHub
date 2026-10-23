@@ -54,7 +54,7 @@ describe("live browser", () => {
     expect((await browser.categories())[0]).toEqual({ id: RADIO_CATEGORY_ID, name: "Radio", count: 1 });
     expect((await browser.page(RADIO_CATEGORY_ID)).items.map((item) => item.name)).toEqual(["Jazz FM"]);
     expect((await browser.page(null, undefined, "jazz")).items).toHaveLength(1);
-    expect(await browser.channelsOf("News")).toHaveLength(1);
+    expect((await browser.page("News")).items).toHaveLength(1);
   });
 
   it("asks an Xtream provider for one category at a time and remembers the answer", async () => {

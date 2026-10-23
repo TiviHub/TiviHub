@@ -78,7 +78,6 @@ export function LiveTvPage({
   onLoadGuideForChannels,
   onPlay,
   onToggleFavorite,
-  onCheckStreamGroup,
   livePlayer,
   livePlaybackItemId,
   livePlayerMini = false,
@@ -92,7 +91,6 @@ export function LiveTvPage({
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (item: PlayableItem) => void;
   onToggleFavorite: (item: LiveChannel, contentType: "LIVE") => void;
-  onCheckStreamGroup?: (channels: LiveChannel[], groupName: string) => void;
   livePlayer?: ReactNode;
   livePlaybackItemId?: string;
   livePlayerMini?: boolean;
@@ -174,16 +172,10 @@ export function LiveTvPage({
       ? "All"
       : browse.categories.find((category) => category.id === effectiveId)?.name ?? "";
   const visibleChannel = selectedChannel ?? shownChannels.find((channel) => channel.id === livePlaybackItemId) ?? shownChannels[0];
-  const groupId = !showingFavorites && typeof effectiveId === "string" ? effectiveId : null;
 
   function play(channel: LiveChannel) {
     setSelectedChannel(channel);
     onPlay(playableChannel(channel));
-  }
-
-  function checkGroup() {
-    if (!browse.browser || !groupId || !onCheckStreamGroup) return;
-    void browse.browser.channelsOf(groupId).then((channels) => onCheckStreamGroup(channels, categoryName));
   }
 
   return (
@@ -211,18 +203,7 @@ export function LiveTvPage({
                 <span className="sr-only">Search Live TV</span>
                 <input onChange={(event) => setQuery(event.target.value)} placeholder="Search live tv" value={query} />
               </label>
-              {groupId && onCheckStreamGroup && (
-                <button
-                  aria-label={`Check all channels in ${categoryName}`}
-                  className="icon-button"
-                  data-tooltip="Check all channels in this group"
-                  onClick={checkGroup}
-                  type="button"
-                >
-                  <Icon name="check_circle" />
-                </button>
-              )}
-            </div>
+                </div>
             <div className="live-channel-list browse-list" ref={listRef} role="list">
               {browse.loading && (
                 <div aria-live="polite" role="status">

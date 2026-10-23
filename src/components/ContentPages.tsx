@@ -155,7 +155,6 @@ export function CatalogPage({
   onOpenSeries,
   onToggleFavorite,
   onAddToLibrary,
-  onCheckStreamGroup,
   livePlayer,
   livePlaybackItemId,
   livePlayerMini = false,
@@ -177,7 +176,6 @@ export function CatalogPage({
   onOpenSeries: (series: Series) => void;
   onToggleFavorite: (item: CatalogItem, contentType: "LIVE" | "MOVIE" | "SERIES") => void;
   onAddToLibrary: (item: CatalogItem, contentType: "MOVIE" | "SERIES") => void;
-  onCheckStreamGroup?: (channels: LiveChannel[], groupName: string) => void;
   livePlayer?: ReactNode;
   livePlaybackItemId?: string;
   livePlayerMini?: boolean;
@@ -213,9 +211,6 @@ export function CatalogPage({
     });
     return () => { active = false; };
   }, [deferredQuery, featuredMediaType, items.length, mdblistApiKey, popularCatalogService]);
-  const selectedGroupChannels = section === "Live TV" && category !== "All"
-    ? channels.filter((channel) => category === RADIO_FILTER ? channel.radio : channel.group === category)
-    : [];
   const favoriteIds = useMemo(() => new Set(favorites.map((favorite) => favorite.contentId)), [favorites]);
   const liveFavorites = useMemo(() => {
     if (section !== "Live TV") return [];
@@ -401,18 +396,6 @@ export function CatalogPage({
               value={query}
             />
           </label>
-          {selectedGroupChannels.length > 0 && onCheckStreamGroup && (
-            <button
-              aria-label={`Check all ${selectedGroupChannels.length} channels in ${category}`}
-              className="secondary-button catalog-group-check"
-              onClick={() => onCheckStreamGroup(selectedGroupChannels, category)}
-              data-tooltip={`Check all ${selectedGroupChannels.length} channels in this group`}
-              type="button"
-            >
-              <Icon name="check_circle" />
-              Check group
-            </button>
-          )}
           {(section === "Movies" || section === "Series") && (
             <div className="category-select sort-select">
               <Icon name="sort" />

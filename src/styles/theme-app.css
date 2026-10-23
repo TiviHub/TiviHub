@@ -151,11 +151,10 @@ textarea {
   box-shadow: none;
 }
 
-:is(.source-row, .diagnostics-download-row, .settings-update-row, .stream-health-channel, .guide-row, .live-guide-row) {
+:is(.source-row, .diagnostics-download-row, .settings-update-row, .guide-row, .live-guide-row) {
   border-color: transparent;
   background: var(--row);
 }
-
 :is(.catalog-card, .feature-card, .home-title-card, .home-continue-card):hover {
   box-shadow: none;
   transform: none;
