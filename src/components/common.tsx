@@ -223,7 +223,7 @@ export function TooltipLayer() {
       const isEpisodeAction = Boolean(element?.matches(".episode-row, .episode-download-action"));
       const isLibraryAction = Boolean(element?.matches(".catalog-library-button, .library-action"));
       const isSourceAction = Boolean(element?.matches(".settings-source-action"));
-      const isIconAction = Boolean(element?.matches(".icon-button, .favorite-button, .live-channel-favorite, .catalog-library-button"));
+      const isIconAction = Boolean(element?.matches(".icon-button, .favorite-button, .live-channel-favorite, .catalog-library-button, .detail-icon-button"));
       if (
         !element ||
         element.closest(".global-search-dialog") ||

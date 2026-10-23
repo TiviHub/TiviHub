@@ -16,6 +16,7 @@ import {
   type PlaybackPath,
 } from "../playbackDiagnostics";
 import { CustomSelect, Icon } from "./common";
+import { RowSkeletons, Skeleton } from "./Skeleton";
 
 const MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
 const NATIVE_TRACK_EVENTS = ["addtrack", "removetrack", "change", "labelchange"] as const;
@@ -858,7 +859,10 @@ export function PlaybackDialog({
           <div>
             <p className="eyebrow">{item.live ? "LIVE SIGNAL" : "NOW PLAYING"}</p>
             <h2 id="playback-title">{item.title}</h2>
-            <p aria-live="polite" className="playback-status" role="status">{status}</p>
+            <p aria-live="polite" className="playback-status" role="status">
+              {/* shortcut: keyed on the initial status text, switch to a status enum if more phases need a skeleton */}
+              {status.startsWith("Preparing") ? <><span className="sr-only">{status}</span><Skeleton className="skeleton-line playback-status-skeleton" /></> : status}
+            </p>
           </div>
           <div className="playback-header-actions">
             {castingDevice && (
@@ -1056,6 +1060,12 @@ export function PlaybackDialog({
                 )}
               </div>
             )}
+            {castBusy && castDevices.length === 0 && (
+              <div aria-live="polite" role="status">
+                <span className="sr-only">Searching for Google Cast devices…</span>
+                <RowSkeletons count={2} />
+              </div>
+            )}
             {castDevices.length > 0 && (
               <ul className="cast-device-list">
                 {castDevices.map((device) => (
@@ -1102,6 +1112,12 @@ export function PlaybackDialog({
               </button>
             </form>
             {subtitleError && <p className="form-error" role="alert">{subtitleError}</p>}
+            {subtitleBusy && subtitleResults.length === 0 && (
+              <div aria-live="polite" role="status">
+                <span className="sr-only">Searching subtitles…</span>
+                <RowSkeletons count={3} />
+              </div>
+            )}
             {subtitleResults.length > 0 && (
               <ul className="subtitle-results">
                 {subtitleResults.slice(0, 20).map((result) => (

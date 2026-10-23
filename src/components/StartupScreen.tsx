@@ -26,7 +26,7 @@ export function StartupScreen({
             <img alt="" src={logoSrc} />
           </span>
           <span className={`launch-intro-wordmark${animate ? " is-animating" : ""}`}>
-            TiviHub<span>.</span>
+            TiviHub
           </span>
         </div>
         <p className="eyebrow">LOCAL LIBRARY</p>

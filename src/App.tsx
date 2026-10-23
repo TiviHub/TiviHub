@@ -1698,7 +1698,7 @@ function App() {
         <div className="sidebar-header">
           <button aria-label="TiviHub home" className="brand" onClick={() => navigateToSection("Home")} type="button">
             <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
-            <span>TiviHub<span className="brand-period">.</span></span>
+            <span>TiviHub</span>
           </button>
         </div>
         <nav className="desktop-nav" id="desktop-navigation">
@@ -1745,7 +1745,7 @@ function App() {
         <header className="topbar">
           <button className="mobile-brand" onClick={() => navigateToSection("Home")} type="button">
             <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
-            <span>TiviHub<span className="brand-period">.</span></span>
+            <span>TiviHub</span>
           </button>
           <button
             aria-keyshortcuts="Control+K Meta+K"
@@ -1761,16 +1761,6 @@ function App() {
           </button>
           <div aria-hidden="true" className="titlebar-drag-region" data-tauri-drag-region />
           <div className="topbar-desktop-actions topbar-desktop-only">
-            {activeSourceExpired && (
-              <button
-                className="topbar-expiry-warning"
-                onClick={openExpiredPlaylist}
-                type="button"
-              >
-                <Icon name="error_outline" />
-                <span>Playlist expired</span>
-              </button>
-            )}
             <button
               aria-label="Add playlist"
               className="icon-button topbar-action-button"
@@ -1826,6 +1816,16 @@ function App() {
           </div>
           <DesktopWindowControls />
         </header>
+        {activeSourceExpired && (
+          <button
+            className="topbar-expiry-warning topbar-expiry-floating"
+            onClick={openExpiredPlaylist}
+            type="button"
+          >
+            <Icon name="error_outline" />
+            <span>Playlist expired</span>
+          </button>
+        )}
 
         {ready && (
           <>
@@ -1838,6 +1838,7 @@ function App() {
                   channels={visibleChannels}
                   epg={visibleEpg}
                   favorites={visibleFavorites}
+                  guideLoading={guideLoadCount > 0}
                   library={visibleLibrary}
                   livePlaybackItemId={inlineLivePlayback && playableItem?.live ? playableItem.id : undefined}
                   livePlayer={inlineLivePlayback && playableItem?.live ? (

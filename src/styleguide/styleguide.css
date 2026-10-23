@@ -1,0 +1,136 @@
+/* Style guide page chrome. It reuses the app shell (.sidebar, .nav-item, .main-content, .catalog-intro),
+   so only specimen containers are defined here, and only from app tokens. */
+
+.sg-section {
+  margin-top: 48px;
+  scroll-margin-top: var(--content-gutter);
+}
+
+.sg-section:first-of-type {
+  margin-top: 36px;
+}
+
+.sg-section-head {
+  margin-bottom: 15px;
+}
+
+.sg-section-head h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.sg-section-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.sg-specimens {
+  display: grid;
+  gap: 15px;
+}
+
+.sg-specimen {
+  display: grid;
+  gap: 15px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+
+.sg-specimen > h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.sg-specimen > .sg-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: 0.71rem;
+}
+
+.sg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.sg-stack {
+  display: grid;
+  gap: 9px;
+}
+
+.sg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 15px;
+}
+
+.sg-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 9px;
+}
+
+.sg-swatch {
+  display: grid;
+  gap: 6px;
+  padding: 11px;
+  border-radius: var(--radius-md);
+  background: var(--row);
+  font-size: 0.71rem;
+}
+
+.sg-swatch > span:first-child {
+  height: 38px;
+  border: 1px solid var(--outline-soft);
+  border-radius: var(--radius-md);
+}
+
+.sg-swatch small {
+  color: var(--muted);
+  font-size: 0.71rem;
+}
+
+.sg-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 9px;
+}
+
+.sg-icon-cell {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 15px 4px;
+  border-radius: var(--radius-md);
+  background: var(--row);
+  color: var(--text);
+  font-size: 0.68rem;
+}
+
+.sg-icon-cell .material-icons {
+  font-size: 21px;
+}
+
+.sg-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.sg-size {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.71rem;
+}
+
+.sidebar a,
+.sidebar a:hover {
+  text-decoration: none;
+}
