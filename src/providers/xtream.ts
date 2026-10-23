@@ -11,6 +11,7 @@ import { recordDiagnosticFailure } from "../lib/diagnosticLog";
 import { formatServerTime } from "../lib/serverTime";
 import { readResponseText, validateHttpsUrl } from "./http";
 import { providerFetch } from "./transport";
+import type { BrowseCategory } from "../browse/types";
 
 interface XtreamPayload {
   [key: string]: unknown;
@@ -293,6 +294,55 @@ export async function authenticateXtream(
   return (await authenticate(playlist, signal)).expiresAtMillis;
 }
 
+function categoryNames(raw: unknown, description: string): Map<string, string> {
+  return new Map(array(raw, description, "categories").flatMap((item) => {
+    const id = stringValue(item.category_id);
+    const name = stringValue(item.category_name);
+    return id && name ? [[id, name] as const] : [];
+  }));
+}
+
+function liveChannelFrom(playlist: Playlist, item: XtreamPayload, categories: Map<string, string>): LiveChannel | null {
+  const providerId = stringValue(item.stream_id);
+  const name = stringValue(item.name);
+  if (!providerId || !name) return null;
+  const categoryId = stringValue(item.category_id);
+  return {
+    id: `${playlist.id}:live:${providerId}`,
+    playlistId: playlist.id,
+    providerId,
+    name,
+    group: (categoryId && categories.get(categoryId)) || "General",
+    streamUrl: xtreamStreamUrl(playlist, "live", providerId, "m3u8"),
+    logoUrl: stringValue(item.stream_icon),
+    tvgId: stringValue(item.epg_channel_id),
+    ...archiveFor(item),
+    ...drmFor(playlist),
+  };
+}
+
+/** The live categories only: one small request, so a source can be added without downloading its channels. */
+export async function loadXtreamLiveCategories(playlist: Playlist, signal?: AbortSignal): Promise<BrowseCategory[]> {
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal);
+  return [...categoryNames(raw, "Live categories")].map(([id, name]) => ({ id, name }));
+}
+
+/** The channels of one live category (every channel when `categoryId` is null). */
+export async function loadXtreamLiveChannels(
+  playlist: Playlist,
+  categoryId: string | null,
+  categories: BrowseCategory[],
+  signal?: AbortSignal,
+): Promise<LiveChannel[]> {
+  const names = new Map(categories.map((category) => [category.id, category.name]));
+  const url = authenticatedUrl(playlist, "get_live_streams", categoryId ? { category_id: categoryId } : undefined);
+  const raw = await requestJson(playlist.userAgent, url, "Live channels", signal);
+  return array(raw, "Live channel", "channels").flatMap((item) => {
+    const channel = liveChannelFrom(playlist, item, names);
+    return channel ? [channel] : [];
+  });
+}
+
 export async function loadXtreamCatalog(
   playlist: Playlist,
   signal?: AbortSignal,
@@ -308,34 +358,14 @@ export async function loadXtreamCatalog(
       requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series"), "Series", signal),
     ]);
 
-  const categoryNames = (raw: unknown, description: string) =>
-    new Map(array(raw, description, "categories").flatMap((item) => {
-      const id = stringValue(item.category_id);
-      const name = stringValue(item.category_name);
-      return id && name ? [[id, name] as const] : [];
-    }));
   const liveCategories = categoryNames(liveCategoriesRaw, "Live categories");
   const movieCategories = categoryNames(movieCategoriesRaw, "Movie categories");
   const seriesCategories = categoryNames(seriesCategoriesRaw, "Series categories");
   const drm = drmFor(playlist);
 
   const channels = array(liveRaw, "Live channel", "channels").flatMap((item) => {
-    const providerId = stringValue(item.stream_id);
-    const name = stringValue(item.name);
-    if (!providerId || !name) return [];
-    const categoryId = stringValue(item.category_id);
-    return [{
-      id: `${playlist.id}:live:${providerId}`,
-      playlistId: playlist.id,
-      providerId,
-      name,
-      group: (categoryId && liveCategories.get(categoryId)) || "General",
-      streamUrl: xtreamStreamUrl(playlist, "live", providerId, "m3u8"),
-      logoUrl: stringValue(item.stream_icon),
-      tvgId: stringValue(item.epg_channel_id),
-      ...archiveFor(item),
-      ...drm,
-    }];
+    const channel = liveChannelFrom(playlist, item, liveCategories);
+    return channel ? [channel] : [];
   });
 
   const movies = array(moviesRaw, "Movie", "movies").flatMap((item) => {

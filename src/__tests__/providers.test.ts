@@ -9,6 +9,8 @@ import {
 import { parseXmltvDate } from "../providers/xmltv";
 import {
   loadXtreamCatalog,
+  loadXtreamLiveCategories,
+  loadXtreamLiveChannels,
   loadXtreamShortEpg,
   XtreamAccountExpiredError,
   xtreamStreamUrl,
@@ -286,6 +288,24 @@ describe("Xtream URL construction", () => {
       year: 2024,
       rating: 4.2,
     });
+  });
+
+  it("browses live TV by category without downloading the catalog", async () => {
+    const requested: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      requested.push(`${url.searchParams.get("action")}:${url.searchParams.get("category_id") ?? ""}`);
+      const body = url.searchParams.get("action") === "get_live_categories"
+        ? [{ category_id: "1", category_name: "News" }, { category_id: "2", category_name: "Sport" }]
+        : [{ stream_id: 7, name: "Late News", category_id: "1" }];
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+
+    const categories = await loadXtreamLiveCategories(playlist);
+    expect(categories).toEqual([{ id: "1", name: "News" }, { id: "2", name: "Sport" }]);
+    const channels = await loadXtreamLiveChannels(playlist, "1", categories);
+    expect(channels).toMatchObject([{ name: "Late News", group: "News", providerId: "7" }]);
+    expect(requested).toEqual(["get_live_categories:", "get_live_streams:1"]);
   });
 
   it("reads archive availability and the server time zone", async () => {

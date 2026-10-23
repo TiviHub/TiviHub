@@ -327,7 +327,7 @@ function staticStreamUrl(item: Payload, cmd: string, live = false): string | nul
   }
 }
 
-async function loadChannels(playlist: Playlist, signal?: AbortSignal): Promise<LiveChannel[]> {
+export async function loadStalkerChannels(playlist: Playlist, signal?: AbortSignal): Promise<LiveChannel[]> {
   const genres = new Map(records(await call(playlist, { type: "itv", action: "get_genres" }, signal))
     .flatMap((genre) => {
       const id = stringValue(genre.id);
@@ -530,7 +530,7 @@ export async function loadVideoLibrary(playlist: Playlist, signal?: AbortSignal)
 }
 
 export async function loadStalkerCatalog(playlist: Playlist, signal?: AbortSignal): Promise<StalkerCatalog> {
-  const channels = await loadChannels(playlist, signal);
+  const channels = await loadStalkerChannels(playlist, signal);
   const library = await loadVideoLibrary(playlist, signal);
   if (channels.length + library.movies.length + library.series.length === 0) {
     throw new Error("The portal returned no channels, movies or series.");
