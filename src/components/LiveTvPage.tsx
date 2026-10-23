@@ -223,7 +223,7 @@ export function LiveTvPage({
                 </button>
               )}
             </div>
-            <div className="live-channel-list" ref={listRef} role="list">
+            <div className="live-channel-list browse-list" ref={listRef} role="list">
               {browse.loading && (
                 <div aria-live="polite" role="status">
                   <span className="sr-only">Loading channels…</span>

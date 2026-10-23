@@ -35,14 +35,14 @@ export function BrowseCategoryList({
         <h2>{title}</h2>
         <span>{categories.filter((category) => !category.pinned && category.id !== "").length.toLocaleString()}</span>
       </div>
-      <div className="browse-category-search">
+      <div className="browse-panel-tools">
         <label className="search-field">
           <Icon name="search" />
           <span className="sr-only">Filter categories</span>
           <input onChange={(event) => setFilter(event.target.value)} placeholder="Filter categories" value={filter} />
         </label>
       </div>
-      <div className="live-channel-list browse-category-list">
+      <div className="live-channel-list browse-list">
         {loading && (
           <div aria-live="polite" role="status">
             <span className="sr-only">Loading categories…</span>

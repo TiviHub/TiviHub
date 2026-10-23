@@ -7902,10 +7902,25 @@ button.icon-button.is-favorite {
   height: auto;
 }
 
+/* Both panels share this build: heading, a search row, then rows 9px apart. */
 .browse-panel-tools {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 0 9px 9px;
+}
+
+.browse-panel-tools .icon-button {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+}
+
+.live-channel-list.browse-list {
+  display: flex;
+  scrollbar-gutter: auto;
+  flex-direction: column;
+  gap: 9px;
   padding: 0 9px 9px;
 }
 
@@ -7918,21 +7933,6 @@ button.icon-button.is-favorite {
   display: none;
 }
 
-.browse-category-search {
-  padding: 9px 9px 0;
-}
-
-.browse-category-search .search-field {
-  width: 100%;
-  min-width: 0;
-}
-
-.browse-category-list {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 9px;
-}
 
 .browse-category {
   display: flex;
