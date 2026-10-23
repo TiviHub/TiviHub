@@ -127,6 +127,7 @@ export type IconName =
   | "sort"
   | "schedule"
   | "history"
+  | "open_in_new"
   | "radio"
   | "restart_alt"
   | "chevron_left"

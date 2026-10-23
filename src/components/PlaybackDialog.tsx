@@ -1,3 +1,4 @@
+import { soundIsMissing } from "../playbackAudio";
 import { proxiedUrl, proxyBase, usesNativeTransport } from "../providers/transport";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -127,6 +128,7 @@ export function PlaybackDialog({
   resumePositionMillis,
   onExpand,
   onClose,
+  onOpenExternal,
   onStarted,
   onProgress,
 }: {
@@ -137,6 +139,8 @@ export function PlaybackDialog({
   resumePositionMillis: number;
   onExpand?: () => void;
   onClose: () => void;
+  /** Hands the stream to VLC or mpv; given only where that is possible. */
+  onOpenExternal?: (item: PlayableItem) => void;
   onStarted?: (item: PlayableItem) => void;
   onProgress: (
     item: PlayableItem,
@@ -147,6 +151,7 @@ export function PlaybackDialog({
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [soundMissing, setSoundMissing] = useState(false);
   const restoreFocusFrameRef = useRef<number | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const focusCapturedRef = useRef(false);
@@ -388,6 +393,7 @@ export function PlaybackDialog({
     setQualityHeights([]);
     setQualityChoice("auto");
     setPlaybackSpeed(1);
+    setSoundMissing(false);
     setError(null);
     setDiagnosticCopyMessage(null);
     const videoRefValue = videoRef.current;
@@ -403,6 +409,9 @@ export function PlaybackDialog({
       playbackFailedRef.current = false;
       hasStartedPlaybackRef.current = true;
       setStatus("Playing");
+      window.setTimeout(() => {
+        if (!disposed && !video.paused && soundIsMissing(video)) setSoundMissing(true);
+      }, 4000);
       if (item.live && !liveStartRecorded) {
         liveStartRecorded = true;
         onStartedRef.current?.(item);
@@ -947,6 +956,17 @@ export function PlaybackDialog({
             </p>
           </div>
           <div className="playback-header-actions">
+            {onOpenExternal && !item.offline && !item.drmLicenseUrl && (
+              <button
+                aria-label="Open in VLC or mpv"
+                className="icon-button"
+                data-tooltip="Open in VLC or mpv"
+                onClick={() => onOpenExternal(item)}
+                type="button"
+              >
+                <Icon name="open_in_new" />
+              </button>
+            )}
             {castingDevice && (
               <button
                 className="secondary-button"
@@ -991,6 +1011,12 @@ export function PlaybackDialog({
               {castError && <span className="player-casting-warning">{castError}</span>}
             </div>
           </div>
+        )}
+        {soundMissing && !error && (
+          <p className="player-error" role="status">
+            This file has no sound in the built-in player: its audio (usually AC-3 or E-AC-3) cannot be decoded here.
+            {onOpenExternal && " Use the Open in VLC or mpv button at the top to watch it with sound."}
+          </p>
         )}
         {error && <p className="player-error" role="alert">{error}</p>}
         {error && (

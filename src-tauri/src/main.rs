@@ -2,6 +2,7 @@
 
 mod chromecast;
 mod diagnostics;
+mod external_player;
 mod net;
 mod storage;
 
@@ -177,6 +178,7 @@ fn main() {
             cast_media,
             stop_cast,
             get_backend_diagnostics,
+            external_player::open_in_external_player,
             net::http_fetch,
             net::proxy_register,
             storage::storage_status,

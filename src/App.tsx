@@ -192,7 +192,7 @@ function App() {
   } = useLocalData({ notify, setFavorites, setLibrary });
   const {
     playableItem, inlineLivePlayback, resumePosition, streamHealthRequest, setStreamHealthRequest,
-    openPlayback, openReplay, closePlayback, recordWatchedChannel,
+    openPlayback, openReplay, openExternal, closePlayback, recordWatchedChannel,
   } = usePlayback({ notify, setLibrary, sources });
   const {
     downloads, downloadTasks, downloadDirectoryPath, downloadsLoaded, downloadedIds, activeDownloadIds,
@@ -664,6 +664,7 @@ function App() {
                       mini={section !== "Live TV"}
                       onClose={closePlayback}
                       onExpand={() => navigateToSection("Live TV")}
+                      onOpenExternal={openExternal}
                       onProgress={saveProgress}
                       onStarted={(item) => void recordWatchedChannel(item)}
                       resumePositionMillis={resumePosition}
@@ -926,7 +927,8 @@ function App() {
         <PlaybackDialog
           item={playableItem}
           onClose={closePlayback}
-          onProgress={saveProgress}
+          onOpenExternal={openExternal}
+                      onProgress={saveProgress}
           resumePositionMillis={resumePosition}
           subtitleApiKey={subtitleApiKey}
         />

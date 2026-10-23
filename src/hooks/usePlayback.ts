@@ -1,5 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { replayUrl } from "../catchup";
+import { canOpenExternally, openInExternalPlayer } from "../externalPlayer";
 import { isStalkerLink, isStalkerVideoLink, resolveStalkerLink, stalkerUserAgent } from "../providers/stalker";
 import { getLibraryItems, saveLibraryItem } from "../storage/database";
 import type { EpgProgram, LibraryItem, LiveChannel, PlayableItem, Playlist } from "../types";
@@ -82,6 +83,22 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     });
   }
 
+  /** Hands the stream to VLC or mpv. A portal address only lives a few seconds, so a fresh one is asked for first. */
+  async function openExternal(item: PlayableItem) {
+    const source = sources.find((entry) => entry.id === item.playlistId);
+    try {
+      const address = source?.type === "STALKER" && item.sourceUrl
+        ? await resolveStalkerLink(source, item.sourceUrl)
+        : item.streamUrl;
+      const userAgent = source?.type === "STALKER" ? stalkerUserAgent(source) : source?.userAgent;
+      closePlayback(); // the portal allows few connections at once, so the built-in player lets go first
+      const player = await openInExternalPlayer(address, userAgent);
+      notify(`Opened in ${player}.`, "notice");
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : String(cause), "error");
+    }
+  }
+
   function closePlayback() {
     revokeOfflineUrl();
     setPlayableItem(null);
@@ -120,6 +137,7 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     setStreamHealthRequest,
     openPlayback,
     openReplay,
+    openExternal: canOpenExternally() ? openExternal : undefined,
     closePlayback,
     recordWatchedChannel,
   };
