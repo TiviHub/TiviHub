@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import { LibraryPage } from "../components/ContentPages";
+import { LibraryPage } from "../components/LibraryPage";
 import { TooltipLayer } from "../components/common";
 import { PlaylistDeletionProgress } from "../components/PlaylistDeletionProgress";
 import { PlaylistDialog, type PlaylistDraft } from "../components/PlaylistDialog";

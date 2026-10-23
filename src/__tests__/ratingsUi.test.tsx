@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../App";
-import { MovieDetail, SeriesDetail } from "../components/ContentPages";
+import { MovieDetail, SeriesDetail } from "../components/DetailPages";
 import { MdblistError } from "../providers/mdblist";
 import type { RatingsResult, RatingsService } from "../services/ratingsService";
 import { saveCatalog, savePlaylist } from "../storage/database";

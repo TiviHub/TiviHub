@@ -50,7 +50,9 @@ import type {
 import { createRatingsService } from "./services/ratingsService";
 import { createPopularCatalogService } from "./services/popularCatalogService";
 import { configureMdblistRateLimiter } from "./lib/mdblistRateLimit";
-import { CatalogPage, LibraryPage, MovieDetail, playableChannel, SeriesDetail } from "./components/ContentPages";
+import { CatalogPage, playableChannel } from "./components/ContentPages";
+import { MovieDetail, SeriesDetail } from "./components/DetailPages";
+import { LibraryPage } from "./components/LibraryPage";
 import { Icon, TooltipLayer, type IconName } from "./components/common";
 import { MobileNav, Sidebar, Topbar } from "./components/AppShell";
 import { DownloadsPage } from "./components/DownloadsPage";
