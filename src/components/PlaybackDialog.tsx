@@ -18,107 +18,10 @@ import {
   type PlaybackPath,
 } from "../lib/playbackDiagnostics";
 import { CustomSelect, Icon } from "./common";
-import { RowSkeletons, Skeleton } from "./Skeleton";
-
-const MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
-const NATIVE_TRACK_EVENTS = ["addtrack", "removetrack", "change", "labelchange"] as const;
-
-interface TextTrackOption {
-  id: number;
-  label: string;
-  language: string;
-  active: boolean;
-}
-
-interface ShakaTextTrack {
-  id: number;
-  label: string;
-  language: string;
-  active: boolean;
-}
-
-interface ShakaVariantTrack {
-  id: number;
-  active: boolean;
-  language: string;
-  label?: string;
-  audioId?: number;
-  height?: number;
-  bandwidth?: number;
-}
-
-interface ShakaPlayer {
-  attach(video: HTMLVideoElement): Promise<unknown>;
-  addEventListener(type: string, listener: EventListener): void;
-  configure(configuration: object): boolean;
-  getNetworkingEngine(): {
-    registerRequestFilter(filter: (type: number, request: { uris: string[] }) => void): void;
-    registerResponseFilter(
-      filter: (type: number, response: { uri: string; headers: Record<string, string> }) => void,
-    ): void;
-  } | null;
-  load(uri: string): Promise<unknown>;
-  retryStreaming(): void;
-  getTextTracks(): ShakaTextTrack[];
-  getVariantTracks(): ShakaVariantTrack[];
-  selectTextTrack(track?: ShakaTextTrack | null): void;
-  selectVariantTrack(track: ShakaVariantTrack, clearBuffer?: boolean, safeMargin?: number): void;
-  addTextTrackAsync(
-    uri: string,
-    language: string,
-    kind: string,
-    mimeType?: string,
-    codec?: string,
-    label?: string,
-    forced?: boolean,
-  ): Promise<ShakaTextTrack>;
-  destroy(): Promise<void>;
-}
-
-interface ShakaRuntime {
-  polyfill: { installAll(): void };
-  Player: {
-    new (): ShakaPlayer;
-    isBrowserSupported(): boolean;
-  };
-}
-
-interface CastDeviceInfo {
-  address: string;
-  name: string;
-}
-
-function mediaDuration(video: HTMLVideoElement): number {
-  return Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : 0;
-}
-
-function directMediaUrl(value: string): boolean {
-  try {
-    return /\.(mp4|m4v|webm|mov|ogv|ogg)$/i.test(new URL(value).pathname);
-  } catch {
-    return false;
-  }
-}
-
-function nativeHlsUrl(value: string, video: HTMLVideoElement): boolean {
-  try {
-    return /\.m3u8$/i.test(new URL(value).pathname) &&
-      navigator.vendor === "Apple Computer, Inc." &&
-      video.canPlayType("application/vnd.apple.mpegurl") !== "";
-  } catch {
-    return false;
-  }
-}
-
-function asWebVtt(contents: string): string {
-  const normalized = contents.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
-  if (/^\s*WEBVTT(?:\s|$)/i.test(normalized)) return normalized;
-  const cues = normalized.replace(
-    /^(\d{2}:\d{2}:\d{2}),(\d{3})(\s+-->\s+\d{2}:\d{2}:\d{2}),(\d{3})/gm,
-    "$1.$2$3.$4",
-  );
-  return `WEBVTT\n\n${cues}`;
-}
+import { Skeleton } from "./Skeleton";
+import { CastPanel } from "./CastPanel";
+import { SubtitlePanel } from "./SubtitlePanel";
+import { MAX_SUBTITLE_BYTES, NATIVE_TRACK_EVENTS, asWebVtt, directMediaUrl, mediaDuration, nativeHlsUrl, type CastDeviceInfo, type ShakaPlayer, type ShakaRuntime, type ShakaVariantTrack, type TextTrackOption } from "../lib/playbackMedia";
 
 export function PlaybackDialog({
   item,
@@ -1151,159 +1054,33 @@ export function PlaybackDialog({
         </div>
 
         {castOpen && (
-          <section aria-label="Cast to a device" className="cast-panel">
-            <div className="cast-panel-heading">
-              <strong>Google Cast devices</strong>
-              <button
-                className="text-button"
-                disabled={castBusy}
-                onClick={() => void openCastPanel()}
-                type="button"
-              >
-                {castBusy ? "Searching…" : "Refresh"}
-              </button>
-            </div>
-            {castError && (
-              <div className="playback-error-actions">
-                <p className="form-error" role="alert">{castError}</p>
-                <button className="text-button" onClick={() => void copyDiagnostics()} type="button">
-                  <Icon name="content_copy" />
-                  Copy error details
-                </button>
-                {diagnosticCopyMessage && (
-                  <p aria-live="polite" className="playback-error-copy-status">{diagnosticCopyMessage}</p>
-                )}
-              </div>
-            )}
-            {castBusy && castDevices.length === 0 && (
-              <div aria-live="polite" role="status">
-                <span className="sr-only">Searching for Google Cast devices…</span>
-                <RowSkeletons count={2} />
-              </div>
-            )}
-            {castDevices.length > 0 && (
-              <ul className="cast-device-list">
-                {castDevices.map((device) => (
-                  <li key={device.address}>
-                    <button
-                      className="secondary-button"
-                      disabled={castBusy || Boolean(item.drmLicenseUrl) || Boolean(castingDevice)}
-                      onClick={() => void castToDevice(device)}
-                      type="button"
-                    >
-                      <Icon name={castingDevice?.address === device.address ? "cast_connected" : "cast"} />
-                      {device.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!castBusy && castDevices.length === 0 && !castError && (
-              <p className="form-note">No Chromecast devices found on your local network.</p>
-            )}
-            <p className="form-note">
-              The Chromecast fetches the stream directly from your provider. TiviHub does not relay media.
-            </p>
-          </section>
+          <CastPanel
+            castBusy={castBusy}
+            castDevices={castDevices}
+            castError={castError}
+            castingDevice={castingDevice}
+            castToDevice={castToDevice}
+            copyDiagnostics={copyDiagnostics}
+            diagnosticCopyMessage={diagnosticCopyMessage}
+            drm={Boolean(item.drmLicenseUrl)}
+            openCastPanel={openCastPanel}
+          />
         )}
 
         {!item.live && subtitleOpen && (
-          <section className="subtitle-panel" aria-label="Search OpenSubtitles">
-            <div className="subtitle-column">
-              <strong className="subtitle-column-title">Search OpenSubtitles</strong>
-              <form
-                className="subtitle-search"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void searchSubtitles();
-                }}
-              >
-                <label className="search-field">
-                  <Icon name="search" />
-                  <input
-                    aria-label="Subtitle search"
-                    onChange={(event) => setSubtitleQuery(event.target.value)}
-                    placeholder="Movie or episode title"
-                    value={subtitleQuery}
-                  />
-                </label>
-                <button className="secondary-button selected" disabled={subtitleBusy} type="submit">
-                  {subtitleBusy ? "Searching…" : "Search"}
-                </button>
-              </form>
-              {subtitleError && <p className="form-error" role="alert">{subtitleError}</p>}
-              {subtitleBusy && subtitleResults.length === 0 && (
-                <div aria-live="polite" role="status">
-                  <span className="sr-only">Searching subtitles…</span>
-                  <RowSkeletons count={3} />
-                </div>
-              )}
-              {subtitleResults.length > 0 && (
-                <ul className="subtitle-results">
-                  {subtitleResults.slice(0, 20).map((result) => (
-                    <li key={`${result.fileId}:${result.fileName}`}>
-                      <span>
-                        <strong>{result.fileName}</strong>
-                        <small>{result.language}{result.release ? ` · ${result.release}` : ""}</small>
-                      </span>
-                      <button
-                        aria-label={`Download ${result.fileName}`}
-                        className="icon-button"
-                        data-tooltip="Download"
-                        disabled={subtitleBusy}
-                        onClick={() => void downloadSubtitle(result)}
-                        type="button"
-                      >
-                        <Icon name="download" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {!subtitleApiKey && (
-                <p className="form-note">Add your API key in Settings to search. You can import a subtitle file without an API key.</p>
-              )}
-            </div>
-            <div className="subtitle-column">
-              <strong className="subtitle-column-title">
-                Saved downloads
-                {savedSubtitles.length > 0 && <span className="subtitle-count">{savedSubtitles.length}</span>}
-              </strong>
-              {savedSubtitles.length === 0 && (
-                <div className="subtitle-empty">
-                  <Icon name="subtitles" />
-                  <p>Nothing saved yet. Download a subtitle and it will appear here.</p>
-                </div>
-              )}
-              {savedSubtitles.length > 0 && (
-                <ul className="subtitle-results">
-                  {savedSubtitles.map((saved) => (
-                    <li key={saved.fileId}>
-                      <span><strong>{saved.name}</strong></span>
-                      <button
-                        aria-label={`Use ${saved.name}`}
-                        className="icon-button"
-                        data-tooltip="Use this subtitle"
-                        onClick={() => void applySavedSubtitle(saved.fileId)}
-                        type="button"
-                      >
-                        <Icon name="subtitles" />
-                      </button>
-                      <button
-                        aria-label={`Remove ${saved.name}`}
-                        className="icon-button"
-                        data-tooltip="Remove from this title"
-                        onClick={() => void forgetSavedSubtitle(saved.fileId)}
-                        type="button"
-                      >
-                        <Icon name="delete" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
+          <SubtitlePanel
+            applySavedSubtitle={applySavedSubtitle}
+            downloadSubtitle={downloadSubtitle}
+            forgetSavedSubtitle={forgetSavedSubtitle}
+            savedSubtitles={savedSubtitles}
+            searchSubtitles={searchSubtitles}
+            setSubtitleQuery={setSubtitleQuery}
+            subtitleApiKey={subtitleApiKey}
+            subtitleBusy={subtitleBusy}
+            subtitleError={subtitleError}
+            subtitleQuery={subtitleQuery}
+            subtitleResults={subtitleResults}
+          />
         )}
         <p className="player-disclaimer">
           Playback and subtitle requests connect directly to their configured hosts. Availability depends on the webview codecs, CORS, and source permissions.
