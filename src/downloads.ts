@@ -97,8 +97,8 @@ function getDatabase(): Promise<IDBPDatabase<DownloadDatabase>> {
 }
 
 const DIRECTORY_SETTING_KEY = "download-directory";
-// The offline copy lives in one Blob in memory while downloading; larger files would exhaust the webview.
-const MAX_DOWNLOAD_BYTES = 2 * 1024 ** 3;
+// The offline copy lives in one Blob in memory while downloading, plus a second copy while it is saved; shortcut: 1 GB cap, stream to the folder and play from the file when a larger limit is needed.
+const MAX_DOWNLOAD_BYTES = 1024 ** 3;
 const PROGRESS_INTERVAL_MILLIS = 250;
 const DIRECT_MEDIA_EXTENSIONS = new Set(["mp4", "m4v", "webm", "mov", "ogv", "ogg"]);
 
@@ -266,7 +266,7 @@ async function saveToNativeDirectory(
 }
 
 function tooLargeError(): Error {
-  return new Error("This video is larger than 2 GB, which is too large to save for offline playback.");
+  return new Error("This video is larger than 1 GB, which is too large to save for offline playback.");
 }
 
 export async function downloadMedia(

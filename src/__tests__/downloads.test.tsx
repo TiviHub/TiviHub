@@ -136,7 +136,7 @@ describe("offline downloads", () => {
     })));
 
     await expect(downloadMedia(media, new AbortController().signal, vi.fn()))
-      .rejects.toThrow("larger than 2 GB");
+      .rejects.toThrow("larger than 1 GB");
     expect(await getDownloads()).toEqual([]);
   });
 
