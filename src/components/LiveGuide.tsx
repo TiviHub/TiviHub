@@ -208,7 +208,7 @@ export function LiveGuide({
           <button aria-label="Next day" className="icon-button" data-tooltip="Next day" onClick={() => shiftDay(1)} type="button">
             <Icon name="chevron_right" />
           </button>
-          <button className="secondary-button" onClick={jumpToNow} type="button">Now</button>
+          {!single && <button className="secondary-button" onClick={jumpToNow} type="button">Now</button>}
         </div>
         {!single && (
           <>
@@ -227,20 +227,22 @@ export function LiveGuide({
             </button>
           </>
         )}
-        <label className="live-guide-zoom">
-          <Icon name="search" />
-          <span className="sr-only">Timeline zoom</span>
-          <input
-            aria-label={`Timeline zoom (${zoomPercent}%)`}
-            max="175"
-            min="50"
-            onChange={(event) => setZoomPercent(Number(event.target.value))}
-            step="5"
-            type="range"
-            value={zoomPercent}
-            data-tooltip={`${zoomPercent}%`}
-          />
-        </label>
+        {!single && (
+          <label className="live-guide-zoom">
+            <Icon name="search" />
+            <span className="sr-only">Timeline zoom</span>
+            <input
+              aria-label={`Timeline zoom (${zoomPercent}%)`}
+              max="175"
+              min="50"
+              onChange={(event) => setZoomPercent(Number(event.target.value))}
+              step="5"
+              type="range"
+              value={zoomPercent}
+              data-tooltip={`${zoomPercent}%`}
+            />
+          </label>
+        )}
       </div>
 
       <div

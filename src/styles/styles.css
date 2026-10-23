@@ -7733,11 +7733,15 @@ button.icon-button.is-favorite {
 /* Browsing screens (Live TV now; Movies and Series next): edge to edge beside the sidebar, three full-height panels:
    categories, the items of the chosen category, then the player or details. */
 .main-content.main-content--browse {
+  height: 100dvh;
+  min-height: 0;
   padding: 0;
+  overflow: hidden;
 }
 
 /* The desktop app has a fixed topbar: the panels start under it, with the same 9px around the search rows. */
 .app-shell.desktop-app .main-content.main-content--browse {
+  box-sizing: border-box;
   padding-top: var(--app-topbar-height);
 }
 
@@ -7797,11 +7801,27 @@ button.icon-button.is-favorite {
   align-content: center;
 }
 
+.browse-layout .live-tv-main {
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* A playing channel fills the panel: the picture takes what the heading, tools and guide leave over. */
 .browse-layout .live-tv-player.has-live-player {
-  overflow: visible;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .browse-layout .playback-dialog.playback-inline:not(.playback-mini) {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
   gap: 0;
   padding: 0;
   border: 0;
@@ -7839,8 +7859,43 @@ button.icon-button.is-favorite {
 }
 
 .browse-layout .playback-dialog.playback-inline:not(.playback-mini) > video {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 0;
   max-height: none;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: auto;
+  object-fit: contain;
+}
+
+/* Open in VLC and Close sit on the picture, 9px from its top and right edge and 9px apart. */
+.browse-layout .playback-dialog.playback-inline:not(.playback-mini) .playback-header-actions {
+  position: absolute;
+  z-index: 2;
+  top: 65px;
+  right: 9px;
+  gap: 9px;
+}
+
+.browse-layout .playback-dialog.playback-inline:not(.playback-mini) .playback-header-actions .icon-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 50%;
+  background: rgb(9 8 15 / 72%);
+  color: #fff;
+}
+
+.browse-layout .playback-dialog.playback-inline:not(.playback-mini) .playback-header-actions .icon-button:hover {
+  background: rgb(9 8 15 / 88%);
+}
+
+.browse-layout .playback-dialog.playback-inline:not(.playback-mini) > .player-tools,
+.browse-layout .playback-dialog.playback-inline:not(.playback-mini) > .subtitle-panel,
+.browse-layout .playback-dialog.playback-inline:not(.playback-mini) > .cast-panel {
+  flex: 0 0 auto;
 }
 
 .browse-layout .playback-dialog.playback-inline:not(.playback-mini) > .player-tools,
@@ -7857,7 +7912,7 @@ button.icon-button.is-favorite {
 .live-guide-workspace.is-single {
   height: auto;
   grid-template-rows: auto auto;
-  margin: 9px;
+  margin: 0 9px 9px;
 }
 
 .live-guide-workspace.is-single .live-guide-scroll {
