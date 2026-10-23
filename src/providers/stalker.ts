@@ -209,7 +209,7 @@ async function call(
       return await portalRequest(playlist, params, await session(playlist, signal, true), signal, maxBytes);
     } catch (second) {
       if (second instanceof PortalAuthError) {
-        throw new Error("The portal refused this MAC address or login. Check them with your provider.");
+        throw new Error("The portal refused this MAC address or login. Check them with your provider.", { cause: second });
       }
       throw second;
     }
