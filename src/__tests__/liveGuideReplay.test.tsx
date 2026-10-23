@@ -30,11 +30,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderGuide(channels = [channel]) {
+function renderGuide(channels = [channel], single = false) {
   const onPlay = vi.fn();
   const onReplay = vi.fn();
   render(
     <LiveGuide
+      single={single}
       channels={channels}
       epg={epg}
       favoriteIds={new Set()}
@@ -74,5 +75,18 @@ describe("TV guide replay", () => {
     renderGuide([{ ...channel, catchup: undefined }]);
     expect(screen.queryByRole("button", { name: /Start over/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /watch the recording/ })).toBeNull();
+  });
+});
+
+describe("single-channel guide under the player", () => {
+  it("shows the day for one channel without the page heading, channel column or footer", () => {
+    const { onReplay } = renderGuide([channel], true);
+
+    expect(screen.queryByRole("heading", { name: "TV Guide" })).toBeNull();
+    expect(screen.queryByText("CHANNEL")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Play One live/ })).toBeNull();
+    expect(screen.getByRole("region", { name: "Programme guide for One" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Morning show.*Select to watch the recording/ }));
+    expect(onReplay).toHaveBeenCalledWith(channel, epg[0]);
   });
 });

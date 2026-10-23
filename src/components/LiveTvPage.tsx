@@ -4,11 +4,10 @@ import type { EpgProgram, Favorite, LiveChannel, PlayableItem, Playlist } from "
 import { BrowseCategoryList, type BrowseCategoryEntry } from "./BrowseCategoryList";
 import { playableChannel } from "./ContentPages";
 import { Icon } from "./common";
+import { LiveGuide } from "./LiveGuide";
 import { RowSkeletons, Skeleton } from "./Skeleton";
 
 const FAVORITES_ID = "@@favorites";
-
-const formatTime = (millis: number) => new Date(millis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 function ChannelRow({
   channel,
@@ -79,6 +78,7 @@ export function LiveTvPage({
   guideLoading,
   onLoadGuideForChannels,
   onPlay,
+  onReplay,
   onToggleFavorite,
   livePlayer,
   livePlaybackItemId,
@@ -92,6 +92,7 @@ export function LiveTvPage({
   guideLoading: boolean;
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (item: PlayableItem) => void;
+  onReplay: (channel: LiveChannel, program: EpgProgram) => void;
   onToggleFavorite: (item: LiveChannel, contentType: "LIVE") => void;
   livePlayer?: ReactNode;
   livePlaybackItemId?: string;
@@ -175,13 +176,8 @@ export function LiveTvPage({
       : browse.categories.find((category) => category.id === effectiveId)?.name ?? "";
   const visibleChannel = selectedChannel ?? shownChannels.find((channel) => channel.id === livePlaybackItemId) ?? shownChannels[0];
 
-  const programmes = useMemo(() => {
-    const key = visibleChannel ? visibleChannel.tvgId || visibleChannel.id : null;
-    const upcoming = key
-      ? epg.filter((program) => program.channelId === key && program.endMillis > now).sort((a, b) => a.startMillis - b.startMillis)
-      : [];
-    return { current: upcoming.find((program) => program.startMillis <= now), next: upcoming.find((program) => program.startMillis > now) };
-  }, [epg, now, visibleChannel]);
+  const guideChannels = useMemo(() => (visibleChannel ? [visibleChannel] : []), [visibleChannel]);
+  const onNow = visibleChannel ? currentByChannel.get(visibleChannel.tvgId || visibleChannel.id) : undefined;
 
   function play(channel: LiveChannel) {
     setSelectedChannel(channel);
@@ -263,7 +259,7 @@ export function LiveTvPage({
                   <div className="live-player-empty-art">
                     {visibleChannel?.logoUrl ? <img alt="" src={visibleChannel.logoUrl} /> : <Icon name="live_tv" />}
                   </div>
-                  <p>{visibleChannel ? (programmes.current ? `On now: ${programmes.current.title}` : visibleChannel.group) : "Select a channel to start its live stream."}</p>
+                  <p>{visibleChannel ? (onNow ? `On now: ${onNow.title}` : visibleChannel.group) : "Select a channel to start its live stream."}</p>
                   {visibleChannel && (
                     <button className="primary-button" onClick={() => play(visibleChannel)} type="button">
                       <Icon name="play_arrow" /> Watch live
@@ -273,23 +269,18 @@ export function LiveTvPage({
               </>
             )}
           </section>
-          {livePlayer && (
-            <section aria-label="Programme" className="browse-player-info">
-              {programmes.current ? (
-                <>
-                  <small>On now · {formatTime(programmes.current.startMillis)} – {formatTime(programmes.current.endMillis)}</small>
-                  <strong>{programmes.current.title}</strong>
-                  {programmes.current.synopsis && <p>{programmes.current.synopsis}</p>}
-                </>
-              ) : guideLoading ? (
-                <Skeleton className="skeleton-line" />
-              ) : (
-                <p>No programme information for this channel.</p>
-              )}
-              {programmes.next && (
-                <small>Next · {formatTime(programmes.next.startMillis)} · {programmes.next.title}</small>
-              )}
-            </section>
+          {livePlayer && visibleChannel && (
+            <LiveGuide
+              activeChannelId={livePlaybackItemId}
+              channels={guideChannels}
+              epg={epg}
+              favoriteIds={favoriteIds}
+              loading={guideLoading}
+              onLoadGuideForChannels={onLoadGuideForChannels}
+              onPlay={play}
+              onReplay={onReplay}
+              single
+            />
           )}
         </div>
       </div>

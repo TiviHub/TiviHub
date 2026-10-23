@@ -32,6 +32,7 @@ export function LiveGuide({
   onLoadGuideForChannels,
   onPlay,
   onReplay,
+  single = false,
 }: {
   channels: LiveChannel[];
   epg: EpgProgram[];
@@ -42,11 +43,14 @@ export function LiveGuide({
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (channel: LiveChannel) => void;
   onReplay: (channel: LiveChannel, program: EpgProgram) => void;
+  /** One channel only (under the player): no page heading, filters, channel column or footer. */
+  single?: boolean;
 }) {
+  const channelColumn = single ? 0 : CHANNEL_COLUMN_WIDTH;
   const [date, setDate] = useState(() => startOfLocalDay(new Date()));
   const [now, setNow] = useState(Date.now());
   const [scope, setScope] = useState("all");
-  const [onlyWithEpg, setOnlyWithEpg] = useState(true);
+  const [onlyWithEpg, setOnlyWithEpg] = useState(!single);
   const [compact, setCompact] = useState(false);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [channelQuery, setChannelQuery] = useState("");
@@ -117,7 +121,8 @@ export function LiveGuide({
   const beforeHeight = startIndex * rowHeight;
   const afterHeight = (rows.length - endIndex) * rowHeight;
   const timelineWidth = Math.max(trackWidth, 1);
-  const canvasWidth = Math.max(viewportSize.width, CHANNEL_COLUMN_WIDTH + timelineWidth);
+  const columns = single ? `${timelineWidth}px` : `${channelColumn}px ${timelineWidth}px`;
+  const canvasWidth = Math.max(viewportSize.width, channelColumn + timelineWidth);
   const currentChannel = channels.find((channel) => channel.id === activeChannelId)
     ?? channels.find((channel) => channel.id === selectedChannelId);
   const nowX = now >= bounds.startMillis && now < bounds.endMillis
@@ -139,7 +144,7 @@ export function LiveGuide({
       const viewport = scrollRef.current;
       if (!viewport) return;
       const x = ((Date.now() - guideDayBounds(today).startMillis) / 3_600_000) * hourWidth;
-      const visibleTimelineWidth = Math.max(0, viewport.clientWidth - CHANNEL_COLUMN_WIDTH);
+      const visibleTimelineWidth = Math.max(0, viewport.clientWidth - channelColumn);
       viewport.scrollTo({ left: Math.max(0, x - visibleTimelineWidth / 2), behavior: "smooth" });
     });
   }
@@ -152,15 +157,15 @@ export function LiveGuide({
     const x = sameDay
       ? ((Date.now() - bounds.startMillis) / 3_600_000) * hourWidth
       : 0;
-    const visibleTimelineWidth = Math.max(0, viewport.clientWidth - CHANNEL_COLUMN_WIDTH);
+    const visibleTimelineWidth = Math.max(0, viewport.clientWidth - channelColumn);
     viewport.scrollTo({ left: Math.max(0, x - visibleTimelineWidth / 2), behavior: "auto" });
-  }, [bounds, date, hourWidth]);
+  }, [bounds, channelColumn, date, hourWidth]);
 
   const dateLabel = date.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 
   return (
-    <section aria-label="Full TV guide" className="live-guide-workspace">
-      <header className="page-intro catalog-intro live-guide-page-heading">
+    <section aria-label={single ? `Programme guide for ${channels[0]?.name ?? "the channel"}` : "Full TV guide"} className={`live-guide-workspace${single ? " is-single" : ""}`}>
+      {!single && <header className="page-intro catalog-intro live-guide-page-heading">
         <div>
           <p className="eyebrow">CHANNELS · PROGRAMME TIMES</p>
           <h1>TV Guide</h1>
@@ -192,7 +197,7 @@ export function LiveGuide({
             />
           </div>
         </div>
-      </header>
+      </header>}
 
       <div className="live-guide-toolbar">
         <div className="live-guide-date-controls">
@@ -205,19 +210,23 @@ export function LiveGuide({
           </button>
           <button className="secondary-button" onClick={jumpToNow} type="button">Now</button>
         </div>
-        <label className="live-guide-only-epg">
-          <input checked={onlyWithEpg} onChange={(event) => setOnlyWithEpg(event.target.checked)} type="checkbox" />
-          <span>Only with EPG</span>
-        </label>
-        <button
-          aria-pressed={compact}
-          className={`icon-button${compact ? " selected" : ""}`}
-          onClick={() => setCompact((value) => !value)}
-          data-tooltip={compact ? "Comfortable row height" : "Compact row height"}
-          type="button"
-        >
-          <Icon name="view_list" />
-        </button>
+        {!single && (
+          <>
+            <label className="live-guide-only-epg">
+              <input checked={onlyWithEpg} onChange={(event) => setOnlyWithEpg(event.target.checked)} type="checkbox" />
+              <span>Only with EPG</span>
+            </label>
+            <button
+              aria-pressed={compact}
+              className={`icon-button${compact ? " selected" : ""}`}
+              onClick={() => setCompact((value) => !value)}
+              data-tooltip={compact ? "Comfortable row height" : "Compact row height"}
+              type="button"
+            >
+              <Icon name="view_list" />
+            </button>
+          </>
+        )}
         <label className="live-guide-zoom">
           <Icon name="search" />
           <span className="sr-only">Timeline zoom</span>
@@ -243,8 +252,8 @@ export function LiveGuide({
         style={{ "--live-guide-row-height": `${rowHeight}px` } as CSSProperties}
       >
         <div className="live-guide-canvas" style={{ width: `${canvasWidth}px` }}>
-          <div className="live-guide-ruler" style={{ gridTemplateColumns: `${CHANNEL_COLUMN_WIDTH}px ${timelineWidth}px` }}>
-            <div aria-label="Channel" className="live-guide-channel-heading">CHANNEL</div>
+          <div className="live-guide-ruler" style={{ gridTemplateColumns: columns }}>
+            {!single && <div aria-label="Channel" className="live-guide-channel-heading">CHANNEL</div>}
             <div className="live-guide-ruler-track" style={{ width: `${timelineWidth}px` }}>
               {ticks.map((tick) => (
                 <span
@@ -272,24 +281,26 @@ export function LiveGuide({
                   className="live-guide-row"
                   key={channel.id}
                   role="row"
-                  style={{ gridTemplateColumns: `${CHANNEL_COLUMN_WIDTH}px ${timelineWidth}px`, height: `${rowHeight}px` }}
+                  style={{ gridTemplateColumns: columns, height: `${rowHeight}px` }}
                 >
-                  <button
-                    aria-label={`Play ${channel.name} live`}
-                    className={`live-guide-channel${channel.id === activeChannelId ? " is-playing" : ""}`}
-                    onClick={() => onPlay(channel)}
-                    role="rowheader"
-                    data-tooltip={`${channel.name} · ${channel.group}`}
-                    type="button"
-                  >
-                    <span className="live-guide-channel-logo">
-                      {channel.logoUrl ? <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={channel.logoUrl} /> : <Icon name="live_tv" />}
-                    </span>
-                    <span className="live-guide-channel-name">
-                      <strong>{channel.name}</strong>
-                      <small>{channel.group}</small>
-                    </span>
-                  </button>
+                  {!single && (
+                    <button
+                      aria-label={`Play ${channel.name} live`}
+                      className={`live-guide-channel${channel.id === activeChannelId ? " is-playing" : ""}`}
+                      onClick={() => onPlay(channel)}
+                      role="rowheader"
+                      data-tooltip={`${channel.name} · ${channel.group}`}
+                      type="button"
+                    >
+                      <span className="live-guide-channel-logo">
+                        {channel.logoUrl ? <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={channel.logoUrl} /> : <Icon name="live_tv" />}
+                      </span>
+                      <span className="live-guide-channel-name">
+                        <strong>{channel.name}</strong>
+                        <small>{channel.group}</small>
+                      </span>
+                    </button>
+                  )}
                   <div className="live-guide-program-track" role="presentation" style={{ width: `${timelineWidth}px` }}>
                     {ticks.map((tick) => (
                       <span aria-hidden="true" className={`live-guide-gridline${new Date(tick.millis).getMinutes() === 0 ? " is-hour" : ""}`} key={tick.millis} style={{ left: `${tick.left}px` }} />
@@ -336,6 +347,9 @@ export function LiveGuide({
                 </div>
               );
             })}
+            {single && !loading && visibleRows.length > 0 && !programsByChannel.get(channelGuideId(visibleRows[0])) && (
+              <p className="live-guide-empty live-guide-single-empty">No programme information for this channel.</p>
+            )}
             {afterHeight > 0 && <div aria-hidden="true" className="live-guide-spacer" style={{ height: `${afterHeight}px` }} />}
             {rows.length === 0 && (
               <p className="live-guide-empty">No channels match these filters.</p>
@@ -348,14 +362,14 @@ export function LiveGuide({
               className="live-guide-now-line"
               style={{
                 height: `${visibleRows.length * rowHeight}px`,
-                left: `${CHANNEL_COLUMN_WIDTH + nowX}px`,
+                left: `${channelColumn + nowX}px`,
                 top: `${42 + beforeHeight}px`,
               }}
             />
           )}
         </div>
       </div>
-      <footer className="live-guide-footer">
+      {!single && <footer className="live-guide-footer">
         <span>{currentChannel ? `Playing: ${currentChannel.name}` : "Select a channel to start playback"}</span>
         <span>Click a programme to play its channel live. Marked programmes can be watched again.</span>
         {loading && (
@@ -364,7 +378,7 @@ export function LiveGuide({
             <Skeleton className="live-guide-footer-skeleton" />
           </span>
         )}
-      </footer>
+      </footer>}
     </section>
   );
 }

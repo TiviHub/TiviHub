@@ -48,6 +48,7 @@ describe("radio filter in Live TV", () => {
       guideLoading={false}
       onLoadGuideForChannels={vi.fn()}
       onPlay={onPlay}
+      onReplay={vi.fn()}
       onToggleFavorite={vi.fn()}
       showAdultContent
       source={source}

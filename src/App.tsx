@@ -515,6 +515,7 @@ function App() {
                   guideLoading={guideLoadCount > 0}
                   onLoadGuideForChannels={catalogProps.onLoadGuideForChannels}
                   onPlay={catalogProps.onPlay}
+                  onReplay={openReplay}
                   onToggleFavorite={catalogProps.onToggleFavorite}
                   showAdultContent={showAdultContent}
                   source={activeSource}

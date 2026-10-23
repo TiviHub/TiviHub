@@ -7853,22 +7853,25 @@ button.icon-button.is-favorite {
   margin: 9px 16px 0;
 }
 
-.browse-layout .playback-dialog.playback-inline:not(.playback-mini) > .browse-player-info {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
-  border-top: 1px solid var(--outline-soft);
+/* The single-channel guide under the player: the TV Guide page's look, for one channel. */
+.live-guide-workspace.is-single {
+  height: auto;
+  grid-template-rows: auto auto;
+  margin: 9px;
 }
 
-.browse-player-info strong {
-  font-size: 0.9rem;
+.live-guide-workspace.is-single .live-guide-scroll {
+  height: auto;
 }
 
-.browse-player-info small,
-.browse-player-info p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.8rem;
+/* Over the empty row, and kept in view while the day track scrolls sideways to "now". */
+.live-guide-workspace.is-single .live-guide-rows > .live-guide-single-empty {
+  display: flex;
+  height: var(--live-guide-row-height);
+  align-items: center;
+  margin: calc(-1 * var(--live-guide-row-height)) 0 0;
+  padding: 0 12px;
+  left: 0;
 }
 
 /* Both side panels share this build: heading, a search row, then rows 9px apart. */
