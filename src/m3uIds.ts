@@ -13,18 +13,21 @@ function carryIds<T extends Item>(
   kind: string,
   keyOf: (item: T) => string,
 ): Map<string, string> {
-  const unused = new Map<string, string[]>();
+  const unused = new Map<string, { ids: string[]; next: number }>();
   let highest = -1;
   for (const item of previous) {
     const key = keyOf(item);
-    unused.set(key, [...(unused.get(key) ?? []), item.id]);
+    const queue = unused.get(key);
+    if (queue) queue.ids.push(item.id);
+    else unused.set(key, { ids: [item.id], next: 0 });
     const counter = Number(item.id.slice(item.id.lastIndexOf(":") + 1));
     if (Number.isInteger(counter)) highest = Math.max(highest, counter);
   }
   const renamed = new Map<string, string>();
   const fresh: T[] = [];
   for (const item of next) {
-    const oldId = unused.get(keyOf(item))?.shift();
+    const queue = unused.get(keyOf(item));
+    const oldId = queue && queue.next < queue.ids.length ? queue.ids[queue.next++] : undefined;
     if (oldId === undefined) fresh.push(item);
     else renamed.set(item.id, oldId);
   }

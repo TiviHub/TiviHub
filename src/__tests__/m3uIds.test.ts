@@ -30,3 +30,23 @@ describe("keepM3uIds", () => {
     expect(after.episodes.find((episode) => episode.streamUrl.endsWith("Show.mp4"))!.seriesId).toBe(show.id);
   });
 });
+
+describe("keepM3uIds at scale", () => {
+  it("matches 200,000 channels in well under a few seconds, even when many share one URL", () => {
+    const build = (offset: number) => {
+      const lines = ["#EXTM3U"];
+      for (let index = 0; index < 200_000; index += 1) {
+        lines.push(`#EXTINF:-1,Channel ${index}`, `https://host/${index < 50_000 ? "same" : index + offset}.m3u8`);
+      }
+      return parseM3uCatalog(lines.join("\n"), context);
+    };
+    const before = build(0);
+    const after = build(1);
+    const started = performance.now();
+    keepM3uIds(after, before);
+    const elapsed = performance.now() - started;
+    console.log(`keepM3uIds on 200k channels: ${elapsed.toFixed(0)} ms`);
+    expect(new Set(after.channels.map((channel) => channel.id)).size).toBe(200_000);
+    expect(elapsed).toBeLessThan(3000);
+  });
+});
