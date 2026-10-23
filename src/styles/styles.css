@@ -7453,6 +7453,7 @@ button:disabled {
 .icon-button,
 .library-content-tabs button,
 .library-tabs button,
+.browse-category,
 .live-channel-favorite,
 .live-guide-channel,
 .live-guide-program,
@@ -7843,4 +7844,87 @@ button.icon-button.is-favorite {
 
 .playback-radio-art > .material-icons {
   font-size: 27px;
+}
+
+/* Browsing screens (Live TV now; Movies and Series next): category panel, then the items of the chosen category. */
+.live-tv-layout.browse-layout {
+  grid-template-columns: minmax(560px, 1.05fr) minmax(0, 1fr);
+}
+
+.live-channel-columns.has-categories {
+  grid-template-columns: minmax(190px, 0.8fr) minmax(230px, 1fr);
+}
+
+.browse-category-search {
+  padding: 9px 9px 0;
+}
+
+.browse-category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px;
+}
+
+.browse-category {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.browse-category-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browse-category-count {
+  display: grid;
+  min-width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 0.67rem;
+}
+
+.browse-message {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.browse-message p {
+  margin: 0;
+}
+
+.browse-message .text-button {
+  justify-self: start;
+}
+
+.browse-sentinel {
+  height: 1px;
+}
+
+@media (max-width: 1180px) {
+  .live-tv-layout.browse-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

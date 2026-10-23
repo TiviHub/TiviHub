@@ -2,9 +2,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { CatalogPage } from "../components/ContentPages";
+import { LiveTvPage } from "../components/LiveTvPage";
 import { parseM3uCatalog } from "../providers/m3u";
-import type { LiveChannel } from "../types";
+import type { LiveChannel, Playlist } from "../types";
 
 afterEach(cleanup);
 
@@ -34,24 +34,24 @@ describe("radio stations in the M3U parser", () => {
   });
 });
 
+const source: Playlist = {
+  id: "p", name: "P", type: "M3U", url: "https://host/list.m3u", username: "", password: "",
+  active: true, drmLicenseUrl: "", drmSystem: "com.widevine.alpha", createdAt: 1,
+};
+
 describe("radio filter in Live TV", () => {
   function renderLive(channels: LiveChannel[]) {
     const onPlay = vi.fn();
-    render(<CatalogPage
-      channels={channels}
+    render(<LiveTvPage
       epg={[]}
       favorites={[]}
-      library={[]}
-      loading={false}
-      movies={[]}
-      onAddToLibrary={vi.fn()}
+      guideLoading={false}
       onLoadGuideForChannels={vi.fn()}
-      onOpenMovie={vi.fn()}
-      onOpenSeries={vi.fn()}
       onPlay={onPlay}
       onToggleFavorite={vi.fn()}
-      section="Live TV"
-      series={[]}
+      showAdultContent
+      source={source}
+      storedChannels={channels}
     />);
     return onPlay;
   }
@@ -60,20 +60,18 @@ describe("radio filter in Live TV", () => {
     const user = userEvent.setup();
     const onPlay = renderLive([channel("tv", "Evening News"), channel("fm", "Jazz FM", { radio: true })]);
 
-    await user.click(screen.getByRole("combobox", { name: "Filter by category" }));
-    await user.click(await screen.findByRole("option", { name: "Radio" }));
+    await user.click(await screen.findByRole("button", { name: /^Radio/ }));
 
+    expect(await screen.findByRole("button", { name: "Play Jazz FM" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Play Evening News" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Play Jazz FM" }));
     expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ id: "fm", radio: true }));
   });
 
-  it("offers no Radio filter when the source has no stations", async () => {
-    const user = userEvent.setup();
+  it("offers no Radio category when the source has no stations", async () => {
     renderLive([channel("tv", "Evening News")]);
 
-    await user.click(screen.getByRole("combobox", { name: "Filter by category" }));
-
-    expect(screen.queryByRole("option", { name: "Radio" })).toBeNull();
+    await screen.findByRole("button", { name: "Play Evening News" });
+    expect(screen.queryByRole("button", { name: /^Radio/ })).toBeNull();
   });
 });

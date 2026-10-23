@@ -165,7 +165,7 @@ textarea {
   background: var(--row);
 }
 
-:is(.source-row.active, .live-channel-list-item.selected, .live-guide-channel.is-playing, .library-tabs button.active, .library-content-tabs button.active, .catalog-view-switch button.active, .custom-select-option.active, .custom-select-option[aria-selected="true"], .theme-option.selected, .source-type.active, .source-mode.active) {
+:is(.source-row.active, .live-channel-list-item.selected, .live-guide-channel.is-playing, .library-tabs button.active, .library-content-tabs button.active, .browse-category.active, .catalog-view-switch button.active, .custom-select-option.active, .custom-select-option[aria-selected="true"], .theme-option.selected, .source-type.active, .source-mode.active) {
   border-color: transparent;
   background: var(--row-selected);
   box-shadow: inset 3px 0 var(--primary);
@@ -239,6 +239,7 @@ textarea {
 }
 
 /* Episode rows and library tabs follow the Live TV channel list: separate grey tiles, grey hover, purple selection bar. */
+.browse-category:hover:not(.active),
 .library-tabs button:hover:not(.active),
 .library-content-tabs button:hover:not(.active) {
   border-color: transparent;

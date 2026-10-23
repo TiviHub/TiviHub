@@ -43,6 +43,7 @@ import { createPopularCatalogService } from "./services/popularCatalogService";
 import { configureMdblistRateLimiter } from "./lib/mdblistRateLimit";
 import { CatalogPage, playableChannel } from "./components/ContentPages";
 import { MovieDetail, SeriesDetail } from "./components/DetailPages";
+import { LiveTvPage } from "./components/LiveTvPage";
 import { LibraryPage } from "./components/LibraryPage";
 import { Icon, TooltipLayer } from "./components/common";
 import { MobileNav, Sidebar, Topbar } from "./components/AppShell";
@@ -512,9 +513,16 @@ function App() {
                 key={activeSourceId ?? "no-active-source"}
                 className={`live-tv-persistent${section === "Live TV" ? "" : " is-mini"}`}
               >
-                <CatalogPage
-                  {...catalogProps}
+                <LiveTvPage
+                  epg={visibleEpg}
+                  favorites={visibleFavorites}
                   guideLoading={guideLoadCount > 0}
+                  onLoadGuideForChannels={catalogProps.onLoadGuideForChannels}
+                  onPlay={catalogProps.onPlay}
+                  onToggleFavorite={catalogProps.onToggleFavorite}
+                  showAdultContent={showAdultContent}
+                  source={activeSource}
+                  storedChannels={channels}
                   livePlaybackItemId={inlineLivePlayback && playableItem?.live ? playableItem.id : undefined}
                   livePlayer={inlineLivePlayback && playableItem?.live ? (
                     <PlaybackDialog
@@ -533,7 +541,6 @@ function App() {
                   ) : undefined}
                   livePlayerMini={section !== "Live TV"}
                   onCheckStreamGroup={checkStreamGroup}
-                  section="Live TV"
                 />
               </div>
             )}

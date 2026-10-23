@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createLiveBrowser } from "../browse/live";
+import { createLiveBrowser, RADIO_CATEGORY_ID } from "../browse/live";
 import { BROWSE_PAGE_SIZE } from "../browse/types";
 import type { LiveChannel, Playlist } from "../types";
 
@@ -43,6 +43,18 @@ describe("live browser", () => {
     expect(second.nextCursor).toBeUndefined();
     expect((await browser.page(null)).total).toBe(BROWSE_PAGE_SIZE + 6);
     expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters a category by name and offers radio stations as their own category", async () => {
+    const stored = [
+      channel(1, "News"),
+      { ...channel(2, "Music"), name: "Jazz FM", radio: true },
+    ];
+    const browser = createLiveBrowser(base, async () => stored);
+    expect((await browser.categories())[0]).toEqual({ id: RADIO_CATEGORY_ID, name: "Radio", count: 1 });
+    expect((await browser.page(RADIO_CATEGORY_ID)).items.map((item) => item.name)).toEqual(["Jazz FM"]);
+    expect((await browser.page(null, undefined, "jazz")).items).toHaveLength(1);
+    expect(await browser.channelsOf("News")).toHaveLength(1);
   });
 
   it("asks an Xtream provider for one category at a time and remembers the answer", async () => {

@@ -1,3 +1,4 @@
+import { BrowseCategoryList } from "../components/BrowseCategoryList";
 import { useEffect, useState, type ReactNode } from "react";
 import { CustomSelect, Icon, TooltipLayer, type IconName } from "../components/common";
 import { ProgressIndicator } from "../components/ProgressIndicator";
@@ -29,6 +30,7 @@ const SECTIONS: { name: string; icon: IconName }[] = [
   { name: "Tabs", icon: "view_list" },
   { name: "Cards", icon: "movie" },
   { name: "Lists", icon: "playlist_play" },
+  { name: "Browse", icon: "filter_list" },
   { name: "Feedback", icon: "error_outline" },
   { name: "Loading", icon: "refresh" },
   { name: "Pagination", icon: "chevron_right" },
@@ -409,6 +411,39 @@ export function StyleGuide() {
         <Block title="playback-badge (Live chip in the player header, modal, inline and mini)">
           <h2 style={{ margin: 0 }}><span className="playback-badge">Live</span>Channel name</h2>
         </Block>
+        </div>
+      </section>
+
+      <section className="sg-section" id="browse">
+        <div className="sg-section-head">
+          <h2>Browse</h2>
+          <p>Live TV, Movies and Series open on a category list; the items of the chosen category load a batch at a time next to it.</p>
+        </div>
+        <div className="sg-specimens">
+          <Block title="BrowseCategoryList" note="Favorites and All are pinned above the source's own categories. The selected tile uses the shared selection look.">
+            <div className="live-channel-columns has-categories">
+              <BrowseCategoryList
+                categories={[
+                  { id: "@@favorites", name: "Favorites", count: 3, pinned: true },
+                  { id: "", name: "All", pinned: true },
+                  { id: "news", name: "News", count: 42 },
+                  { id: "sport", name: "Sport", count: 1280 },
+                  { id: "kids", name: "A category with a long name that is cut off", count: 7 },
+                ]}
+                loading={false}
+                onRetry={() => undefined}
+                onSelect={() => undefined}
+                selectedId="news"
+                title="Live categories"
+              />
+              <BrowseCategoryList categories={[]} loading onRetry={() => undefined} onSelect={() => undefined} selectedId={null} title="Loading" />
+            </div>
+          </Block>
+          <Block title="Error" note="A failed request keeps what is on screen and offers Try again; it never leaves a silent gap.">
+            <div className="live-channel-columns has-categories">
+              <BrowseCategoryList categories={[]} error="Could not reach the provider." loading={false} onRetry={() => undefined} onSelect={() => undefined} selectedId={null} title="Live categories" />
+            </div>
+          </Block>
         </div>
       </section>
 
