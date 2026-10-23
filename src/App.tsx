@@ -5,6 +5,7 @@ import webPackage from "../package.json";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useDownloads } from "./hooks/useDownloads";
 import { useLibrary } from "./hooks/useLibrary";
+import { useGlobalSearch } from "./hooks/useGlobalSearch";
 import { useSources } from "./hooks/useSources";
 import { useNotifications } from "./hooks/useNotifications";
 import { isAdultContent } from "./adultContent";
@@ -13,7 +14,7 @@ import { getDiagnosticLogSnapshot } from "./diagnosticLog";
 import {
   isPlaylistExpired,
 } from "./catalogCache";
-import type { GlobalSearchCommand, GlobalSearchMatch, SearchSection } from "./globalSearch";
+import type { SearchSection } from "./globalSearch";
 import { visibleButton } from "./visibleButton";
 import {
   loadXtreamEpisodes,
@@ -192,7 +193,6 @@ function App() {
   const [resumePosition, setResumePosition] = useState(0);
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Playlist | undefined>();
-  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [deletingSource, setDeletingSource] = useState<{
     name: string;
@@ -220,7 +220,6 @@ function App() {
   const requestedEpgChannels = useRef(new Set<string>());
   const activeSourceIdRef = useRef(activeSourceId);
   activeSourceIdRef.current = activeSourceId;
-  const globalSearchReturnFocusRef = useRef<HTMLElement | null>(null);
   const startupOverlayRef = useRef<HTMLDivElement>(null);
   const refreshOverlayRef = useRef<HTMLDivElement>(null);
   const refreshReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -291,6 +290,20 @@ function App() {
     expiredSourceIds, notify, ready, refreshReturnFocusRef, reloadLocalData, requestedEpgChannels, setDeletingSource,
     setEpg, setEpisodes, setExpiredSourceIds, setGuideLoadCount, setRefreshing, setSection, setSelectedSeries, sources,
   });
+
+  const { globalSearchOpen, openGlobalSearch, closeGlobalSearch, runGlobalSearchCommand, openGlobalSearchResult } =
+    useGlobalSearch({
+      canOpen: canOpenGlobalSearch,
+      openAddSource,
+      openPlayback,
+      openSeries,
+      refreshCurrentSource,
+      setEpisodeError,
+      setEpisodes,
+      setSection,
+      setSelectedMovie,
+      setSelectedSeries,
+    });
 
   useEffect(() => {
     const expiresAtMillis = activeSource?.expiresAtMillis;
@@ -365,40 +378,6 @@ function App() {
       document.body.style.overflow = previousBodyOverflow;
     };
   }, [refreshing]);
-
-  useEffect(() => {
-    if (!globalSearchOpen) return;
-    const root = document.documentElement;
-    const previousRootOverflow = root.style.overflow;
-    const previousBodyOverflow = document.body.style.overflow;
-    root.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
-    return () => {
-      root.style.overflow = previousRootOverflow;
-      document.body.style.overflow = previousBodyOverflow;
-    };
-  }, [globalSearchOpen]);
-
-  useEffect(() => {
-    if (globalSearchOpen) return;
-    const returnFocus = globalSearchReturnFocusRef.current;
-    globalSearchReturnFocusRef.current = null;
-    if (returnFocus?.isConnected) returnFocus.focus();
-  }, [globalSearchOpen]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((!event.ctrlKey && !event.metaKey) || event.key.toLowerCase() !== "k" || event.repeat) return;
-      if (!canOpenGlobalSearch || globalSearchOpen) return;
-      event.preventDefault();
-      globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
-        ? document.activeElement
-        : visibleButton(".global-search-button");
-      setGlobalSearchOpen(true);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canOpenGlobalSearch, globalSearchOpen]);
 
   async function reloadLocalData(preferredSourceId?: string) {
     const savedSources = await getPlaylists();
@@ -498,62 +477,6 @@ function App() {
     if (!activeSource) return;
     setEditingSource(activeSource);
     setSourceDialogOpen(true);
-  }
-
-  function openGlobalSearch() {
-    if (!canOpenGlobalSearch) return;
-    globalSearchReturnFocusRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
-      ? document.activeElement
-      : visibleButton(".global-search-button");
-    setGlobalSearchOpen(true);
-  }
-
-  function closeGlobalSearch(restoreFocus = true) {
-    if (!restoreFocus) globalSearchReturnFocusRef.current = null;
-    setGlobalSearchOpen(false);
-  }
-
-  function runGlobalSearchCommand(command: GlobalSearchCommand) {
-    closeGlobalSearch(false);
-    if (command.kind === "navigate") {
-      setSelectedMovie(null);
-      setSelectedSeries(null);
-      setEpisodes([]);
-      setEpisodeError(null);
-      setSection(command.section);
-    } else if (command.kind === "add-source") {
-      openAddSource();
-    } else {
-      void refreshCurrentSource();
-    }
-  }
-
-  function openGlobalSearchResult(result: GlobalSearchMatch) {
-    closeGlobalSearch(false);
-    if (result.type === "LIVE") {
-      const channel = result.item;
-      setSelectedMovie(null);
-      setSelectedSeries(null);
-      setEpisodes([]);
-      setSection("Live TV");
-      openPlayback({
-        id: channel.id,
-        playlistId: channel.playlistId,
-        contentType: "LIVE",
-        title: channel.name,
-        streamUrl: channel.streamUrl,
-        artworkUrl: channel.logoUrl,
-        drmLicenseUrl: channel.drmLicenseUrl,
-        drmSystem: channel.drmSystem,
-        live: true,
-      });
-    } else if (result.type === "MOVIE") {
-      setSelectedMovie(result.item);
-      setSelectedSeries(null);
-      setSection("Movies");
-    } else {
-      void openSeries(result.item);
-    }
   }
 
   async function saveApiKey(value: string) {
