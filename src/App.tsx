@@ -3,6 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
 import { useAppUpdate } from "./hooks/useAppUpdate";
+import { useDownloads } from "./hooks/useDownloads";
 import { useNotifications } from "./hooks/useNotifications";
 import { isAdultContent } from "./adultContent";
 import { getCatalogImportLogSnapshot, recordCatalogImportSummary } from "./catalogImportLog";
@@ -21,21 +22,6 @@ import {
   type CatalogCandidate,
 } from "./catalogRefresh";
 import type { GlobalSearchCommand, GlobalSearchMatch, SearchSection } from "./globalSearch";
-import {
-  canDownloadMedia,
-  chooseDownloadDirectory,
-  clearCompletedDownloads,
-  downloadIdFor,
-  downloadMedia,
-  getDownloadedBlob,
-  getDownloadDirectoryPath,
-  getDownloads,
-  removeDownload,
-  type DownloadableMedia,
-  type DownloadProgress,
-  type DownloadRecord,
-  type DownloadTask,
-} from "./downloads";
 import { keepM3uIds } from "./m3uIds";
 import { fetchM3u, parseM3uCatalog, parseM3uCatalogAsync } from "./providers/m3u";
 import { fetchXmltv } from "./providers/xmltv";
@@ -232,10 +218,6 @@ function App() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [library, setLibrary] = useState<LibraryItem[]>([]);
-  const [downloads, setDownloads] = useState<DownloadRecord[]>([]);
-  const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
-  const [downloadDirectoryPath, setDownloadDirectoryPath] = useState<string | null>(null);
-  const [downloadsLoaded, setDownloadsLoaded] = useState(false);
   const [epg, setEpg] = useState<EpgProgram[]>([]);
   const [guideLoadCount, setGuideLoadCount] = useState(0);
   const [subtitleApiKey, setSubtitleApiKey] = useState("");
@@ -266,13 +248,17 @@ function App() {
     () => isDesktopApp && !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const { error, notice, notificationKey, notify, clearNotifications } = useNotifications();
+  const {
+    downloads, downloadTasks, downloadDirectoryPath, downloadsLoaded, downloadedIds, activeDownloadIds,
+    startDownload, cancelDownload, removeFailedDownload, deleteDownload, clearDownloads,
+    changeDownloadDirectory, playDownload,
+  } = useDownloads({ notify, openPlayback });
   const [expiredSourceIds, setExpiredSourceIds] = useState<Set<string>>(() => new Set());
   const [expiryCheckTime, setExpiryCheckTime] = useState(() => Date.now());
   const { availableUpdate, updateStatus, checkUpdates, openAvailableUpdate } = useAppUpdate(isDesktopApp);
   const requestedEpgChannels = useRef(new Set<string>());
   const activeSourceIdRef = useRef(activeSourceId);
   activeSourceIdRef.current = activeSourceId;
-  const downloadControllers = useRef(new Map<string, AbortController>());
   const globalSearchReturnFocusRef = useRef<HTMLElement | null>(null);
   const startupOverlayRef = useRef<HTMLDivElement>(null);
   const refreshOverlayRef = useRef<HTMLDivElement>(null);
@@ -328,11 +314,6 @@ function App() {
   const activeSourceExpired = Boolean(activeSource && (
     isPlaylistExpired(activeSource, expiryCheckTime) || expiredSourceIds.has(activeSource.id)
   ));
-  const downloadedIds = useMemo(() => new Set(downloads.map((download) => download.id)), [downloads]);
-  const activeDownloadIds = useMemo(
-    () => new Set(downloadTasks.filter((task) => task.status === "downloading").map((task) => task.id)),
-    [downloadTasks],
-  );
   const blockingDialogOpen = sourceDialogOpen ||
     Boolean(playableItem && !(inlineLivePlayback && playableItem.live)) ||
     Boolean(streamHealthRequest);
@@ -500,28 +481,6 @@ function App() {
       }
     });
     return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    void Promise.all([getDownloads(), getDownloadDirectoryPath()]).then(([savedDownloads, directoryPath]) => {
-      if (!active) return;
-      setDownloads(savedDownloads);
-      setDownloadDirectoryPath(directoryPath);
-      setDownloadsLoaded(true);
-    }).catch((cause: unknown) => {
-      if (active) {
-        console.error("Could not load offline downloads", cause);
-        notify(cause instanceof Error ? cause.message : "Could not load offline downloads.", "error");
-        setDownloadsLoaded(true);
-      }
-    });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => () => {
-    for (const controller of downloadControllers.current.values()) controller.abort();
-    downloadControllers.current.clear();
   }, []);
 
   useEffect(() => {
@@ -1359,117 +1318,6 @@ function App() {
       ...item,
       drmCertificateUrl: item.drmCertificateUrl || source?.drmCertificateUrl,
     });
-  }
-
-  async function startDownload(media: DownloadableMedia) {
-    if (!canDownloadMedia(media)) {
-      notify("Offline downloads support direct, non-DRM movie and episode files only.", "error");
-      return;
-    }
-    const id = downloadIdFor(media);
-    if (downloadedIds.has(id)) return;
-    if (downloadControllers.current.has(id)) return;
-
-    const controller = new AbortController();
-    downloadControllers.current.set(id, controller);
-    setDownloadTasks((tasks) => [
-      ...tasks.filter((task) => task.id !== id),
-      { id, title: media.title, media, receivedBytes: 0, totalBytes: null, status: "downloading" },
-    ]);
-    try {
-      const result = await downloadMedia(media, controller.signal, (progress: DownloadProgress) => {
-        setDownloadTasks((tasks) => tasks.map((task) => task.id === progress.id
-          ? { ...task, ...progress, status: "downloading", error: undefined }
-          : task));
-      });
-      setDownloads((current) => [
-        result.record,
-        ...current.filter((download) => download.id !== result.record.id),
-      ].sort((a, b) => b.completedAt - a.completedAt));
-      setDownloadTasks((tasks) => tasks.filter((task) => task.id !== id));
-      if (result.folderError) {
-        console.error("Offline video was saved, but its folder copy failed", result.folderError);
-        notify(result.folderError.message, "error");
-      } else {
-        notify(`${media.title} is ready for offline playback.`, "notice");
-      }
-    } catch (cause) {
-      if (cause instanceof DOMException && cause.name === "AbortError") {
-        setDownloadTasks((tasks) => tasks.filter((task) => task.id !== id));
-        return;
-      }
-      const message = cause instanceof Error ? cause.message : "Could not download this video.";
-      console.error("Could not download offline media", cause);
-      setDownloadTasks((tasks) => tasks.map((task) => task.id === id
-        ? { ...task, status: "failed", error: message }
-        : task));
-      notify(message, "error");
-    } finally {
-      downloadControllers.current.delete(id);
-    }
-  }
-
-  function cancelDownload(id: string) {
-    downloadControllers.current.get(id)?.abort();
-  }
-
-  function removeFailedDownload(id: string) {
-    setDownloadTasks((tasks) => tasks.filter((task) => task.id !== id || task.status !== "failed"));
-  }
-
-  async function deleteDownload(id: string, title: string) {
-    try {
-      await removeDownload(id);
-      setDownloads((current) => current.filter((download) => download.id !== id));
-      notify(`Removed ${title} from downloads.`, "notice");
-    } catch (cause) {
-      console.error("Could not remove downloaded media", cause);
-      notify(cause instanceof Error ? cause.message : "Could not remove this download.", "error");
-    }
-  }
-
-  async function clearDownloads() {
-    if (!window.confirm("Delete all completed downloads from this device?")) return;
-    try {
-      await clearCompletedDownloads();
-      setDownloads([]);
-      notify("Completed downloads were removed.", "notice");
-    } catch (cause) {
-      console.error("Could not clear completed downloads", cause);
-      notify(cause instanceof Error ? cause.message : "Could not clear completed downloads.", "error");
-    }
-  }
-
-  async function changeDownloadDirectory() {
-    try {
-      const name = await chooseDownloadDirectory();
-      setDownloadDirectoryPath(name);
-      notify(`New downloads will also be copied to ${name}.`, "notice");
-    } catch (cause) {
-      if (cause instanceof DOMException && cause.name === "AbortError") return;
-      console.error("Could not change the download folder", cause);
-      notify(cause instanceof Error ? cause.message : "Could not change the download folder.", "error");
-    }
-  }
-
-  async function playDownload(download: DownloadRecord) {
-    try {
-      const blob = await getDownloadedBlob(download.id);
-      openPlayback({
-        id: download.mediaId,
-        playlistId: download.playlistId,
-        contentType: download.contentType,
-        title: download.title,
-        streamUrl: URL.createObjectURL(blob),
-        artworkUrl: download.artworkUrl,
-        live: false,
-        parentTitle: download.parentTitle,
-        offline: true,
-      });
-    } catch (cause) {
-      console.error("Could not open offline media", cause);
-      notify(cause instanceof Error ? cause.message : "Could not open this offline video.", "error");
-    }
   }
 
   function navigateToSection(next: Section) {
