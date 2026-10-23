@@ -23,5 +23,4 @@ Tauri 2 desktop app (Rust in `src-tauri/`) with a React 19 + Vite + TypeScript U
 - A bug fix starts with a failing test. Never skip or weaken a test to get green.
 - Do not add dependencies, Prettier or Stylelint, or a monorepo, without asking.
 - Before saying done: `npx tsc --noEmit`, `npm run lint`, `npx vitest run src` (plus `cargo test` if Rust changed). Report what you could not run.
-- Plans, specs and notes go in `tasks/<topic>/{spec,plan,todo}.md`. `docs/` holds release notes only.
 - `src/` root stays `main.tsx`, `App.tsx`, `types.ts`: pure helpers in `src/lib/`, I/O logic in `src/services/`, CSS in `src/styles/`.

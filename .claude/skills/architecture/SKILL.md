@@ -39,7 +39,6 @@ providers/*  ->  storage/*  ->  hooks/*  ->  components/*  ->  App.tsx
   - new screen -> `src/components/<Name>Page.tsx`, state in a hook, route wired in `App.tsx`
   - shared UI piece -> `src/components/common.tsx` and the style guide (see the `ui` skill)
   - pure helper -> `src/lib/<name>.ts`; anything with I/O -> `src/services/<name>.ts`; styles -> `src/styles/`. Keep `src/` root to `main.tsx`, `App.tsx`, `types.ts`.
-  - plan or design note -> `tasks/<topic>/{spec,plan,todo}.md`; `docs/` is release notes only
 
 ## Size limits
 

@@ -27,7 +27,7 @@ description: How to test, lint, measure performance and what CI runs. Use when a
 
 ## Performance
 
-- Claims need numbers: run `npm run perf:all` before and after, put both in the PR. Baselines live in `tasks/baseline/results/`.
+- Claims need numbers: run `npm run perf:all` before and after, put both in the PR. Results are written to `scripts/perf/results/` (not committed): save the numbers you compare in the PR.
 - Watch: cold start, time to open the Movies/Series/Live pages on a 200k-title playlist, scroll smoothness, memory after a catalog refresh, bundle size of the startup chunk.
 
 ## Lint
