@@ -53,7 +53,7 @@ function apiBase(playlist: Playlist): URL {
   if (url.username || url.password) {
     throw new Error("Put Xtream credentials in their own fields, not in the server URL.");
   }
-  if (!url.pathname.endsWith("/player_api.php") && url.pathname !== "/player_api.php") {
+  if (!url.pathname.endsWith("/player_api.php")) {
     url.pathname = `${url.pathname.replace(/\/+$/, "")}/player_api.php`;
   }
   url.hash = "";
@@ -267,24 +267,15 @@ export async function loadXtreamCatalog(
       requestJson(authenticatedUrl(playlist, "get_series"), "Series", signal),
     ]);
 
-  const liveCategories = new Map(array(liveCategoriesRaw, "Live categories", "categories")
-    .flatMap((item) => {
+  const categoryNames = (raw: unknown, description: string) =>
+    new Map(array(raw, description, "categories").flatMap((item) => {
       const id = stringValue(item.category_id);
       const name = stringValue(item.category_name);
       return id && name ? [[id, name] as const] : [];
     }));
-  const movieCategories = new Map(array(movieCategoriesRaw, "Movie categories", "categories")
-    .flatMap((item) => {
-      const id = stringValue(item.category_id);
-      const name = stringValue(item.category_name);
-      return id && name ? [[id, name] as const] : [];
-    }));
-  const seriesCategories = new Map(array(seriesCategoriesRaw, "Series categories", "categories")
-    .flatMap((item) => {
-      const id = stringValue(item.category_id);
-      const name = stringValue(item.category_name);
-      return id && name ? [[id, name] as const] : [];
-    }));
+  const liveCategories = categoryNames(liveCategoriesRaw, "Live categories");
+  const movieCategories = categoryNames(movieCategoriesRaw, "Movie categories");
+  const seriesCategories = categoryNames(seriesCategoriesRaw, "Series categories");
   const drm = drmFor(playlist);
 
   const channels = array(liveRaw, "Live channel", "channels").flatMap((item) => {

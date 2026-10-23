@@ -502,7 +502,8 @@ pub fn load_or_create_key(
             KeychainAction::UseFile => {}
             KeychainAction::Fail => {
                 return Err(
-                    "The system keychain could not be read. Restart TiviHub to try again.".to_string(),
+                    "The system keychain could not be read. Restart TiviHub to try again."
+                        .to_string(),
                 );
             }
         }
@@ -800,7 +801,10 @@ mod tests {
     fn a_keychain_error_never_replaces_the_key_of_existing_data() {
         let failure = || keyring::Error::NoStorageAccess("locked".into());
         assert_eq!(keychain_action(Err(failure()), true), KeychainAction::Fail);
-        assert_eq!(keychain_action(Err(failure()), false), KeychainAction::UseFile);
+        assert_eq!(
+            keychain_action(Err(failure()), false),
+            KeychainAction::UseFile
+        );
         assert_eq!(
             keychain_action(Err(keyring::Error::NoEntry), false),
             KeychainAction::Create

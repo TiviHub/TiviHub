@@ -343,6 +343,8 @@ export function PlaylistDialog({
                 {type === "M3U"
                   ? "M3U playlist downloads are limited to 200 MB."
                   : "Each Xtream API response is limited to 200 MB."}
+                {/^http:\/\//i.test(url.trim()) &&
+                  " This address is unencrypted (HTTP), so anyone on your network can read your login."}
               </p>
             </>
           ) : (
