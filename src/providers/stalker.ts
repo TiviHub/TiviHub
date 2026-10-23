@@ -1,7 +1,9 @@
 import { recordDiagnosticFailure } from "../diagnosticLog";
 import type { EpgProgram, LiveChannel, Movie, Playlist } from "../types";
+import { normalizeImdbId, normalizeTmdbId } from "../ratings";
 import { readResponseText } from "./http";
 import { providerFetch } from "./transport";
+import { catalogYear } from "./xtream";
 
 // Stalker (Ministra) portals identify a "set-top box" by its MAC address. A web view cannot send the
 // Cookie and User-Agent headers they need, so every request goes through the desktop backend.
@@ -273,11 +275,14 @@ async function loadMovies(playlist: Playlist, signal?: AbortSignal): Promise<Mov
       const name = stringValue(item.name);
       const cmd = stringValue(item.cmd);
       // Series come as items with episode lists; only plain movies are listed for now.
-      const isSeries = Array.isArray(item.series) && item.series.length > 0;
+      const isSeries = (Array.isArray(item.series) && item.series.length > 0) || ["1", "true"].includes(String(item.is_series));
       if (!id || !name || !cmd || isSeries || seen.has(id)) continue;
       seen.add(id);
-      const year = numberValue(stringValue(item.year)?.slice(0, 4));
+      // Ratings and the Top 5 lists match a title by id or by name and year, so a missing year is filled in from the name.
+      const year = catalogYear(item.year, name);
       const rating = numberValue(item.rating_imdb) ?? numberValue(item.rating_kinopoisk);
+      // Portals keep local time as "2021-05-01 12:34:56"; the "Recently added" list sorts on it.
+      const added = Date.parse(String(stringValue(item.added) ?? "").replace(" ", "T"));
       movies.push({
         id: `${playlist.id}:movie:${id}`,
         playlistId: playlist.id,
@@ -286,8 +291,11 @@ async function loadMovies(playlist: Playlist, signal?: AbortSignal): Promise<Mov
         streamUrl: stalkerLink(cmd, "vod"),
         posterUrl: absolute(playlist, item.screenshot_uri),
         overview: stringValue(item.description),
-        year: year && year > 1800 ? year : undefined,
+        year,
         rating: rating && rating > 0 ? rating : undefined,
+        imdbId: normalizeImdbId(item.imdb_id ?? item.imdb ?? item.imdbid),
+        tmdbId: normalizeTmdbId(item.tmdb_id ?? item.tmdb),
+        addedAtMillis: Number.isFinite(added) ? added : undefined,
         categoryId,
         category: categoryName,
       });

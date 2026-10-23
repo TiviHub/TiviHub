@@ -10,6 +10,8 @@ import {
   stalkerApiUrl,
   stalkerLink,
 } from "../providers/stalker";
+import { rankLocalCatalogByPopularity } from "../catalogPopularity";
+import { createTitleIdentity } from "../ratings";
 import type { Playlist } from "../types";
 
 const MAC = "00:1A:79:12:34:56";
@@ -136,6 +138,37 @@ describe("Stalker catalog", () => {
     expect(catalog.movies[0]).toMatchObject({
       year: 2019, rating: 7.5, category: "Action", posterUrl: "http://portal.example/img/101.jpg", overview: "A film",
     });
+  });
+
+  it("gives movies what ratings and the Top 5 lists match on: a year, ids and the added date", async () => {
+    portal({
+      "vod:get_ordered_list": () => ({
+        total_items: 4,
+        max_page_items: 10,
+        data: [
+          { id: "1", name: "Old Film (2015)", cmd: "/m/1", added: "2021-05-01 12:34:56", imdb_id: "tt0123456", tmdb_id: "42" },
+          { id: "2", name: "Plain Film", cmd: "/m/2", year: "2020-03-01" },
+          { id: "3", name: "No year anywhere", cmd: "/m/3" },
+          { id: "4", name: "Series flagged", cmd: "/m/4", is_series: "1" },
+        ],
+      }),
+    });
+    const { movies } = await loadStalkerCatalog(source());
+
+    expect(movies.map((movie) => movie.name)).toEqual(["Old Film (2015)", "Plain Film", "No year anywhere"]);
+    expect(movies[0]).toMatchObject({ year: 2015, imdbId: "tt0123456", tmdbId: "42" });
+    expect(movies[0].addedAtMillis).toBe(new Date(2021, 4, 1, 12, 34, 56).getTime());
+    expect(movies[1].year).toBe(2020);
+    expect(movies[2].year).toBeUndefined();
+    expect(movies[2].addedAtMillis).toBeUndefined();
+
+    // The two features that were empty for Stalker movies now find them.
+    expect(createTitleIdentity(movies[0], "MOVIE")?.key).toBe("movie:imdb:v2:tt0123456");
+    expect(createTitleIdentity(movies[1], "MOVIE")?.key).toBe("movie:title:v3:plain film:2020");
+    expect(rankLocalCatalogByPopularity(movies, [
+      { title: "Plain Film", year: 2020 },
+      { title: "Other", year: 2015, imdbId: "tt0123456" },
+    ]).map((movie) => movie.name)).toEqual(["Plain Film", "Old Film (2015)"]);
   });
 
   it("keeps the live channels when the portal has no video library", async () => {

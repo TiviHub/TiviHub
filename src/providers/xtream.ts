@@ -208,7 +208,7 @@ function stringValue(value: unknown): string | undefined {
   return undefined;
 }
 
-function catalogYear(...values: unknown[]): number | undefined {
+export function catalogYear(...values: unknown[]): number | undefined {
   for (const value of values) {
     const text = stringValue(value);
     if (!text) continue;
