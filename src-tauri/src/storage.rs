@@ -29,6 +29,7 @@ const STORES: &[(&str, &str)] = &[
     ("mdblistRateLimits", "key"),
     ("subtitleSearch", "key"),
     ("subtitleFiles", "fileId"),
+    ("subtitleChoices", "itemId"),
     ("secrets", "id"),
 ];
 const CATALOG_STORES: &[&str] = &["channels", "movies", "series"];
@@ -152,6 +153,17 @@ fn migrate(conn: &Connection) -> Result<(), String> {
              PRAGMA user_version = 1;",
         )
         .map_err(|e| e.to_string())?;
+    }
+    if version < 2 {
+        // Adds stores introduced after version 1 (subtitleChoices) to existing databases.
+        for (store, _) in STORES {
+            conn.execute_batch(&format!(
+                "CREATE TABLE IF NOT EXISTS \"{store}\" (key TEXT PRIMARY KEY, playlist_id TEXT,                  series_id TEXT, channel_id TEXT, source TEXT, json TEXT NOT NULL);"
+            ))
+            .map_err(|e| e.to_string())?;
+        }
+        conn.execute_batch("PRAGMA user_version = 2;")
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

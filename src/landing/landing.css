@@ -11,7 +11,7 @@
   --step-display: clamp(2.25rem, 5.2vw, 6rem);
   --dot: #2a2a30;
   --step-body: clamp(1rem, 1.1vw, 1.125rem);
-  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -35,7 +35,7 @@ body {
   min-height: 100vh;
   margin: 0;
   background-color: var(--bg);
-  background-image: radial-gradient(circle, var(--dot) 1.5px, transparent 1.6px);
+  background-image: none;
   background-size: 24px 24px;
   overflow-x: clip;
 }
@@ -103,7 +103,7 @@ input {
 .section-title {
   font-size: var(--step-display);
   font-weight: 700;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.02em;
   line-height: 0.95;
 }
 
@@ -167,11 +167,12 @@ input {
   gap: 12px;
   font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 .brand img {
   display: block;
+  border-radius: 3px;
 }
 
 .nav {
@@ -236,7 +237,7 @@ input {
 .ui-screen-title {
   font-size: 1.75rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
@@ -263,7 +264,7 @@ input {
   display: block;
   font-size: 17vw;
   font-weight: 700;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.02em;
   line-height: 0.78;
   white-space: nowrap;
   transform-origin: 0 100%;
@@ -285,7 +286,7 @@ input {
   gap: clamp(64px, 9vw, 140px) var(--m);
   padding: clamp(80px, 12vw, 180px) var(--m) clamp(48px, 6vw, 96px);
   background-color: var(--accent);
-  background-image: radial-gradient(circle, #6d33dd 1.5px, transparent 1.6px);
+  background-image: none;
   background-size: 24px 24px;
   color: var(--accent-ink);
 }
@@ -294,7 +295,7 @@ input {
   grid-column: 1 / -1;
   font-size: clamp(2.5rem, 6.6vw, 7.5rem);
   font-weight: 700;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.02em;
   line-height: 0.92;
 }
 
@@ -335,7 +336,7 @@ input {
 .feature-text h3 {
   font-size: clamp(1.75rem, 2.8vw, 3rem);
   font-weight: 700;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
@@ -504,7 +505,7 @@ input {
 .platforms {
   padding: clamp(80px, 9vw, 144px) 0 0;
   background-color: var(--surface);
-  background-image: radial-gradient(circle, #2c2c32 1.5px, transparent 1.6px);
+  background-image: none;
   background-size: 24px 24px;
 }
 
@@ -530,7 +531,7 @@ input {
 .platform-name {
   font-size: clamp(3rem, 9.5vw, 10.5rem);
   font-weight: 700;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.02em;
   line-height: 0.9;
 }
 
@@ -576,7 +577,7 @@ input {
   min-height: 56px;
   padding: 0 18px;
   border: 2px solid var(--surface-2);
-  border-radius: 0;
+  border-radius: 3px;
   background: var(--surface);
   color: var(--ink);
 }
@@ -600,7 +601,7 @@ input {
   min-height: 44px;
   padding: 0 18px;
   border: 0;
-  border-radius: 0;
+  border-radius: 3px;
   background: var(--surface-2);
   color: var(--ink);
   cursor: pointer;
@@ -633,7 +634,7 @@ input {
   grid-column: 1 / 7;
   font-size: clamp(1.625rem, 2.6vw, 2.75rem);
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   line-height: 1.08;
 }
 
@@ -654,7 +655,7 @@ input {
 
 /* Close: the page inverts */
 .close {
-  background-image: radial-gradient(circle, #d4d4da 1.5px, transparent 1.6px);
+  background-image: none;
   background-size: 24px 24px;
   display: flex;
   flex-direction: column;
@@ -668,7 +669,7 @@ input {
 .close h2 {
   font-size: clamp(2.75rem, 9vw, 10rem);
   font-weight: 700;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.02em;
   line-height: 0.88;
 }
 
@@ -704,7 +705,7 @@ input {
   gap: 4px;
   font-size: clamp(1.75rem, 3vw, 3rem);
   font-weight: 700;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
   line-height: 1.1;
 }
 
@@ -903,7 +904,7 @@ input {
   }
 }
 
-/* Terminal touches: prompts, status dots, a blinking cursor */
+/* Status dots and the live blink (the old terminal prompts are switched off at the end of this file) */
 .section-title::before {
   display: block;
   margin-bottom: 0.5em;
@@ -1020,6 +1021,7 @@ input {
   width: 34px;
   height: 34px;
   margin-bottom: auto;
+  border-radius: 3px;
   background: var(--accent);
   color: var(--accent-ink);
 }
@@ -1048,7 +1050,7 @@ input {
 .aw-title {
   font-size: 1.125rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 .aw-live {
@@ -1096,7 +1098,7 @@ input {
 .aw-player-title {
   font-size: 1.75rem;
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
@@ -1205,7 +1207,7 @@ input {
   margin: 0;
   font-size: clamp(2.25rem, 4.4vw, 5rem);
   font-weight: 700;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.02em;
   line-height: 0.98;
 }
 
@@ -1400,4 +1402,69 @@ input {
 
 .platforms li a {
   padding-right: calc(var(--m) + 72px);
+}
+
+/* Real app capture with invented titles and abstract posters (scripts/landing/shot.mjs) */
+.hero-shot {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+  object-position: top left;
+  border: 1px solid #2e2e33;
+}
+
+/* The capture bleeds off the right and bottom edges of the hero */
+@media (min-width: 901px) {
+  .hero-grid .hero-ui {
+    margin-right: calc(var(--m) * -1 - 48px);
+    margin-bottom: calc(var(--m) * -1 - 48px);
+  }
+
+  .hero-shot {
+    border-right: 0;
+    border-bottom: 0;
+  }
+}
+
+.feature-shot {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #2e2e33;
+}
+
+/* Softer look: 3px corners, no prompts, no blinking cursor. */
+#features-title::before,
+#download-title::before,
+#faq-title::before,
+.hero-sentence::after,
+.button::before,
+.footer-links a::before {
+  content: none;
+}
+
+.button,
+.ui-button {
+  border-radius: 3px;
+}
+
+.chip,
+.ui-chip {
+  border-radius: 999px;
+}
+
+.faq-search input,
+.feature-panel,
+.ui-row,
+.ui-channel,
+.ui-show,
+.ui-poster,
+.aw-channel {
+  border-radius: 3px;
+}
+
+.app-window {
+  overflow: hidden;
+  border-radius: 3px;
 }

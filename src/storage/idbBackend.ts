@@ -19,6 +19,7 @@ import type {
   MdblistPopularCacheEntry,
   MdblistRateLimitState,
   Movie,
+  OpenSubtitleChoices,
   OpenSubtitleFileCacheEntry,
   OpenSubtitleSearchCacheEntry,
   PlaylistDocument,
@@ -32,7 +33,7 @@ interface EncryptedPayload {
 }
 
 export const IDB_DATABASE_NAME = "tivihub-web";
-const DATABASE_VERSION = 6;
+const DATABASE_VERSION = 7;
 const CATALOG_WRITE_BATCH_SIZE = 1000;
 const DELETE_BATCH_SIZE = 10_000;
 const CREDENTIAL_KEY_ID = "local-encryption-key";
@@ -82,6 +83,7 @@ interface TiviHubDatabase extends DBSchema {
   mdblistRateLimits: { key: string; value: MdblistRateLimitState };
   subtitleSearch: { key: string; value: OpenSubtitleSearchCacheEntry };
   subtitleFiles: { key: number; value: OpenSubtitleFileCacheEntry };
+  subtitleChoices: { key: string; value: OpenSubtitleChoices };
   secrets: { key: string; value: StoredSecret };
   keys: { key: string; value: CryptoKey };
 }
@@ -123,6 +125,9 @@ function getDb(): Promise<IDBPDatabase<TiviHubDatabase>> {
     if (oldVersion < 6) {
       database.createObjectStore("subtitleSearch", { keyPath: "key" });
       database.createObjectStore("subtitleFiles", { keyPath: "fileId" });
+    }
+    if (oldVersion < 7) {
+      database.createObjectStore("subtitleChoices", { keyPath: "itemId" });
     }
   },
 });;

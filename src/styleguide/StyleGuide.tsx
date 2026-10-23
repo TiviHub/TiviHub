@@ -144,7 +144,7 @@ export function StyleGuide() {
         <div className="sg-specimens">
         <div className="sg-specimen">
           <p className="eyebrow">EYEBROW LABEL</p>
-          <h1 style={{ fontSize: "clamp(2.25rem, 5vw, 3.55rem)", letterSpacing: "-0.06em" }}>Page title</h1>
+          <h1 style={{ fontSize: "clamp(2.25rem, 5vw, 3.55rem)", letterSpacing: "-0.02em" }}>Page title</h1>
           <h2 style={{ margin: 0, fontSize: "1.5rem" }}>Section heading</h2>
           <p>Body text in the default colour, used for overviews and descriptions.</p>
           <p style={{ color: "var(--muted)" }}>Muted text for secondary information.</p>
@@ -373,6 +373,41 @@ export function StyleGuide() {
               </article>
             ))}
           </div>
+        </Block>
+        <Block title="home-resume (Home, title in progress)">
+          <article className="home-resume">
+            <span className="home-resume-art"><span className="catalog-artwork-fallback"><Icon name="movie" /></span></span>
+            <div className="home-resume-copy">
+              <strong>Movie title</strong>
+              <small>Movie · 45% watched</small>
+              <span className="library-progress"><span style={{ width: "45%" }} /></span>
+            </div>
+            <button className="primary-button" type="button"><Icon name="play_arrow" />Resume</button>
+          </article>
+        </Block>
+        <Block title="subtitle-panel (player): search-field + results + saved list" note="Results and saved rows use the shared card look. The empty card replaces plain hint text.">
+          <section className="subtitle-panel">
+            <div className="subtitle-column">
+              <strong className="subtitle-column-title">Search OpenSubtitles</strong>
+              <form className="subtitle-search">
+                <label className="search-field"><Icon name="search" /><input aria-label="Subtitle search" placeholder="Movie or episode title" /></label>
+                <button className="secondary-button selected" type="submit">Search</button>
+              </form>
+              <ul className="subtitle-results">
+                <li>
+                  <span><strong>Movie.Title.2024.1080p.srt</strong><small>en · WEB-DL</small></span>
+                  <button aria-label="Download" className="icon-button" data-tooltip="Download" type="button"><Icon name="download" /></button>
+                </li>
+              </ul>
+            </div>
+            <div className="subtitle-column">
+              <strong className="subtitle-column-title">Saved downloads<span className="subtitle-count">1</span></strong>
+              <div className="subtitle-empty"><Icon name="subtitles" /><p>Nothing saved yet. Download a subtitle and it will appear here.</p></div>
+            </div>
+          </section>
+        </Block>
+        <Block title="playback-badge (Live chip in the player header, modal, inline and mini)">
+          <h2 style={{ margin: 0 }}><span className="playback-badge">Live</span>Channel name</h2>
         </Block>
         </div>
       </section>

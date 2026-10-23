@@ -193,11 +193,11 @@ export function LiveGuide({
 
       <div className="live-guide-toolbar">
         <div className="live-guide-date-controls">
-          <button aria-label="Previous day" className="icon-button" onClick={() => shiftDay(-1)} type="button">
+          <button aria-label="Previous day" className="icon-button" data-tooltip="Previous day" onClick={() => shiftDay(-1)} type="button">
             <Icon name="chevron_left" />
           </button>
-          <span>{dateLabel}</span>
-          <button aria-label="Next day" className="icon-button" onClick={() => shiftDay(1)} type="button">
+          <span>{date.getTime() === startOfLocalDay(new Date()).getTime() ? `Today · ${dateLabel}` : dateLabel}</span>
+          <button aria-label="Next day" className="icon-button" data-tooltip="Next day" onClick={() => shiftDay(1)} type="button">
             <Icon name="chevron_right" />
           </button>
           <button className="secondary-button" onClick={jumpToNow} type="button">Now</button>

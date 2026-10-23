@@ -7,14 +7,14 @@ The owner keeps asking for consistent UI ("too much difference everywhere"). The
 ## Where styles live
 
 - `src/styles.css`: base styles and the shared rules at the very end (hover transition, list-card rule, icon sizes, dropdown rule).
-- `src/theme-terminal.css`: loaded after `styles.css`; the app's look (black/grey/purple, mono type, square corners, dot grid). It overrides tokens and a few components.
+- `src/theme-app.css`: loaded after `styles.css`; the app's look (black/grey/purple, Roboto type, softly rounded corners, flat background). It overrides tokens and a few components.
 - **Specificity trap:** the theme's "nested controls" rule uses `:is(... input[type="text"] ...)`, whose specificity is `(0,1,1)`. A plain `.my-class` (0,1,0) will lose to it. Use `button.my-class` or a two-class selector when overriding buttons, inputs and selects there.
 - `.eyebrow` labels are hidden by the theme; do not rely on them.
 - Prefer one shared selector list over per-page rules. Add new list rows, cards and buttons to the existing shared rules.
 
 ## Tokens (use these, never hard-coded colours)
 
-`--bg --sidebar --surface --surface-raised --surface-hover --panel --row --row-selected --text --muted --faint --primary --primary-hover --secondary --outline --outline-soft --success --danger`, radii `--radius-sm|md|lg|xl|2xl` (all 0 in the terminal theme, so always use the variable), `--hover-duration` (140ms).
+`--bg --sidebar --surface --surface-raised --surface-hover --panel --row --row-selected --text --muted --faint --primary --primary-hover --secondary --outline --outline-soft --success --danger`, radii `--radius-sm|md|lg|xl|2xl` (all 3px in the app theme, so always use the variable), `--hover-duration` (140ms).
 Pink `#ff83aa` is used only for a favorited heart.
 
 ## Layout and spacing
@@ -27,7 +27,7 @@ Pink `#ff83aa` is used only for a favorited heart.
 
 ## Typography
 
-Roboto Mono throughout. Never use literal pixel `border-radius` values (they ignore the theme); use `var(--radius-md)` or the other radius tokens (pill shapes `999px` and `50%` are the only exceptions). Muted text `--muted`, placeholders and hints `--faint`. Control text: 0.8rem (buttons, search), 0.78rem (dropdowns), 0.72rem (toasts, chips). Do not introduce new font sizes for controls.
+Roboto throughout (no monospace in the UI). Never use literal pixel `border-radius` values (they ignore the theme); use `var(--radius-md)` or the other radius tokens (pill shapes `999px` and `50%` are the only exceptions). Muted text `--muted`, placeholders and hints `--faint`. Control text: 0.8rem (buttons, search), 0.78rem (dropdowns), 0.72rem (toasts, chips). Do not introduce new font sizes for controls.
 
 ## Buttons
 
@@ -59,7 +59,7 @@ Never add one-off bordered or purple-outline icon button variants. Icon-only but
 ## Cards and lists
 
 - Catalog cards (`.catalog-card`): poster 2:3, live 16:9; overlay actions `.favorite-button` and `.catalog-library-button` (34px circles, top-right).
-- **One card look for every list row**: library items, favorite rows, episode rows, download items and Live TV channel rows share the "Shared card look" rule at the end of `styles.css` (surface background, 1px `--outline-soft` border, `--radius-lg`, hover darkens the border). Add any new list row to that selector list.
+- **One card look for every list row**: library items, favorite rows, episode rows, download items and Live TV channel rows share the "Shared card look" rule at the end of `styles.css` (surface background, 1px `--outline-soft` border, `--radius-lg`, hover darkens the border). Add any new list row to that selector list (currently also `.subtitle-results li` and `.home-resume`).
 - Padding 11px, gap 14px (8px / 9px on phones). Actions inside a row are bare `.icon-button`s; the selected row (Live TV) uses `--row-selected` and the 3px bar.
 - Episode rows: one card holding the play circle, text and download button.
 
@@ -73,6 +73,13 @@ Never add one-off bordered or purple-outline icon button variants. Icon-only but
 - Transparent channel logos get no shimmer (it would stay visible behind them); opaque poster images do.
 - New loading state: add the skeleton to the style guide's Loading section in the same change.
 - Progress: `ProgressIndicator` / `.progress-indicator`.
+
+## Player
+
+- One player look for the modal player, the inline Live TV player and the mini player: header with title (plus the `.playback-badge` "Live" chip on live channels, no eyebrow), video edge to edge, tools row below with 42px `.player-track-select` boxes, small `--faint` disclaimer. The modal player gives the header and tools a side margin; the inline player does the same with its own margin.
+- Subtitle panel (`.subtitle-panel`): search uses the shared `.search-field` plus a 42px `.secondary-button.selected`, never a custom input or a 48px primary button. Result and saved rows are `.subtitle-results li` in the shared card look; saved heading carries a `.subtitle-count` pill; the empty state is `.subtitle-empty` (bordered card, 27px icon), not loose text.
+- Home resume card (`.home-resume`): shared card look, 96px poster, progress bar, one 48px `.primary-button`. It is the only large card on Home; shelves stay poster cards.
+- Count pills (tab counts, `.subtitle-count`, shelf counts) are 999px pills on `--row-selected` / `--surface-raised`.
 
 ## Pagination
 

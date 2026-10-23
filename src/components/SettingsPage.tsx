@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { decryptBackup, encryptBackup } from "../backup";
 import { formatCatalogChangeSummary } from "../catalogRefresh";
 import { createSnapshot, restoreSnapshot } from "../storage/database";
+import { clearSubtitleCache, countSavedSubtitles } from "../subtitleService";
 import type { Playlist, UserDataSnapshot } from "../types";
 import { Icon } from "./common";
 
@@ -97,6 +98,8 @@ export function SettingsPage({
   const [backupError, setBackupError] = useState<string | null>(null);
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [epgBusy, setEpgBusy] = useState(false);
+  const [savedSubtitleCount, setSavedSubtitleCount] = useState(0);
+  const [subtitleCacheNotice, setSubtitleCacheNotice] = useState<string | null>(null);
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
   const [diagnosticsNotice, setDiagnosticsNotice] = useState<string | null>(null);
 
@@ -112,6 +115,20 @@ export function SettingsPage({
       setDiagnosticsNotice("Could not create the diagnostic log. No file was downloaded.");
     } finally {
       setDiagnosticsBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    void countSavedSubtitles().then(setSavedSubtitleCount, () => undefined);
+  }, []);
+
+  async function clearCache() {
+    try {
+      await clearSubtitleCache();
+      setSavedSubtitleCount(0);
+      setSubtitleCacheNotice("Subtitle cache cleared.");
+    } catch {
+      setSubtitleCacheNotice("Could not clear the subtitle cache.");
     }
   }
 
@@ -229,10 +246,10 @@ export function SettingsPage({
             <a href="#settings-ratings"><Icon name="high_quality" /><span>External ratings</span></a>
           )}
           <a href="#settings-backup"><Icon name="backup" /><span>Encrypted backup</span></a>
-          <a href="#settings-diagnostics"><Icon name="download" /><span>Diagnostics</span></a>
+          <a href="#settings-diagnostics"><Icon name="speed" /><span>Diagnostics</span></a>
           <a href="#settings-privacy-card"><Icon name="lock" /><span>Privacy by design</span></a>
           <a href="#settings-legal"><Icon name="info" /><span>Legal and content rights</span></a>
-          {isDesktopApp && <a href="#settings-updates"><Icon name="download" /><span>App updates</span></a>}
+          {isDesktopApp && <a href="#settings-updates"><Icon name="refresh" /><span>App updates</span></a>}
         </nav>
 
         <div className="settings-content">
@@ -404,7 +421,7 @@ export function SettingsPage({
               </div>
               <form className="settings-form" onSubmit={(event) => void saveKey(event)}>
                 <label className="form-field">
-                  <span>OpenSubtitles API key <em>Optional</em></span>
+                  <span>OpenSubtitles API key <em>{apiKey.trim() ? "Saved" : "Optional"}</em></span>
                   <input
                     autoComplete="off"
                     onChange={(event) => setKeyDraft(event.target.value)}
@@ -432,6 +449,22 @@ export function SettingsPage({
                 <button className="secondary-button" type="submit"><Icon name="lock" /> Save key</button>
                 {keyNotice && <p className="settings-message" role="status">{keyNotice}</p>}
               </form>
+              <div className="settings-download-location">
+                <div>
+                  <span>Downloaded subtitles</span>
+                  <strong>{savedSubtitleCount.toLocaleString()} saved {savedSubtitleCount === 1 ? "subtitle" : "subtitles"}</strong>
+                  <small>Kept on this device so a subtitle you downloaded once never needs another OpenSubtitles request.</small>
+                  {subtitleCacheNotice && <small role="status">{subtitleCacheNotice}</small>}
+                </div>
+                <button
+                  className="secondary-button danger-button"
+                  disabled={savedSubtitleCount === 0}
+                  onClick={() => void clearCache()}
+                  type="button"
+                >
+                  <Icon name="delete_sweep" /> Clear subtitle cache
+                </button>
+              </div>
             </div>
           </section>
 
@@ -444,7 +477,7 @@ export function SettingsPage({
                 </div>
                 <form className="settings-form" onSubmit={(event) => void saveMdblistKey(event)}>
                   <label className="form-field">
-                    <span>MDBList API key <em>Optional</em></span>
+                    <span>MDBList API key <em>{mdblistApiKey.trim() ? "Saved" : "Optional"}</em></span>
                     <input
                       autoComplete="off"
                       onChange={(event) => setMdblistDraft(event.target.value)}

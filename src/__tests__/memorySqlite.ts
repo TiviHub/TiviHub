@@ -8,6 +8,7 @@ const KEY_FIELDS: Partial<Record<StoreName, string>> = {
   mdblistRateLimits: "key",
   subtitleSearch: "key",
   subtitleFiles: "fileId",
+  subtitleChoices: "itemId",
 };
 
 // Stands in for the Rust backend: JSON rows keyed like the real tables, strings as sealed payloads.

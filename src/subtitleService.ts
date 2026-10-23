@@ -4,24 +4,32 @@ import {
   type SubtitleResult,
 } from "./providers/opensubtitles";
 import {
+  clearOpenSubtitleCache,
+  countOpenSubtitleFiles,
+  getOpenSubtitleChoices,
   getOpenSubtitleFileCacheEntry,
   getOpenSubtitleSearchCacheEntry,
+  saveOpenSubtitleChoices,
   saveOpenSubtitleFileCacheEntry,
   saveOpenSubtitleSearchCacheEntry,
 } from "./storage/database";
 import type {
+  OpenSubtitleChoices,
   OpenSubtitleFileCacheEntry,
   OpenSubtitleSearchCacheEntry,
 } from "./types";
 
 export const SUBTITLE_SEARCH_TTL_MILLIS = 24 * 60 * 60 * 1000;
-export const SUBTITLE_FILE_TTL_MILLIS = 30 * 24 * 60 * 60 * 1000;
+// Subtitle files never change once published, so they are kept until the user clears the cache.
+const SUBTITLE_FILE_NEVER_EXPIRES = Number.MAX_SAFE_INTEGER;
 
 export interface SubtitleCache {
   getSearch(key: string): Promise<OpenSubtitleSearchCacheEntry | undefined>;
   putSearch(entry: OpenSubtitleSearchCacheEntry): Promise<void>;
   getFile(fileId: number): Promise<OpenSubtitleFileCacheEntry | undefined>;
   putFile(entry: OpenSubtitleFileCacheEntry): Promise<void>;
+  getChoices(itemId: string): Promise<OpenSubtitleChoices | undefined>;
+  putChoices(entry: OpenSubtitleChoices): Promise<void>;
 }
 
 export interface SubtitleServiceOptions {
@@ -30,13 +38,11 @@ export interface SubtitleServiceOptions {
   download?: (apiKey: string, fileId: number) => Promise<{ name: string; contents: string }>;
   now?: () => number;
   searchTtlMillis?: number;
-  fileTtlMillis?: number;
 }
 
 export function createSubtitleService(options: SubtitleServiceOptions) {
   const now = options.now ?? Date.now;
   const searchTtl = options.searchTtlMillis ?? SUBTITLE_SEARCH_TTL_MILLIS;
-  const fileTtl = options.fileTtlMillis ?? SUBTITLE_FILE_TTL_MILLIS;
   const searcher = options.search ?? searchOpenSubtitles;
   const downloader = options.download ?? downloadOpenSubtitle;
   const searches = new Map<string, Promise<SubtitleResult[]>>();
@@ -68,9 +74,7 @@ export function createSubtitleService(options: SubtitleServiceOptions) {
 
   async function download(apiKey: string, fileId: number): Promise<{ name: string; contents: string }> {
     const cached = await options.cache.getFile(fileId);
-    if (cached && cached.expiresAt > now()) {
-      return { name: cached.name, contents: cached.contents };
-    }
+    if (cached) return { name: cached.name, contents: cached.contents };
 
     let pending = downloads.get(fileId);
     if (!pending) {
@@ -81,7 +85,7 @@ export function createSubtitleService(options: SubtitleServiceOptions) {
           fileId,
           ...subtitle,
           fetchedAt,
-          expiresAt: fetchedAt + fileTtl,
+          expiresAt: SUBTITLE_FILE_NEVER_EXPIRES,
         });
         return subtitle;
       })().finally(() => downloads.delete(fileId));
@@ -90,7 +94,43 @@ export function createSubtitleService(options: SubtitleServiceOptions) {
     return pending;
   }
 
-  return { search, download };
+  // Cache only, never the network: restoring a remembered subtitle must not spend an API download.
+  async function cachedFile(fileId: number): Promise<{ name: string; contents: string } | undefined> {
+    const cached = await options.cache.getFile(fileId);
+    return cached ? { name: cached.name, contents: cached.contents } : undefined;
+  }
+
+  /** Every subtitle downloaded for a title, oldest first, so the newest ends up selected. */
+  async function rememberChoice(itemId: string, fileId: number) {
+    const fileIds = [...await choices(itemId)].filter((id) => id !== fileId);
+    await options.cache.putChoices({ itemId, fileIds: [...fileIds, fileId] });
+  }
+
+  async function choices(itemId: string): Promise<number[]> {
+    return (await options.cache.getChoices(itemId))?.fileIds ?? [];
+  }
+
+  /** The subtitles saved for a title, oldest first; entries whose file is gone from the cache are skipped. */
+  async function saved(itemId: string): Promise<{ fileId: number; name: string }[]> {
+    const found = await Promise.all((await choices(itemId)).map(async (fileId) => {
+      const file = await cachedFile(fileId);
+      return file ? { fileId, name: file.name } : undefined;
+    }));
+    return found.filter((entry) => entry !== undefined);
+  }
+
+  async function forgetChoice(itemId: string, fileId: number) {
+    const fileIds = (await choices(itemId)).filter((id) => id !== fileId);
+    await options.cache.putChoices({ itemId, fileIds });
+  }
+
+  return { search, download, cachedFile, rememberChoice, choices, saved, forgetChoice };
+}
+
+export const countSavedSubtitles = countOpenSubtitleFiles;
+
+export async function clearSubtitleCache() {
+  await clearOpenSubtitleCache();
 }
 
 export const subtitleService = createSubtitleService({
@@ -99,5 +139,7 @@ export const subtitleService = createSubtitleService({
     putSearch: saveOpenSubtitleSearchCacheEntry,
     getFile: getOpenSubtitleFileCacheEntry,
     putFile: saveOpenSubtitleFileCacheEntry,
+    getChoices: getOpenSubtitleChoices,
+    putChoices: saveOpenSubtitleChoices,
   },
 });
