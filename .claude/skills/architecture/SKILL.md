@@ -21,6 +21,7 @@ providers/*  ->  storage/*  ->  hooks/*  ->  components/*  ->  App.tsx
 | Storage | `src/storage/` (`database.ts` facade, `sqliteBackend`, `idbBackend`, `codec`, `migration`) | Reads/writes, encryption of secrets, backend choice | Import hooks or components |
 | Services | `src/services/` (`ratingsService`, `subtitleService`, `catalogRefresh`, `downloads`, `backup`, ...) | Business rules, caching with TTLs, anything that touches storage, network or Tauri | Import React |
 | Lib | `src/lib/` (`m3uIds`, `catchup`, `catalogSorting`, `playbackErrors`, `demo`, ...) | Pure helpers: no I/O, no React, easy to unit test | Touch storage, network or Tauri |
+| Locales | `src/locales/` (`area.ts`, `index.ts`, one file per area: `shell`, `browse`, `library`, `detail`, `sources`, `errors`, `home`, `playback`, `misc`, `parental`, `reminders`, `multiview`, plus the Settings files `en.ts`, `nl.ts`, ...) | All user-visible text in seven languages | Anything but strings |
 | Hooks | `src/hooks/` | App state and side effects (`useSources`, `useLibrary`, `usePlayback`, `useDownloads`, ...). Browsing: `useBrowse` (categories + batches of one category) wrapped by `useLiveBrowse`, `useMovieBrowse`, `useSeriesBrowse`; `useCategoryEntries` builds the category tiles | Render markup |
 | Components | `src/components/` | Markup, local UI state | Call `fetch`, `invoke` or `database.ts` directly; pass data in via props or a hook |
 | Backend | `src-tauri/src/` (`net`, `storage`, `chromecast`, `external_player`, `diagnostics`) | Network (CORS-free, proxy), SQLite, keychain, cast, external players | Hold UI logic |
@@ -28,7 +29,7 @@ providers/*  ->  storage/*  ->  hooks/*  ->  components/*  ->  App.tsx
 ## Rules
 
 - **All network goes through `providers/transport.ts` / `http.ts`.** In the desktop app that calls the Rust `http_fetch`; in the browser it is plain `fetch`. Never call `fetch` from a component.
-- **All persistence goes through `src/storage/database.ts`.** Never use `localStorage` for data (only tiny per-viewer hints, see `MIGRATED_HINT_KEY`).
+- **All persistence goes through `src/storage/database.ts`.** Never use `localStorage` for data (only tiny per-viewer hints, see `MIGRATED_HINT_KEY`, and UI preferences: theme, language, adult-content switch, the PIN record).
 - **New Tauri command:** write it in the right `src-tauri/src/*.rs` module, register it in `main.rs`, add its capability in `src-tauri/capabilities/`, wrap it in one typed TS function in the layer that owns it. Commands return `Result<T, String>`; the TS side shows the message, never swallows it.
 - **Credentials never sit in plain stored URLs.** See `src/storage/credentialUrls.ts` (`redactUrl`, `hydrateUrl`, `withoutCredentialUrls`) and the `secrets` store.
 - **Local-first.** No TiviHub server, account, analytics or proxy (see `CONTRIBUTING.md`).
