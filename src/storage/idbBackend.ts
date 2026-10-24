@@ -1,4 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { t } from "../lib/i18n";
 import type {
   CatalogWrite,
   IndexName,
@@ -143,7 +144,7 @@ let localKeyPromise: Promise<CryptoKey> | null = null;
 
 async function localEncryptionKey(): Promise<CryptoKey> {
   if (!globalThis.crypto?.subtle) {
-    throw new Error("Secure local storage is unavailable on this device; source credentials cannot be saved.");
+    throw new Error(t("store.secureUnavailable"));
   }
   if (!localKeyPromise) {
     localKeyPromise = (async () => {
@@ -186,7 +187,7 @@ async function decrypt(sealed: Sealed): Promise<string> {
     return decoder.decode(cleartext);
   } catch (error) {
     console.error("Could not decrypt local TiviHub data", error);
-    throw new Error("Local encrypted data could not be opened in this TiviHub installation.", { cause: error });
+    throw new Error(t("store.cannotOpenEncrypted"), { cause: error });
   }
 }
 
@@ -203,13 +204,13 @@ async function saveCatalog(catalog: CatalogWrite): Promise<void> {
   const transaction = database.transaction(["channels", "movies", "series", "episodes", "playlists"], "readwrite");
   try {
     if (storedSource && !(await transaction.objectStore("playlists").get(catalog.playlistId))) {
-      throw new Error("This source was deleted before its refreshed catalog could be saved.");
+      throw new Error(t("store.sourceDeleted"));
     }
     const getKeys = async (name: "channels" | "movies" | "series" | "episodes"): Promise<string[]> => {
       const keys = await transaction.objectStore(name).index("byPlaylist")
         .getAllKeys(IDBKeyRange.only(catalog.playlistId));
       if (!keys.every((key): key is string => typeof key === "string")) {
-        throw new Error("The local catalog contains a record with an invalid key.");
+        throw new Error(t("store.invalidKey"));
       }
       return keys;
     };

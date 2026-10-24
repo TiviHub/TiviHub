@@ -1,4 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { t } from "../lib/i18n";
 import { replayUrl } from "../lib/catchup";
 import { canOpenExternally, openInExternalPlayer } from "../services/externalPlayer";
 import { isStalkerLink, isStalkerVideoLink, resolveStalkerLink, stalkerUserAgent, warmStalkerSession } from "../providers/stalker";
@@ -33,7 +34,7 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
           userAgent: stalkerUserAgent(source),
           direct: isStalkerVideoLink(item.streamUrl) && !/[.](?:m3u8|mpd)(?:[?#]|$)/i.test(streamUrl),
         }, position))
-        .catch((cause: unknown) => notify(cause instanceof Error ? cause.message : "The portal could not start this stream.", "error"));
+        .catch((cause: unknown) => notify(cause instanceof Error ? cause.message : t("play.portalFailed"), "error"));
       return;
     }
     if (source?.type === "STALKER") {
@@ -65,7 +66,7 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
     const source = sources.find((entry) => entry.id === channel.playlistId);
     const streamUrl = source && replayUrl(channel, source, program.startMillis, program.endMillis);
     if (!streamUrl) {
-      notify("This recording could not be opened. The provider may not keep it any more.", "error");
+      notify(t("play.recordingFailed"), "error");
       return;
     }
     openPlayback({
@@ -92,7 +93,7 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
       const userAgent = source?.type === "STALKER" ? stalkerUserAgent(source) : source?.userAgent;
       closePlayback(); // the portal allows few connections at once, so the built-in player lets go first
       const player = await openInExternalPlayer(address, userAgent);
-      notify(`Opened in ${player}.`, "notice");
+      notify(t("play.openedIn", { player }), "notice");
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : String(cause), "error");
     }
@@ -124,7 +125,7 @@ export function usePlayback({ notify, setLibrary, sources }: Options) {
       });
       setLibrary(await getLibraryItems());
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : `Could not save ${item.title} to recently watched channels.`, "error");
+      notify(cause instanceof Error ? cause.message : t("play.recentFailed", { title: item.title }), "error");
     }
   }
 

@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { EmptyPanel } from "./EmptyPanel";
 import type { SubtitleResult } from "../providers/opensubtitles";
 import { Icon, SearchField } from "./common";
@@ -29,9 +30,9 @@ export function SubtitlePanel({
   forgetSavedSubtitle: (fileId: number) => Promise<void>;
 }) {
   return (
-      <section className="subtitle-panel" aria-label="Search OpenSubtitles">
+      <section className="subtitle-panel" aria-label={t("sub.searchTitle")}>
         <div className="subtitle-column">
-          <strong className="subtitle-column-title">Search OpenSubtitles</strong>
+          <strong className="subtitle-column-title">{t("sub.searchTitle")}</strong>
           <form
             className="subtitle-search"
             onSubmit={(event) => {
@@ -39,15 +40,15 @@ export function SubtitlePanel({
               void searchSubtitles();
             }}
           >
-            <SearchField label="Subtitle search" onChange={setSubtitleQuery} placeholder="Movie or episode title" value={subtitleQuery} />
+            <SearchField label={t("sub.searchLabel")} onChange={setSubtitleQuery} placeholder={t("sub.placeholder")} value={subtitleQuery} />
             <button className="secondary-button selected" disabled={subtitleBusy} type="submit">
-              {subtitleBusy ? "Searching…" : "Search"}
+              {subtitleBusy ? t("sub.searching") : t("sub.search")}
             </button>
           </form>
           {subtitleError && <p className="form-error" role="alert">{subtitleError}</p>}
           {subtitleBusy && subtitleResults.length === 0 && (
             <div aria-live="polite" role="status">
-              <span className="sr-only">Searching subtitles…</span>
+              <span className="sr-only">{t("sub.searchingSr")}</span>
               <RowSkeletons count={3} />
             </div>
           )}
@@ -60,9 +61,9 @@ export function SubtitlePanel({
                     <small>{result.language}{result.release ? ` · ${result.release}` : ""}</small>
                   </span>
                   <button
-                    aria-label={`Download ${result.fileName}`}
+                    aria-label={t("sub.downloadAria", { name: result.fileName })}
                     className="icon-button"
-                    data-tooltip="Download"
+                    data-tooltip={t("sub.download")}
                     disabled={subtitleBusy}
                     onClick={() => void downloadSubtitle(result)}
                     type="button"
@@ -74,16 +75,16 @@ export function SubtitlePanel({
             </ul>
           )}
           {!subtitleApiKey && (
-            <p className="form-note">Add your API key in Settings to search. You can import a subtitle file without an API key.</p>
+            <p className="form-note">{t("sub.needKey")}</p>
           )}
         </div>
         <div className="subtitle-column">
           <strong className="subtitle-column-title">
-            Saved downloads
+            {t("sub.saved")}
             {savedSubtitles.length > 0 && <span className="subtitle-count">{savedSubtitles.length}</span>}
           </strong>
           {savedSubtitles.length === 0 && (
-            <EmptyPanel icon="subtitles" title="Nothing saved yet">Download a subtitle and it will appear here.</EmptyPanel>
+            <EmptyPanel icon="subtitles" title={t("downloads.emptyTitle")}>{t("sub.nothingSavedBody")}</EmptyPanel>
           )}
           {savedSubtitles.length > 0 && (
             <ul className="subtitle-results">
@@ -91,18 +92,18 @@ export function SubtitlePanel({
                 <li key={saved.fileId}>
                   <span><strong>{saved.name}</strong></span>
                   <button
-                    aria-label={`Use ${saved.name}`}
+                    aria-label={t("sub.useAria", { name: saved.name })}
                     className="icon-button"
-                    data-tooltip="Use this subtitle"
+                    data-tooltip={t("sub.use")}
                     onClick={() => void applySavedSubtitle(saved.fileId)}
                     type="button"
                   >
                     <Icon name="subtitles" />
                   </button>
                   <button
-                    aria-label={`Remove ${saved.name}`}
+                    aria-label={t("sub.removeAria", { name: saved.name })}
                     className="icon-button"
-                    data-tooltip="Remove from this title"
+                    data-tooltip={t("sub.remove")}
                     onClick={() => void forgetSavedSubtitle(saved.fileId)}
                     type="button"
                   >

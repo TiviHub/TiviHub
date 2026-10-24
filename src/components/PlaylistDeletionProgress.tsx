@@ -1,3 +1,4 @@
+import { formatNumber, t } from "../lib/i18n";
 import { ProgressIndicator } from "./ProgressIndicator";
 
 interface PlaylistDeletionProgressProps {
@@ -26,21 +27,21 @@ export function PlaylistDeletionProgress({
     >
       <section className="refresh-progress-card">
         <span aria-hidden="true" className="spinner refresh-progress-spinner" />
-        <p className="eyebrow">{phase === "updating" ? "LIBRARY UPDATE" : "LOCAL DATA"}</p>
+        <p className="eyebrow">{phase === "updating" ? t("deletion.eyebrowUpdating") : t("deletion.eyebrowData")}</p>
         <h2 id="delete-progress-title">
-          {phase === "preparing" ? "Preparing playlist deletion" : deleting ? "Deleting playlist" : "Updating your library"}
+          {phase === "preparing" ? t("deletion.preparing") : deleting ? t("deletion.deleting") : t("deletion.updating")}
         </h2>
         <p aria-live="polite" id="delete-progress-description">
           {phase === "preparing"
-            ? `Checking the local data linked to “${name}” before removing it.`
+            ? t("deletion.checking", { name })
             : deleting
-              ? `Removing “${name}” and its saved catalog data. ${completed.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} records deleted.`
-              : `Finishing the removal of “${name}” and loading your remaining sources.`}
+              ? t("deletion.removing", { name, completed: formatNumber(completed), total: formatNumber(total) })
+              : t("deletion.finishing", { name })}
         </p>
         <ProgressIndicator
           label={deleting
-            ? "Playlist deletion progress"
-            : phase === "preparing" ? "Preparing playlist deletion" : "Library update progress"}
+            ? t("deletion.progressDeleting")
+            : phase === "preparing" ? t("deletion.preparing") : t("deletion.progressLibrary")}
           {...(deleting && total > 0 ? { max: total, value: completed } : {})}
         />
       </section>

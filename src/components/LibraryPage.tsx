@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { t } from "../lib/i18n";
+import type { MessageKey } from "../locales";
 import type { ContentType, Favorite, LibraryItem, PlayableItem } from "../types";
 import { CustomSelect, Icon, SearchField, type CustomSelectOption, type IconName } from "./common";
 import { BrowseShell } from "./BrowseShell";
@@ -11,13 +13,13 @@ import { NoSourceEmptyState } from "./NoSourceEmptyState";
 type LibraryGroupKey = "LIVE" | "MOVIE" | "SERIES";
 
 const LIBRARY_CONTENT_GROUPS = [
-  { key: "LIVE", label: "Live TV", icon: "live_tv" },
-  { key: "MOVIE", label: "Movies", icon: "movie" },
-  { key: "SERIES", label: "Series", icon: "tv" },
-] as const;
+  { key: "LIVE", label: "nav.liveTv", icon: "live_tv" },
+  { key: "MOVIE", label: "nav.movies", icon: "movie" },
+  { key: "SERIES", label: "nav.series", icon: "tv" },
+] as const satisfies readonly { key: LibraryGroupKey; label: MessageKey; icon: string }[];
 
 function groupLabel(contentType: ContentType): string {
-  return LIBRARY_CONTENT_GROUPS.find((group) => group.key === libraryGroupFor(contentType))!.label;
+  return t(LIBRARY_CONTENT_GROUPS.find((group) => group.key === libraryGroupFor(contentType))!.label);
 }
 
 function libraryGroupFor(contentType: ContentType): LibraryGroupKey {
@@ -27,10 +29,10 @@ function libraryGroupFor(contentType: ContentType): LibraryGroupKey {
 }
 
 
-const LIBRARY_STATUS_OPTIONS: readonly CustomSelectOption<LibraryItem["status"]>[] = [
-  { label: "Watchlist", value: "WATCHLIST" },
-  { label: "Watching", value: "WATCHING" },
-  { label: "Watched", value: "WATCHED" },
+const libraryStatusOptions = (): readonly CustomSelectOption<LibraryItem["status"]>[] => [
+  { label: t("library.statusWatchlist"), value: "WATCHLIST" },
+  { label: t("library.statusWatching"), value: "WATCHING" },
+  { label: t("library.statusWatched"), value: "WATCHED" },
 ];
 
 
@@ -96,17 +98,17 @@ export function LibraryPage({
   }
 
   const tabs = [
-    { id: "Continue watching", label: "Continue watching", icon: "play_arrow", count: watching.length },
-    { id: "Watchlist", label: "Watchlist", icon: "bookmark", count: watchlist.length },
-    { id: "Watched", label: "Watched", icon: "check_circle", count: watched.length },
-    { id: "Favorites", label: "Favorites", icon: "favorite", count: favorites.length },
+    { id: "Continue watching", label: t("library.tabContinue"), icon: "play_arrow", count: watching.length },
+    { id: "Watchlist", label: t("library.tabWatchlist"), icon: "bookmark", count: watchlist.length },
+    { id: "Watched", label: t("library.tabWatched"), icon: "check_circle", count: watched.length },
+    { id: "Favorites", label: t("browse.favorites"), icon: "favorite", count: favorites.length },
   ] as const;
 
   return (
     <BrowseShell
       bodyClassName="live-channel-list browse-list movies-grid"
       count={tab === "Favorites" ? visibleFavorites.length : visibleContent.length}
-      label="Your library"
+      label={t("library.aria")}
       nav={(
         <NavPanel
           items={[...tabs]}
@@ -115,24 +117,24 @@ export function LibraryPage({
             setContentFilter("ALL");
           }}
           selectedId={tab}
-          title="Library"
+          title={t("nav.library")}
         />
       )}
-      title={tab}
+      title={tabs.find((entry) => entry.id === tab)?.label ?? tab}
       tools={activeItems.length > 0 ? (
         <>
-        <SearchField label={`Search ${tab.toLowerCase()}`} onChange={setQuery} placeholder="Search titles" value={query} />
+        <SearchField label={t("library.searchLabel", { tab: tabs.find((entry) => entry.id === tab)?.label ?? tab })} onChange={setQuery} placeholder={t("library.searchPlaceholder")} value={query} />
         <div className="live-guide-select">
           <Icon name="filter_list" />
           <CustomSelect
-            ariaLabel={`Filter ${tab} by content type`}
+            ariaLabel={t("library.filterBy", { tab: tabs.find((entry) => entry.id === tab)?.label ?? tab })}
             onValueChange={setContentFilter}
             options={[
-              { label: `All (${activeItems.length})`, value: "ALL" },
+              { label: t("library.filterAll", { count: activeItems.length }), value: "ALL" },
               ...LIBRARY_CONTENT_GROUPS
-                .map((group) => ({ label: group.label, value: group.key, count: activeItems.filter((item) => libraryGroupFor(item.contentType) === group.key).length }))
+                .map((group) => ({ label: t(group.label), value: group.key, count: activeItems.filter((item) => libraryGroupFor(item.contentType) === group.key).length }))
                 .filter((group) => group.count > 0)
-                .map((group) => ({ label: `${group.label} (${group.count})`, value: group.value })),
+                .map((group) => ({ label: t("library.filterOption", { label: group.label, count: group.count }), value: group.value })),
             ]}
             value={contentFilter}
             variant="embedded"
@@ -143,7 +145,7 @@ export function LibraryPage({
     >
       {tab === "Favorites" ? (
         visibleFavorites.length === 0 ? (
-          <LibraryEmpty icon={narrowed ? "search" : "favorite_border"} label={narrowed ? "No matches" : "No favorites yet"} detail={narrowed ? "Try another title or content type." : "Tap the heart on a channel, movie, or series to keep it here."} />
+          <LibraryEmpty icon={narrowed ? "search" : "favorite_border"} label={narrowed ? t("categories.noMatchesTitle") : t("library.noFavoritesTitle")} detail={narrowed ? t("library.noMatchesBody") : t("library.noFavoritesBody")} />
         ) : visibleFavorites.map((favorite) => (
           <LibraryCard
             artworkUrl={favorite.artworkUrl}
@@ -169,9 +171,9 @@ export function LibraryPage({
               }
             }}
             onRemove={() => onRemoveFavorite(favorite)}
-            openLabel={favorite.contentType === "LIVE" ? `Play ${favorite.title}` : `View details for ${favorite.title}`}
-            removeLabel={`Remove ${favorite.title} from favorites`}
-            removeTooltip="Remove from favorites"
+            openLabel={favorite.contentType === "LIVE" ? t("card.play", { name: favorite.title }) : t("card.details", { name: favorite.title })}
+            removeLabel={t("card.favRemove", { name: favorite.title })}
+            removeTooltip={t("library.removeFavoriteTooltip")}
             subtitle={groupLabel(favorite.contentType)}
             title={favorite.title}
           />
@@ -179,12 +181,12 @@ export function LibraryPage({
       ) : visibleContent.length === 0 ? (
         <LibraryEmpty
           icon={narrowed ? "search" : tab === "Watchlist" ? "bookmark" : tab === "Watched" ? "check_circle" : "play_arrow"}
-          label={narrowed ? "No matches" : tab === "Continue watching" ? "Nothing in progress" : tab === "Watchlist" ? "Your watchlist is empty" : "Nothing watched yet"}
-          detail={narrowed ? "Try another title or content type." : tab === "Continue watching"
-            ? "Start a movie or episode, and your place will be saved automatically."
+          label={narrowed ? t("categories.noMatchesTitle") : tab === "Continue watching" ? t("library.continueEmptyTitle") : tab === "Watchlist" ? t("library.watchlistEmptyTitle") : t("library.watchedEmptyTitle")}
+          detail={narrowed ? t("library.noMatchesBody") : tab === "Continue watching"
+            ? t("library.continueEmptyBody")
             : tab === "Watchlist"
-              ? "Add a title from Movies or Series, or change its status to Watchlist."
-              : "Change a title's status to Watched when you finish it."}
+              ? t("library.watchlistEmptyBody")
+              : t("library.watchedEmptyBody")}
         />
       ) : visibleContent.map((item) => (
         <LibraryCard
@@ -194,18 +196,18 @@ export function LibraryPage({
           key={item.id}
           onOpen={() => playLibraryItem(item)}
           onRemove={() => onRemove(item.id, item.title)}
-          openLabel={`${item.status === "WATCHING" ? "Resume" : item.status === "WATCHED" ? "Replay" : "Watch"} ${item.title}`}
+          openLabel={t(item.status === "WATCHING" ? "library.resume" : item.status === "WATCHED" ? "library.replay" : "library.watch", { title: item.title })}
           progress={item.durationMillis > 0 ? item.positionMillis / item.durationMillis * 100 : undefined}
-          removeLabel={`Remove ${item.title} from library`}
-          removeTooltip="Remove from library"
+          removeLabel={t("library.removeLabel", { title: item.title })}
+          removeTooltip={t("library.removeTooltip")}
           subtitle={`${groupLabel(item.contentType)}${item.parentTitle ? ` · ${item.parentTitle}` : ""}`}
           title={item.title}
         >
           <div className="status-select">
             <CustomSelect
-              ariaLabel={`Library status for ${item.title}`}
+              ariaLabel={t("library.statusFor", { title: item.title })}
               onValueChange={(status) => onChangeStatus(item, status)}
-              options={LIBRARY_STATUS_OPTIONS}
+              options={libraryStatusOptions()}
               value={item.status}
               variant="compact"
             />

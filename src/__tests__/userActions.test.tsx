@@ -130,7 +130,7 @@ describe("settings user actions", () => {
 
   it("shows playlist expiry as a date and time", () => {
     const expiresAtMillis = Date.now() - 60_000;
-    const formattedExpiry = new Date(expiresAtMillis).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    const formattedExpiry = new Date(expiresAtMillis).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
     render(
       <SettingsPage
         {...settingsProps}

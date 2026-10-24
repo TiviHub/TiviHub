@@ -1,4 +1,6 @@
 import type { SearchSection } from "../lib/globalSearch";
+import { t } from "../lib/i18n";
+import { sectionLabel } from "../lib/sectionLabel";
 import { DesktopWindowControls } from "./DesktopWindowControls";
 import { Icon, type IconName } from "./common";
 
@@ -35,11 +37,11 @@ export function Sidebar({
   return (
     <aside
       className="sidebar"
-      aria-label="Primary navigation"
+      aria-label={t("nav.primary")}
       inert={inert}
     >
       <div className="sidebar-header">
-        <button aria-label="TiviHub home" className="brand" onClick={() => onNavigate("Home")} type="button">
+        <button aria-label={t("nav.brandHome")} className="brand" onClick={() => onNavigate("Home")} type="button">
           <img src={`${ASSET_BASE_URL}icons/tivihub-192.png`} alt="" />
           <span>TiviHub</span>
         </button>
@@ -59,23 +61,23 @@ export function Sidebar({
       <div className="sidebar-footer">
         <button
           aria-current={section === "Settings" ? "page" : undefined}
-          aria-label="Open settings"
+          aria-label={t("nav.openSettings")}
           className={`nav-item sidebar-settings-button${section === "Settings" ? " active" : ""}`}
           onClick={() => onNavigate("Settings")}
-          data-tooltip="Settings"
+          data-tooltip={t("nav.settings")}
           type="button"
         >
           <Icon name="settings" />
-          <span>Settings</span>
+          <span>{t("nav.settings")}</span>
         </button>
         <div className="sidebar-footer-controls">
           <button
             aria-controls="desktop-navigation"
             aria-expanded={!collapsed}
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-label={collapsed ? t("nav.expand") : t("nav.collapse")}
             className="sidebar-collapse sidebar-collapse-footer"
             onClick={onToggleCollapsed}
-            data-tooltip={collapsed ? "Expand navigation" : "Collapse navigation"}
+            data-tooltip={collapsed ? t("nav.expand") : t("nav.collapse")}
             type="button"
           >
             <Icon name={collapsed ? "chevron_right" : "chevron_left"} />
@@ -119,34 +121,34 @@ export function Topbar({
       </button>
       <button
         aria-keyshortcuts="Control+K Meta+K"
-        aria-label="Search your library"
+        aria-label={t("topbar.searchLibrary")}
         className="topbar-global-search topbar-desktop-only global-search-button"
         disabled={!canOpenGlobalSearch}
         onClick={onOpenGlobalSearch}
         type="button"
       >
         <Icon name="search" />
-        <span>Search in your library…</span>
+        <span>{t("topbar.searchPlaceholder")}</span>
         <kbd>Ctrl K</kbd>
       </button>
       <div aria-hidden="true" className="titlebar-drag-region" data-tauri-drag-region />
       <div className="topbar-desktop-actions topbar-desktop-only">
         <button
-          aria-label="Add playlist"
+          aria-label={t("topbar.addPlaylist")}
           className="icon-button topbar-action-button"
           disabled={!canAdd}
           onClick={onAddSource}
-          data-tooltip="Add playlist"
+          data-tooltip={t("topbar.addPlaylist")}
           type="button"
         >
           <Icon name="add" />
         </button>
         <button
-          aria-label="Refresh playlist"
+          aria-label={t("topbar.refreshPlaylist")}
           className="icon-button topbar-action-button refresh-button"
           disabled={!canRefresh}
           onClick={onRefresh}
-          data-tooltip="Refresh playlist"
+          data-tooltip={t("topbar.refreshPlaylist")}
           type="button"
         >
           <Icon name="refresh" />
@@ -155,9 +157,9 @@ export function Topbar({
       <div className="topbar-actions topbar-mobile-only">
         {activeSourceExpired && (
           <button
-            aria-label={`Playlist expired. Edit ${activeSourceName ?? "playlist"}`}
+            aria-label={t("topbar.expiredEdit", { name: activeSourceName ?? t("topbar.playlistWord") })}
             className="icon-button topbar-expiry-warning topbar-expiry-warning-mobile"
-            data-tooltip="Playlist expired. Edit playlist"
+            data-tooltip={t("topbar.expiredTooltip")}
             onClick={onOpenExpiredPlaylist}
             type="button"
           >
@@ -166,7 +168,7 @@ export function Topbar({
         )}
         <button
           aria-keyshortcuts="Control+K Meta+K"
-          aria-label="Search your library"
+          aria-label={t("topbar.searchLibrary")}
           className="icon-button global-search-button"
           disabled={!canOpenGlobalSearch}
           onClick={onOpenGlobalSearch}
@@ -175,7 +177,7 @@ export function Topbar({
           <Icon name="search" />
         </button>
         <button
-          aria-label="Open settings"
+          aria-label={t("nav.openSettings")}
           aria-current={section === "Settings" ? "page" : undefined}
           className={`icon-button settings-shortcut${section === "Settings" ? " selected" : ""}`}
           onClick={() => onNavigate("Settings")}
@@ -203,7 +205,7 @@ export function MobileNav({
   return (
     <nav
       className="mobile-nav"
-      aria-label="Primary navigation"
+      aria-label={t("nav.primary")}
       inert={inert}
     >
       {sections.filter((item) => item.label !== "Settings").map((item) => (
@@ -244,7 +246,7 @@ function NavItem({
       type="button"
     >
       <Icon name={icon} />
-      <span>{label === "Live TV" && compact ? "Live" : label}</span>
+      <span>{label === "Live TV" && compact ? t("nav.liveShort") : sectionLabel(label)}</span>
     </button>
   );
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { formatNumber } from "../lib/i18n";
 
 /**
  * The frame of every two-panel page (Movies, Series, Library, TV Guide, Downloads, Settings): a 320px panel on the left,
@@ -22,7 +23,7 @@ export function BrowseShell({ label, nav, title, count, tools, bodyClassName = "
         <aside aria-label={title} className="live-channel-sidebar">
           <div className="live-channel-sidebar-heading">
             <h2>{title}</h2>
-            {count !== undefined && <span>{count.toLocaleString()}</span>}
+            {count !== undefined && <span>{formatNumber(count)}</span>}
           </div>
           {tools && <div className="browse-panel-tools">{tools}</div>}
           <div className={bodyClassName}>{children}</div>

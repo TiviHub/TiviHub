@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { t } from "../lib/i18n";
 import {
   getFavorites,
   getLibraryItems,
@@ -40,11 +41,11 @@ export function useLibrary(notify: (message: string, kind: "error" | "notice") =
       const added = await toggleStoredFavorite(favorite);
       setFavorites(await getFavorites());
       notify(
-        added ? `Added ${item.name} to favorites.` : `Removed ${item.name} from favorites.`,
+        added ? t("library.favAdded", { name: item.name }) : t("library.favRemoved", { name: item.name }),
         "notice",
       );
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not update favorites.", "error");
+      notify(cause instanceof Error ? cause.message : t("library.favFailed"), "error");
     }
   }
 
@@ -66,9 +67,9 @@ export function useLibrary(notify: (message: string, kind: "error" | "notice") =
         updatedAt: Date.now(),
       });
       setLibrary(await getLibraryItems());
-      notify(`Added ${item.name} to your watchlist.`, "notice");
+      notify(t("library.watchlistAdded", { name: item.name }), "notice");
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not add this title to your library.", "error");
+      notify(cause instanceof Error ? cause.message : t("library.addFailed"), "error");
     }
   }
 
@@ -108,9 +109,9 @@ export function useLibrary(notify: (message: string, kind: "error" | "notice") =
         updatedAt: Date.now(),
       });
       setLibrary(await getLibraryItems());
-      notify(`${item.title} marked as ${status.toLowerCase()}.`, "notice");
+      notify(t(status === "WATCHLIST" ? "library.markedWatchlist" : status === "WATCHING" ? "library.markedWatching" : "library.markedWatched", { title: item.title }), "notice");
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not update library status.", "error");
+      notify(cause instanceof Error ? cause.message : t("library.statusFailed"), "error");
     }
   }
 
@@ -118,9 +119,9 @@ export function useLibrary(notify: (message: string, kind: "error" | "notice") =
     try {
       await removeLibraryItem(id);
       setLibrary(await getLibraryItems());
-      notify(`Removed ${title} from your library.`, "notice");
+      notify(t("library.removed", { title }), "notice");
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not remove this library item.", "error");
+      notify(cause instanceof Error ? cause.message : t("library.removeFailed"), "error");
     }
   }
 
@@ -132,9 +133,9 @@ export function useLibrary(notify: (message: string, kind: "error" | "notice") =
     try {
       await toggleStoredFavorite(favorite);
       setFavorites(await getFavorites());
-      notify(`Removed ${favorite.title} from favorites.`, "notice");
+      notify(t("library.favRemoved", { name: favorite.title }), "notice");
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not remove this favorite.", "error");
+      notify(cause instanceof Error ? cause.message : t("library.favoriteRemoveFailed"), "error");
     }
   }
 

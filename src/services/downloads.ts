@@ -2,6 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path";
 import { open as openFile, remove as removeFile } from "@tauri-apps/plugin-fs";
+import { t } from "../lib/i18n";
 import { proxiedUrl, proxyBase, usesNativeTransport } from "../providers/transport";
 import type { ContentType } from "../types";
 
@@ -171,7 +172,7 @@ export async function getDownloads(): Promise<DownloadRecord[]> {
 
 export async function getDownloadedBlob(id: string): Promise<Blob> {
   const database = await getDatabase();
-  const missing = () => new Error("The downloaded video file is missing from local storage.");
+  const missing = () => new Error(t("downloads.err.missing"));
   const record = await database.get("downloads", id);
   if (record?.parts === undefined) {
     const stored = await database.get("files", id);
@@ -221,7 +222,7 @@ export async function getDownloadDirectoryPath(): Promise<string | null> {
 export async function chooseDownloadDirectory(): Promise<string> {
   if (isTauri()) {
     const directory = await invoke<NativeDownloadDirectoryInfo | null>("choose_download_directory");
-    if (!directory) throw new DOMException("The folder selection was cancelled.", "AbortError");
+    if (!directory) throw new DOMException(t("downloads.err.folderCancelled"), "AbortError");
     return directory.path;
   }
 
@@ -229,7 +230,7 @@ export async function chooseDownloadDirectory(): Promise<string> {
     showDirectoryPicker?: (options: { mode: "readwrite" }) => Promise<DownloadDirectoryHandle>;
   };
   if (!pickerWindow.showDirectoryPicker) {
-    throw new Error("Folder selection is not available in this browser. Downloads will stay in TiviHub storage.");
+    throw new Error(t("downloads.err.folderUnavailable"));
   }
   const directory = await pickerWindow.showDirectoryPicker({ mode: "readwrite" });
   const database = await getDatabase();
@@ -248,7 +249,7 @@ async function writableDownloadDirectory(): Promise<{
       return directory ? { nativePath: directory.path } : {};
     } catch (cause) {
       return {
-        error: cause instanceof Error ? cause : new Error("Could not access the selected download folder."),
+        error: cause instanceof Error ? cause : new Error(t("downloads.err.folderAccess")),
       };
     }
   }
@@ -263,10 +264,10 @@ async function writableDownloadDirectory(): Promise<{
     }
     return permission === "granted"
       ? { directory: setting.directory }
-      : { error: new Error("TiviHub saved the download for offline playback, but permission to copy it to the selected folder was denied.") };
+      : { error: new Error(t("downloads.err.folderDenied")) };
   } catch (cause) {
     return {
-      error: cause instanceof Error ? cause : new Error("Could not access the selected download folder."),
+      error: cause instanceof Error ? cause : new Error(t("downloads.err.folderAccess")),
     };
   }
 }
@@ -304,7 +305,7 @@ async function saveToNativeDirectory(
 }
 
 function tooLargeError(): Error {
-  return new Error("This video is larger than 8 GB, which is too large to save for offline playback.");
+  return new Error(t("downloads.err.tooLarge"));
 }
 
 export async function downloadMedia(
@@ -314,18 +315,18 @@ export async function downloadMedia(
   userAgent?: string,
 ): Promise<{ record: DownloadRecord; folderError?: Error }> {
   if (!canDownloadMedia(media)) {
-    throw new Error("Offline downloads support direct, non-DRM movie and episode files only. HLS streams and protected streams cannot be saved.");
+    throw new Error(t("downloads.err.unsupportedStream"));
   }
 
   const extension = mediaExtension(media.streamUrl);
-  if (!extension) throw new Error("The video file type could not be determined.");
+  if (!extension) throw new Error(t("downloads.err.unknownType"));
   const directoryAccess = await writableDownloadDirectory();
   // A custom User-Agent goes through the backend proxy, which streams, so large files stay out of memory.
   const address = usesNativeTransport(userAgent)
     ? proxiedUrl(await proxyBase(userAgent!), media.streamUrl)
     : media.streamUrl;
   const response = await fetch(address, { signal, cache: "no-store", credentials: "omit" });
-  if (!response.ok) throw new Error(`The provider could not serve this download (HTTP ${response.status}).`);
+  if (!response.ok) throw new Error(t("downloads.err.http", { status: response.status }));
   const contentType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
   if (
     contentType &&
@@ -335,7 +336,7 @@ export async function downloadMedia(
       contentType.includes("html") ||
       contentType.startsWith("text/"))
   ) {
-    throw new Error("This source returned a streaming playlist or a web page instead of a downloadable video file.");
+    throw new Error(t("downloads.err.notVideo"));
   }
 
   const totalBytesHeader = Number(response.headers.get("content-length"));
@@ -371,7 +372,7 @@ export async function downloadMedia(
         while (true) {
           const result = await reader.read();
           if (result.done) break;
-          if (signal.aborted) throw new DOMException("The download was cancelled.", "AbortError");
+          if (signal.aborted) throw new DOMException(t("downloads.err.cancelled"), "AbortError");
           chunks.push(result.value);
           bufferedBytes += result.value.byteLength;
           receivedBytes += result.value.byteLength;
@@ -393,10 +394,10 @@ export async function downloadMedia(
     }
     reportProgress();
 
-    if (signal.aborted) throw new DOMException("The download was cancelled.", "AbortError");
-    if (receivedBytes === 0) throw new Error("The provider returned an empty video file.");
+    if (signal.aborted) throw new DOMException(t("downloads.err.cancelled"), "AbortError");
+    if (receivedBytes === 0) throw new Error(t("downloads.err.empty"));
     if (totalBytes && receivedBytes !== totalBytes) {
-      throw new Error(`The download ended early (${receivedBytes} of ${totalBytes} bytes). Try again.`);
+      throw new Error(t("downloads.err.endedEarly", { received: receivedBytes, total: totalBytes }));
     }
     await flushPart();
     record = {
@@ -438,7 +439,7 @@ async function copyToChosenFolder(
   } catch (cause) {
     return {
       record,
-      folderError: cause instanceof Error ? cause : new Error("Could not copy the download to the selected folder."),
+      folderError: cause instanceof Error ? cause : new Error(t("downloads.err.copyFailed")),
     };
   }
 }

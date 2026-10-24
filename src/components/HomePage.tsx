@@ -1,5 +1,8 @@
 import { Children, Fragment, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SearchSection } from "../lib/globalSearch";
+import { t, tCount } from "../lib/i18n";
+import { sectionLabel } from "../lib/sectionLabel";
+import type { MessageKey } from "../locales";
 import type { ContentType, Favorite, LibraryItem, LiveChannel, Movie, PlayableItem, Playlist, Series } from "../types";
 import { Icon, type IconName } from "./common";
 import { HomeEmptyState } from "./HomeEmptyState";
@@ -22,14 +25,14 @@ type HomeShelfKey = (typeof HOME_SHELF_KEYS)[number];
 type HomeLayoutPreference = { order: HomeShelfKey[]; hidden: HomeShelfKey[] };
 
 const DEFAULT_HOME_SHELF_ORDER: HomeShelfKey[] = [...HOME_SHELF_KEYS];
-const HOME_SHELF_LABELS: Record<HomeShelfKey, string> = {
-  continueWatching: "Continue watching",
-  watchedChannels: "Recently watched channels",
-  recentlyWatched: "Recently watched movies and series",
-  favoriteMovies: "Favorite movies",
-  favoriteSeries: "Favorite series",
-  favoriteChannels: "Favorite TV channels",
-  watchlist: "Your watchlist",
+const HOME_SHELF_LABELS: Record<HomeShelfKey, MessageKey> = {
+  continueWatching: "library.tabContinue",
+  watchedChannels: "home.shelfWatchedChannels",
+  recentlyWatched: "home.shelfRecentEditor",
+  favoriteMovies: "home.shelfFavMovies",
+  favoriteSeries: "home.shelfFavSeries",
+  favoriteChannels: "home.shelfFavChannels",
+  watchlist: "home.shelfWatchlist",
 };
 
 function isHomeShelfKey(value: unknown): value is HomeShelfKey {
@@ -111,28 +114,27 @@ export function Home({
   }
 
   const destinations: { label: Section; icon: IconName; detail: string }[] = [
-    { label: "Live TV", icon: "live_tv", detail: "Channels & guide" },
-    { label: "Movies", icon: "movie", detail: "Your cinema" },
-    { label: "Series", icon: "tv", detail: "Every episode, in order" },
-    { label: "Library", icon: "bookmark", detail: "Keep your place" },
+    { label: "Live TV", icon: "live_tv", detail: t("home.destLive") },
+    { label: "Movies", icon: "movie", detail: t("home.destMovies") },
+    { label: "Series", icon: "tv", detail: t("home.destSeries") },
+    { label: "Library", icon: "bookmark", detail: t("home.destLibrary") },
   ];
   return (
     <>
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow"><span className="eyebrow-mark">✳</span> YOUR MEDIA. YOUR RULES.</p>
-          <h1>Tune in to<br /><span className="neon-text">your universe</span></h1>
+          <p className="eyebrow"><span className="eyebrow-mark">✳</span> {t("home.heroEyebrow")}</p>
+          <h1>{t("home.heroTitle1")}<br /><span className="neon-text">{t("home.heroTitle2")}</span></h1>
           <p className="hero-description">
-            Your channels, films, and series in one beautifully simple player.
-            Bring your own sources and make it yours.
+            {t("home.heroDesc")}
           </p>
           <div className="hero-actions">
             <button className="primary-button" onClick={onAddSource} type="button">
               <Icon name="add" />
-              Add your first source
+              {t("home.addFirst")}
               <Icon name="arrow_forward" />
             </button>
-            <span className="hero-footnote">{sourceCount ? `${sourceCount} source${sourceCount === 1 ? "" : "s"} on this device` : "No account. No cloud library."}</span>
+            <span className="hero-footnote">{sourceCount ? tCount("home.sources", sourceCount) : t("home.noAccount")}</span>
           </div>
         </div>
         <div className="hero-art" aria-hidden="true">
@@ -143,15 +145,15 @@ export function Home({
         </div>
       </section>
 
-      <section className="privacy-strip" aria-label="Privacy and platform highlights">
-        <Highlight icon="devices" label="Made for your screens" detail="Windows desktop" />
-        <Highlight icon="shield" label="Local-first library" detail="Saved on this device" />
-        <div className="privacy-status"><span className="status-pulse" /><span>NO TIVIHUB APP SERVER</span></div>
+      <section className="privacy-strip" aria-label={t("home.highlightsAria")}>
+        <Highlight icon="devices" label={t("home.hlScreens")} detail={t("home.hlWindows")} />
+        <Highlight icon="shield" label={t("home.hlLocal")} detail={t("home.hlSaved")} />
+        <div className="privacy-status"><span className="status-pulse" /><span>{t("home.noServer")}</span></div>
       </section>
 
       <section className="library-section">
         <div className="section-heading">
-          <div><p className="eyebrow">PICK YOUR FREQUENCY</p><h2>One hub. Every mood.</h2></div>
+          <div><p className="eyebrow">{t("home.pickFreq")}</p><h2>{t("home.oneHub")}</h2></div>
           <span className="section-index">01 — 04</span>
         </div>
         <div className="feature-grid">
@@ -159,7 +161,7 @@ export function Home({
             <button className="feature-card" key={destination.label} onClick={() => onNavigate(destination.label)} type="button">
               <span className="feature-icon"><Icon name={destination.icon} /></span>
               <span className="feature-arrow"><Icon name="arrow_forward" /></span>
-              <span className="feature-title">{destination.label}</span>
+              <span className="feature-title">{sectionLabel(destination.label)}</span>
               <span className="feature-detail">{destination.detail}</span>
             </button>
           ))}
@@ -169,8 +171,8 @@ export function Home({
       {continueWatching.length > 0 && (
         <section className="home-continue-section">
           <div className="section-heading">
-            <div><p className="eyebrow">PICK UP WHERE YOU LEFT OFF</p><h2>Continue watching</h2></div>
-            <button className="text-button" onClick={() => onNavigate("Library")} type="button">Open library <Icon name="arrow_forward" /></button>
+            <div><p className="eyebrow">{t("home.eyebrowPickUp")}</p><h2>{t("library.tabContinue")}</h2></div>
+            <button className="text-button" onClick={() => onNavigate("Library")} type="button">{t("home.openLibrary")} <Icon name="arrow_forward" /></button>
           </div>
           <div className="home-continue-grid">
             {continueWatching.map((item) => (
@@ -205,8 +207,8 @@ export function Home({
       )}
 
       <footer className="page-footer">
-        <span>TIVIHUB DESKTOP <span className="footer-separator">/</span> BUILT FOR YOUR SOURCES</span>
-        <span>Bring sources you are authorized to use.</span>
+        <span>{t("home.footerA")} <span className="footer-separator">/</span> {t("home.footerB")}</span>
+        <span>{t("home.authorized")}</span>
       </footer>
     </>
   );
@@ -279,7 +281,7 @@ function MediaHome({
       window.localStorage.setItem(HOME_LAYOUT_STORAGE_KEY, JSON.stringify(next));
     } catch (cause) {
       console.error("Could not save the local Home layout preference", cause);
-      onPreferenceError("Could not save your Home layout on this device.");
+      onPreferenceError(t("home.layoutSaveFailed"));
     }
   }
 
@@ -358,13 +360,13 @@ function MediaHome({
     const hasSeries = item.contentType === "SERIES" &&
       series.some((entry) => entry.id === item.contentId && entry.playlistId === item.playlistId);
 
-    if (intent === "resume") return item.streamUrl ? "Resume" : "Unavailable";
+    if (intent === "resume") return item.streamUrl ? t("home.resume") : t("home.unavailable");
     if (intent === "replay") {
-      if (item.streamUrl) return "Replay";
-      return hasMovie || hasSeries || item.contentType === "SERIES" ? "View details" : "Unavailable";
+      if (item.streamUrl) return t("home.replay");
+      return hasMovie || hasSeries || item.contentType === "SERIES" ? t("home.viewDetails") : t("home.unavailable");
     }
-    if (hasMovie || hasSeries || (!item.streamUrl && item.contentType === "SERIES")) return "View details";
-    return item.streamUrl ? "Play" : "Unavailable";
+    if (hasMovie || hasSeries || (!item.streamUrl && item.contentType === "SERIES")) return t("home.viewDetails");
+    return item.streamUrl ? t("player.play") : t("home.unavailable");
   }
 
   function openFavorite(favorite: Favorite) {
@@ -408,12 +410,12 @@ function MediaHome({
   }
 
   function favoriteActionLabel(favorite: Favorite) {
-    if (favorite.contentType === "LIVE") return favorite.streamUrl ? "Watch live" : "Unavailable";
-    if (favorite.contentType === "SERIES") return "View details";
+    if (favorite.contentType === "LIVE") return favorite.streamUrl ? t("home.watchLive") : t("home.unavailable");
+    if (favorite.contentType === "SERIES") return t("home.viewDetails");
     if (favorite.contentType === "MOVIE" && movies.some((movie) =>
       movie.id === favorite.contentId && movie.playlistId === favorite.playlistId,
-    )) return "View details";
-    return favorite.streamUrl ? "Play" : "Unavailable";
+    )) return t("home.viewDetails");
+    return favorite.streamUrl ? t("player.play") : t("home.unavailable");
   }
 
   function renderFavoriteCards(items: Favorite[]) {
@@ -421,7 +423,7 @@ function MediaHome({
       <HomeTitleCard
         actionLabel={favoriteActionLabel(favorite)}
         detail={homeContentTypeLabel(favorite.contentType)}
-        disabled={favoriteActionLabel(favorite) === "Unavailable"}
+        disabled={favoriteActionLabel(favorite) === t("home.unavailable")}
         icon={favorite.contentType === "LIVE" ? "live_tv" : favorite.contentType === "SERIES" ? "tv" : "movie"}
         image={favorite.artworkUrl}
         key={favorite.id}
@@ -437,17 +439,17 @@ function MediaHome({
       case "continueWatching":
         return continueWatching.length > 0 ? (
           <HomeShelf
-            actionLabel="Manage all"
+            actionLabel={t("home.manageAll")}
             count={watchingCount}
-            eyebrow="PICK UP WHERE YOU LEFT OFF"
+            eyebrow={t("home.eyebrowPickUp")}
             onMore={() => onNavigate("Library")}
-            title="Continue watching"
+            title={t("library.tabContinue")}
           >
             {continueWatching.map((item) => (
               <HomeTitleCard
                 actionLabel={libraryActionLabel(item, "resume")}
                 detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
-                disabled={libraryActionLabel(item, "resume") === "Unavailable"}
+                disabled={libraryActionLabel(item, "resume") === t("home.unavailable")}
                 icon={item.contentType === "LIVE" ? "live_tv" : item.contentType === "SERIES" || item.contentType === "EPISODE" ? "tv" : "movie"}
                 image={item.artworkUrl}
                 key={item.id}
@@ -464,16 +466,16 @@ function MediaHome({
       case "watchedChannels":
         return watchedChannels.length > 0 ? (
           <HomeShelf
-            actionLabel="Manage all"
+            actionLabel={t("home.manageAll")}
             count={library.filter((item) => item.status === "WATCHED" && item.contentType === "LIVE").length}
-            eyebrow="LAST WATCHED TV"
+            eyebrow={t("home.eyebrowLastTv")}
             onMore={() => onNavigate("Library")}
-            title="Recently watched channels"
+            title={t("home.shelfWatchedChannels")}
           >
             {watchedChannels.map((item) => (
               <HomeTitleCard
-                actionLabel={item.streamUrl ? "Watch live" : "Unavailable"}
-                detail="Live TV"
+                actionLabel={item.streamUrl ? t("home.watchLive") : t("home.unavailable")}
+                detail={t("nav.liveTv")}
                 disabled={!item.streamUrl}
                 icon="live_tv"
                 image={item.artworkUrl}
@@ -488,17 +490,17 @@ function MediaHome({
       case "recentlyWatched":
         return recentlyWatched.length > 0 ? (
           <HomeShelf
-            actionLabel="Manage all"
+            actionLabel={t("home.manageAll")}
             count={library.filter((item) => item.status === "WATCHED").length}
-            eyebrow="YOUR RECENT HISTORY"
+            eyebrow={t("home.eyebrowHistory")}
             onMore={() => onNavigate("Library")}
-            title="Recently watched"
+            title={t("home.shelfRecent")}
           >
             {recentlyWatched.map((item) => (
               <HomeTitleCard
                 actionLabel={libraryActionLabel(item, "replay")}
                 detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
-                disabled={libraryActionLabel(item, "replay") === "Unavailable"}
+                disabled={libraryActionLabel(item, "replay") === t("home.unavailable")}
                 icon={item.contentType === "LIVE" ? "live_tv" : item.contentType === "SERIES" || item.contentType === "EPISODE" ? "tv" : "movie"}
                 image={item.artworkUrl}
                 key={item.id}
@@ -512,11 +514,11 @@ function MediaHome({
       case "favoriteMovies":
         return favoriteMovies.length > 0 ? (
           <HomeShelf
-            actionLabel="Manage all"
+            actionLabel={t("home.manageAll")}
             count={favoriteMovieCount}
-            eyebrow="SAVED FOR YOU"
+            eyebrow={t("home.eyebrowSaved")}
             onMore={() => onNavigate("Library")}
-            title="Favorite movies"
+            title={t("home.shelfFavMovies")}
           >
             {renderFavoriteCards(favoriteMovies)}
           </HomeShelf>
@@ -524,11 +526,11 @@ function MediaHome({
       case "favoriteSeries":
         return favoriteSeries.length > 0 ? (
           <HomeShelf
-            actionLabel="Manage all"
+            actionLabel={t("home.manageAll")}
             count={favoriteSeriesCount}
-            eyebrow="SAVED FOR YOU"
+            eyebrow={t("home.eyebrowSaved")}
             onMore={() => onNavigate("Library")}
-            title="Favorite series"
+            title={t("home.shelfFavSeries")}
           >
             {renderFavoriteCards(favoriteSeries)}
           </HomeShelf>
@@ -536,11 +538,11 @@ function MediaHome({
       case "favoriteChannels":
         return favoriteChannels.length > 0 ? (
           <HomeShelf
-            actionLabel="Manage all"
+            actionLabel={t("home.manageAll")}
             count={favoriteChannelCount}
-            eyebrow="SAVED FOR YOU"
+            eyebrow={t("home.eyebrowSaved")}
             onMore={() => onNavigate("Library")}
-            title="Favorite TV channels"
+            title={t("home.shelfFavChannels")}
           >
             {renderFavoriteCards(favoriteChannels)}
           </HomeShelf>
@@ -548,17 +550,17 @@ function MediaHome({
       case "watchlist":
         return watchlist.length > 0 ? (
           <HomeShelf
-            actionLabel="Manage all"
+            actionLabel={t("home.manageAll")}
             count={library.filter((item) => item.status === "WATCHLIST").length}
-            eyebrow="SAVED FOR LATER"
+            eyebrow={t("home.eyebrowLater")}
             onMore={() => onNavigate("Library")}
-            title="Your watchlist"
+            title={t("home.shelfWatchlist")}
           >
             {watchlist.map((item) => (
               <HomeTitleCard
                 actionLabel={libraryActionLabel(item, "details")}
                 detail={item.parentTitle || homeContentTypeLabel(item.contentType)}
-                disabled={libraryActionLabel(item, "details") === "Unavailable"}
+                disabled={libraryActionLabel(item, "details") === t("home.unavailable")}
                 icon={item.contentType === "SERIES" ? "tv" : "movie"}
                 image={item.artworkUrl}
                 key={item.id}
@@ -582,13 +584,13 @@ function MediaHome({
     return (
       <HomeEmptyState
         actionIcon="play_arrow"
-        actionLabel="Explore content"
-        description="Start watching or save a favorite to bring your channels, movies, and series together here."
-        eyebrow="YOUR MEDIA / HOME"
+        actionLabel={t("home.exploreAction")}
+        description={t("home.emptyDesc")}
+        eyebrow={t("home.eyebrowHome")}
         onAction={() => onNavigate(
           movies.length > 0 ? "Movies" : series.length > 0 ? "Series" : channels.length > 0 ? "Live TV" : "Movies",
         )}
-        title="Make Home yours"
+        title={t("home.emptyTitle")}
       />
     );
   }
@@ -596,9 +598,9 @@ function MediaHome({
   return (
     <section className="media-home">
       <header className="page-intro home-page-intro">
-        <p className="eyebrow">YOUR MEDIA / HOME</p>
-        <h1>Home</h1>
-        <p>Your favorites and watch progress, all in one place.</p>
+        <p className="eyebrow">{t("home.eyebrowHome")}</p>
+        <h1>{t("nav.home")}</h1>
+        <p>{t("home.intro")}</p>
       </header>
       {featuredResume && (
         <article className="home-resume">
@@ -611,7 +613,7 @@ function MediaHome({
             <small>
               {homeContentTypeLabel(featuredResume.contentType)}
               {featuredResume.parentTitle ? ` · ${featuredResume.parentTitle}` : ""}
-              {featuredResume.durationMillis > 0 ? ` · ${Math.round(featuredResumeProgress)}% watched` : ""}
+              {featuredResume.durationMillis > 0 ? ` · ${t("home.percentWatched", { percent: Math.round(featuredResumeProgress) })}` : ""}
             </small>
             {featuredResume.durationMillis > 0 && (
               <span className="library-progress"><span style={{ width: `${featuredResumeProgress}%` }} /></span>
@@ -619,7 +621,7 @@ function MediaHome({
           </div>
           <button className="primary-button" onClick={() => playLibraryItem(featuredResume)} type="button">
             <Icon name="play_arrow" />
-            Resume
+            {t("home.resume")}
           </button>
         </article>
       )}
@@ -637,7 +639,7 @@ function MediaHome({
           type="button"
         >
           <Icon name={homeEditorOpen ? "close" : "edit"} />
-          {homeEditorOpen ? "Done editing" : "Edit Home"}
+          {homeEditorOpen ? t("home.doneEditing") : t("home.editHome")}
         </button>
       </div>
       <section
@@ -648,10 +650,10 @@ function MediaHome({
       >
         <div className="home-layout-editor-heading">
           <div>
-            <h2 id="home-layout-editor-title">Customize Home</h2>
-            <p>Choose which sections to show and set their order. Changes are saved on this device.</p>
+            <h2 id="home-layout-editor-title">{t("home.customize")}</h2>
+            <p>{t("home.customizeDesc")}</p>
           </div>
-          <button className="text-button" onClick={resetHomeLayout} type="button">Reset to default</button>
+          <button className="text-button" onClick={resetHomeLayout} type="button">{t("home.reset")}</button>
         </div>
         <ol className="home-layout-editor-list">
           {homeLayout.order.map((key, index) => (
@@ -662,11 +664,11 @@ function MediaHome({
                   onChange={() => toggleHomeShelf(key)}
                   type="checkbox"
                 />
-                <span>{HOME_SHELF_LABELS[key]}</span>
+                <span>{t(HOME_SHELF_LABELS[key])}</span>
               </label>
               <div>
                 <button
-                  aria-label={`Move ${HOME_SHELF_LABELS[key]} up`}
+                  aria-label={t("home.moveUp", { name: t(HOME_SHELF_LABELS[key]) })}
                   className="icon-button home-layout-move-button move-up"
                   disabled={index === 0}
                   onClick={() => moveHomeShelf(key, -1)}
@@ -675,7 +677,7 @@ function MediaHome({
                   <Icon name="chevron_left" />
                 </button>
                 <button
-                  aria-label={`Move ${HOME_SHELF_LABELS[key]} down`}
+                  aria-label={t("home.moveDown", { name: t(HOME_SHELF_LABELS[key]) })}
                   className="icon-button home-layout-move-button move-down"
                   disabled={index === homeLayout.order.length - 1}
                   onClick={() => moveHomeShelf(key, 1)}
@@ -694,10 +696,10 @@ function MediaHome({
 
 function homeContentTypeLabel(contentType: ContentType): string {
   const labels: Record<ContentType, string> = {
-    LIVE: "Live TV",
-    MOVIE: "Movie",
-    SERIES: "Series",
-    EPISODE: "Episode",
+    LIVE: t("nav.liveTv"),
+    MOVIE: t("card.kindMovie"),
+    SERIES: t("card.kindSeries"),
+    EPISODE: t("downloads.kindEpisode"),
   };
   return labels[contentType];
 }
@@ -707,7 +709,7 @@ function HomeShelf({
   eyebrow,
   onMore,
   count,
-  actionLabel = "See all",
+  actionLabel = t("home.seeAll"),
   children,
 }: {
   title: string;
@@ -786,7 +788,7 @@ function HomeTitleCard({
         <span aria-hidden="true" className="catalog-artwork-fallback"><Icon name={icon} /></span>
         {image && <img alt="" draggable={false} loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={image} />}
         <span aria-hidden="true" className="home-card-play">
-          <Icon name={actionLabel === "View details" ? "arrow_forward" : "play_arrow"} />
+          <Icon name={actionLabel === t("home.viewDetails") ? "arrow_forward" : "play_arrow"} />
           <span>{actionLabel}</span>
         </span>
         {progress !== undefined && (

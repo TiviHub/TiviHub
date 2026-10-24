@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { recordDiagnosticFailure } from "../lib/diagnosticLog";
 import type { BrowseCategory } from "../browse/types";
 import type { Episode, EpgProgram, LiveChannel, Movie, Playlist, Series } from "../types";
@@ -105,7 +106,7 @@ async function deviceId(mac: string): Promise<string> {
 
 function macOf(playlist: Playlist): string {
   const mac = normalizeMac(playlist.macAddress ?? "");
-  if (!mac) throw new Error("Enter the portal's MAC address, for example 00:1A:79:12:34:56.");
+  if (!mac) throw new Error(t("dlg.errMac"));
   return mac;
 }
 
@@ -166,7 +167,7 @@ async function portalRequest(
       if (error instanceof DOMException && error.name === "AbortError") throw error;
       recordDiagnosticFailure("stalker-portal", "network");
       throw new Error(
-        "The portal could not be reached. Stalker portals need the desktop app, and the portal address and your connection must be correct.",
+        t("err.portalNetwork"),
         { cause: error },
       );
     }
@@ -183,10 +184,10 @@ async function portalRequest(
   if (!response.ok) {
     recordDiagnosticFailure("stalker-portal", "http", response.status);
     throw new Error(response.status === 429
-      ? "The portal is limiting requests from this computer right now. Wait a few minutes and try again."
-      : `The portal answered with HTTP ${response.status}.`);
+      ? t("err.portalLimit")
+      : t("err.portalHttp", { status: response.status }));
   }
-  const text = await readResponseText(response, maxBytes, "Portal response");
+  const text = await readResponseText(response, maxBytes, t("label.portalResponse"));
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -194,7 +195,7 @@ async function portalRequest(
     // Without a valid session many portals answer with a plain "Authorization failed." page.
     if (AUTH_FAILURE.test(text)) throw new PortalAuthError();
     recordDiagnosticFailure("stalker-portal", "invalid-response");
-    throw new Error("The portal returned something TiviHub does not understand. Check the portal address.");
+    throw new Error(t("err.portalUnknown"));
   }
   return (parsed as Payload | null)?.js ?? null;
 }
@@ -209,7 +210,7 @@ async function login(playlist: Playlist, signal?: AbortSignal): Promise<Session>
   const mac = macOf(playlist);
   const handshake = await portalRequest(playlist, { type: "stb", action: "handshake", token: "", prehash: "" }, null, signal);
   const token = stringValue((handshake as Payload | null)?.token);
-  if (!token) throw new Error("The portal did not accept this MAC address.");
+  if (!token) throw new Error(t("err.portalMacRejected"));
 
   const id = await deviceId(mac);
   const profileRequest = (secondStep: boolean) => portalRequest(playlist, {
@@ -234,7 +235,7 @@ async function login(playlist: Playlist, signal?: AbortSignal): Promise<Session>
   let profile = await profileRequest(false);
   if (numberValue(profile?.status) === 2) {
     if (!playlist.username.trim()) {
-      throw new Error("This portal asks for a login. Add the username and password in the source's login settings.");
+      throw new Error(t("err.portalLogin"));
     }
     await portalRequest(playlist, {
       type: "stb",
@@ -248,9 +249,9 @@ async function login(playlist: Playlist, signal?: AbortSignal): Promise<Session>
   }
   const status = numberValue(profile?.status) ?? 0;
   if (status === 1) {
-    throw new Error(stringValue(profile?.block_msg) ?? stringValue(profile?.msg) ?? "The portal has blocked this account.");
+    throw new Error(stringValue(profile?.block_msg) ?? stringValue(profile?.msg) ?? t("err.portalBlocked"));
   }
-  if (status === 2) throw new Error("The portal did not accept this login. Check the username and password with your provider.");
+  if (status === 2) throw new Error(t("err.portalLoginRejected"));
   const asked = numberValue(profile?.watchdog_timeout) ?? DEFAULT_WATCHDOG_SECONDS;
   return { token, watchdogSeconds: Math.min(3600, Math.max(30, asked)) };
 }
@@ -283,7 +284,7 @@ async function call(
       return await portalRequest(playlist, params, (await session(playlist, signal, true)).token, signal, maxBytes);
     } catch (second) {
       if (second instanceof PortalAuthError) {
-        throw new Error("The portal refused this MAC address or login. Check them with your provider.", { cause: second });
+        throw new Error(t("err.portalRefused"), { cause: second });
       }
       throw second;
     }
@@ -511,7 +512,7 @@ export async function loadStalkerTitles(
 /** What the app imports for a portal: the live channels. Movies and series are read per category while browsing. */
 export async function loadStalkerCatalog(playlist: Playlist, signal?: AbortSignal): Promise<StalkerCatalog> {
   const channels = await loadStalkerChannels(playlist, signal);
-  if (channels.length === 0) throw new Error("The portal returned no channels.");
+  if (channels.length === 0) throw new Error(t("err.portalNoChannels"));
   return { channels, movies: [], series: [] };
 }
 
@@ -575,7 +576,7 @@ export async function loadStalkerEpisodes(playlist: Playlist, series: Series, si
 
   const inline = series.stalkerEpisodes ?? [];
   if (model === "vod" && inline.length > 0) {
-    if (!series.stalkerCmd) throw new Error("This series has no episode information from the portal.");
+    if (!series.stalkerCmd) throw new Error(t("err.portalNoSeriesInfo"));
     for (const number of inline) add(1, number, undefined, series.stalkerCmd, null, number);
   } else if ((model === "vod" || model === "series") && id) {
     // Seasons and episodes are opened one level at a time: first the seasons, then the episodes of each.
@@ -609,7 +610,7 @@ export async function loadStalkerEpisodes(playlist: Playlist, series: Series, si
       }
     }
   }
-  if (episodes.length === 0) throw new Error("The portal returned no episodes for this series.");
+  if (episodes.length === 0) throw new Error(t("err.portalNoEpisodes"));
   return episodes.sort((left, right) => left.season - right.season || left.number - right.number);
 }
 
@@ -639,7 +640,7 @@ export async function loadStalkerEpg(playlist: Playlist, signal?: AbortSignal): 
 /** Asks the portal for the address to play now; the address usually works for a short time only. */
 export async function resolveStalkerLink(playlist: Playlist, link: string, signal?: AbortSignal): Promise<string> {
   const parsed = parseLink(link);
-  if (!parsed) throw new Error("This item has no portal address.");
+  if (!parsed) throw new Error(t("err.portalNoAddress"));
   const response = await call(playlist, {
     type: parsed.type,
     action: "create_link",
@@ -653,7 +654,7 @@ export async function resolveStalkerLink(playlist: Playlist, link: string, signa
   const cmd = stringValue(response?.cmd);
   // The reply looks like "ffmpeg http://host/stream?token=…": a player hint, then the address.
   const found = cmd?.match(/https?:\/\/\S+/)?.[0] ?? (cmd?.startsWith("/") ? new URL(cmd, playlist.url).toString() : undefined);
-  if (!found) throw new Error("The portal did not give a stream address. Your subscription may not include this channel.");
+  if (!found) throw new Error(t("err.portalNoStream"));
   return found;
 }
 

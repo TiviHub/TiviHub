@@ -6,6 +6,7 @@ import {
   type TitleIdentity,
 } from "../lib/ratings";
 import { mdblistRateLimiter, type MdblistRateLimiter } from "../lib/mdblistRateLimit";
+import { t } from "../lib/i18n";
 import { MdblistError } from "../lib/mdblistError";
 import type { ExternalRating, ExternalRatings } from "../types";
 
@@ -42,7 +43,7 @@ async function getJson(
   signal?: AbortSignal,
 ): Promise<unknown | null> {
   const key = apiKey.trim();
-  if (!key) throw new MdblistError("missing-key", "Add an MDBList API key in Settings to load external ratings.");
+  if (!key) throw new MdblistError("missing-key", t("mdblist.missingKey"));
   const url = new URL(`${API_BASE}${path}`);
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
   url.searchParams.set("apikey", key);
@@ -60,7 +61,7 @@ async function getJson(
     if (error instanceof MdblistError) throw error;
     throw new MdblistError(
       "network",
-      "MDBList could not be reached from TiviHub. Check your connection and cross-origin access.",
+      t("mdblist.network"),
     );
   }
   try {
@@ -70,31 +71,31 @@ async function getJson(
   }
   if (response.status === 404) return null;
   if (response.status === 401 || response.status === 403) {
-    throw new MdblistError("auth", "MDBList rejected the API key. Check it in Settings.", response.status);
+    throw new MdblistError("auth", t("mdblist.auth"), response.status);
   }
   if (response.status === 429) {
-    throw new MdblistError("rate-limited", "MDBList rate limit reached. Try again later.", 429);
+    throw new MdblistError("rate-limited", t("mdblist.rateLimited"), 429);
   }
   if (response.status >= 500) {
-    throw new MdblistError("server", "MDBList is temporarily unavailable.", response.status);
+    throw new MdblistError("server", t("mdblist.server"), response.status);
   }
   if (!response.ok) {
-    throw new MdblistError("invalid-response", `MDBList request failed with HTTP ${response.status}.`, response.status);
+    throw new MdblistError("invalid-response", t("mdblist.http", { status: response.status }), response.status);
   }
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-    throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
+    throw new MdblistError("invalid-response", t("mdblist.invalid"));
   }
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
+    throw new MdblistError("invalid-response", t("mdblist.invalid"));
   }
   const error = (payload as { error?: unknown }).error;
   if (typeof error === "string" && error) {
     if (/not found/i.test(error)) return null;
-    throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
+    throw new MdblistError("invalid-response", t("mdblist.invalid"));
   }
   return payload;
 }
@@ -105,7 +106,7 @@ function finiteNumber(value: unknown): number | undefined {
 
 export function parseMdblistRatings(payload: unknown): ExternalRatings {
   if (!payload || typeof payload !== "object") {
-    throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
+    throw new MdblistError("invalid-response", t("mdblist.invalid"));
   }
   const body = payload as {
     ratings?: unknown;
@@ -116,7 +117,7 @@ export function parseMdblistRatings(payload: unknown): ExternalRatings {
     synopsis?: unknown;
   };
   if (!Array.isArray(body.ratings)) {
-    throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
+    throw new MdblistError("invalid-response", t("mdblist.invalid"));
   }
   const seen = new Set<string>();
   const ratings: ExternalRating[] = [];
@@ -161,7 +162,7 @@ interface SearchCandidate {
 function findExactMatch(payload: unknown, identity: TitleIdentity): SearchCandidate | null {
   const list = (payload as { search?: unknown }).search;
   if (!Array.isArray(list)) {
-    throw new MdblistError("invalid-response", "MDBList returned an invalid response.");
+    throw new MdblistError("invalid-response", t("mdblist.invalid"));
   }
   const wanted = normalizeTitle(normalizeCatalogTitle(identity.title, identity.year));
   const matches = list.flatMap((raw): SearchCandidate[] => {

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
+import { t, useLocale } from "./lib/i18n";
 import { useAppPreferences } from "./hooks/useAppPreferences";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useRefreshOverlay } from "./hooks/useRefreshOverlay";
@@ -102,6 +103,7 @@ function App() {
     () => isDesktopApp && !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const { error, notice, notificationKey, notify, clearNotifications } = useNotifications();
+  useLocale(); // the whole tree renders again when the language changes
   const { theme, showAdultContent, chooseTheme, chooseShowAdultContent } = useAppPreferences(notify);
   const {
     favorites, library, setFavorites, setLibrary, toggleFavorite, addToWatchlist, saveProgress,
@@ -228,7 +230,7 @@ function App() {
       await openUrl(url);
     } catch (cause) {
       console.error("Could not open the external website", cause);
-      notify("Could not open the external website.", "error");
+      notify(t("app.openUrlFailed"), "error");
     }
   }
 
@@ -297,7 +299,7 @@ function App() {
       if (savedEpisodes.length === 0) {
         const source = sources.find((entry) => entry.id === item.playlistId);
         if (!source || source.type === "M3U") {
-          throw new Error("Episode details are available only when the source provides series episodes.");
+          throw new Error(t("app.episodesUnavailable"));
         }
         savedEpisodes = source.type === "STALKER"
           ? await loadStalkerEpisodes(source, item)
@@ -306,7 +308,7 @@ function App() {
       }
       setEpisodes(savedEpisodes);
     } catch (cause) {
-      setEpisodeError(cause instanceof Error ? cause.message : "Could not load episode details.");
+      setEpisodeError(cause instanceof Error ? cause.message : t("app.episodesFailed"));
     } finally {
       setEpisodeLoading(false);
     }
@@ -448,14 +450,14 @@ function App() {
         setSelectedMovie(movie);
         setSelectedSeries(null);
       } else {
-        notify("This movie isn't available in the currently loaded catalog.", "error");
+        notify(t("app.movieMissing"), "error");
       }
     } else if (favorite.contentType === "SERIES") {
       const show = visibleSeries.find((item) =>
         item.id === favorite.contentId && item.playlistId === favorite.playlistId,
       );
       if (show) void openSeries(show);
-      else notify("This series isn't available in the currently loaded catalog.", "error");
+      else notify(t("app.seriesMissing"), "error");
     }
   }
 
@@ -496,7 +498,7 @@ function App() {
             type="button"
           >
             <Icon name="error_outline" />
-            <span>Playlist expired</span>
+            <span>{t("topbar.expiredLabel")}</span>
           </button>
         )}
 
@@ -813,12 +815,12 @@ function App() {
         >
           <section className="refresh-progress-card">
             <span aria-hidden="true" className="spinner refresh-progress-spinner" />
-            <p className="eyebrow">SOURCE SYNC</p>
-            <h2 id="refresh-progress-title">Refreshing your catalog</h2>
+            <p className="eyebrow">{t("app.refreshEyebrow")}</p>
+            <h2 id="refresh-progress-title">{t("app.refreshTitle")}</h2>
             <p id="refresh-progress-description">
-              Updating channels, movies, series, and the TV guide. Please wait while the latest data is saved on this device.
+              {t("app.refreshDescription")}
             </p>
-            <ProgressIndicator label="Source refresh progress" />
+            <ProgressIndicator label={t("app.refreshProgress")} />
           </section>
         </div>
       )}

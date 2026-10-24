@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { recordCatalogImportSummary } from "../lib/catalogImportLog";
+import { formatNumber, t } from "../lib/i18n";
 import {
   canAutoRefreshCatalog,
   catalogRefreshDueAt,
@@ -84,7 +85,7 @@ export interface SourceDeps {
 
 // rtmp://, rtsp:// and udp:// entries cannot play in TiviHub, so the M3U parser leaves them out.
 const skippedLabel = (count: number) =>
-  count > 0 ? `${count.toLocaleString()} skipped (not HTTP or HTTPS)` : "";
+  count > 0 ? t("src.skipped", { count: formatNumber(count) }) : "";
 
 export function useSources(deps: SourceDeps) {
   const {
@@ -121,7 +122,7 @@ export function useSources(deps: SourceDeps) {
     }
     if (!source.epgUrl && source.type === "XTREAM") return null;
     if (!source.epgUrl) {
-      throw new Error("Add an XMLTV guide URL in the source settings before refreshing the guide.");
+      throw new Error(t("src.guideNoUrl"));
     }
     const programs = await fetchXmltv(source.epgUrl, source.id, source.userAgent);
     await replaceEpg(source.id, programs);
@@ -131,8 +132,8 @@ export function useSources(deps: SourceDeps) {
 
   function tvGuideFailureMessage(source: Playlist) {
     return !source.epgUrl && source.type === "M3U"
-      ? "Add a TV guide link in source settings to see listings."
-      : "The TV guide couldn't be loaded. Please try again later.";
+      ? t("src.guideAddLink")
+      : t("src.guideFailed");
   }
 
   async function loadGuideForChannels(
@@ -169,7 +170,7 @@ export function useSources(deps: SourceDeps) {
 
     for (const channel of pending) requestedEpgChannels.current.add(`${source.id}:${channel.id}`);
     setGuideLoadCount((count) => count + 1);
-    notify(`Loading the TV guide for ${pending.length} channels…`, "notice");
+    notify(t("src.guideLoading", { count: formatNumber(pending.length) }), "notice");
     try {
       let requestedCount = 0;
       let failedCount = 0;
@@ -192,14 +193,14 @@ export function useSources(deps: SourceDeps) {
       }
       const loadedCount = requestedCount - failedCount;
       notify(failedCount === 0
-        ? `TV guide loaded for ${loadedCount} channels (${programCount} programmes).`
+        ? t("src.guideLoaded", { loaded: formatNumber(loadedCount), programs: formatNumber(programCount) })
         : loadedCount === 0
-          ? `No TV guide information is available for these ${requestedCount} channels right now. Try again later or check with your TV provider.`
-          : `TV guide information loaded for ${loadedCount} of ${requestedCount} channels. Some listings may be missing; try again later or check with your TV provider.`,
+          ? t("src.guideNone", { requested: formatNumber(requestedCount) })
+          : t("src.guidePartial", { loaded: formatNumber(loadedCount), requested: formatNumber(requestedCount) }),
       "notice");
     } catch {
       for (const channel of pending) requestedEpgChannels.current.delete(`${source.id}:${channel.id}`);
-      notify("The TV guide couldn't be loaded. Please try again later.", "error");
+      notify(t("src.guideFailed"), "error");
     } finally {
       setGuideLoadCount((count) => Math.max(0, count - 1));
     }
@@ -217,7 +218,7 @@ export function useSources(deps: SourceDeps) {
         (playlist.fileName
           ? (await getPlaylistDocument(playlist.id))?.content
           : await fetchM3u(playlist.url, draft.signal, playlist.userAgent));
-      if (!content) throw new Error("The local M3U file could not be read.");
+      if (!content) throw new Error(t("src.fileUnreadable"));
       draft.onStage?.("parsing");
       const importedCatalog = await parseM3uCatalogAsync(content, {
         id: playlist.id,
@@ -265,10 +266,9 @@ export function useSources(deps: SourceDeps) {
     const changeSummary = summarizeCatalogChanges(previousCatalog, catalog);
     if (!isNewSource && isSuspiciousCatalogDrop(previousCatalog, catalog) &&
       !window.confirm(
-        `This source update would replace a large part of your saved catalog (${formatCatalogChangeSummary(changeSummary)}). ` +
-        "The provider may be temporarily returning incomplete data. Apply this update anyway?",
+        t("src.confirmUpdate", { summary: formatCatalogChangeSummary(changeSummary) }),
       )) {
-      throw new Error("Source update cancelled. Your saved catalog was kept.");
+      throw new Error(t("src.updateCancelled"));
     }
     draft.onStage?.("saving");
     const shouldActivate = isNewSource || activeSourceId === playlist.id || activeSourceId === null;
@@ -311,11 +311,11 @@ export function useSources(deps: SourceDeps) {
       episodes: importedEpisodes?.length ?? null,
     });
     const catalogSummary = playlist.type === "XTREAM" || playlist.type === "STALKER"
-      ? `${catalog.channels.length.toLocaleString()} live channels. Movies and series load as you open their categories`
+      ? t("src.catalogXtream", { channels: formatNumber(catalog.channels.length) })
       : [
-        `${catalog.channels.length.toLocaleString()} live channels`,
-        `${catalog.movies.length.toLocaleString()} movies`,
-        `${catalog.series.length.toLocaleString()} series`,
+        t("src.liveChannels", { count: formatNumber(catalog.channels.length) }),
+        t("src.movies", { count: formatNumber(catalog.movies.length) }),
+        t("src.seriesCount", { count: formatNumber(catalog.series.length) }),
         skippedLabel(skippedStreams),
       ].filter(Boolean).join(", ");
     if (shouldActivate) {
@@ -323,21 +323,21 @@ export function useSources(deps: SourceDeps) {
       try {
         const count = await loadGuide(playlist);
         const guideSummary = count === null
-          ? "TV guide listings load as you browse channels."
-          : `TV guide updated with ${count.toLocaleString()} programmes.`;
+          ? t("src.guideBrowse")
+          : t("src.guideUpdated", { count: formatNumber(count) });
         notify(
-          `Source ${isNewSource ? "connected" : "updated"}. ${catalogSummary}. ${guideSummary}`,
+          t(isNewSource ? "src.sourceConnected" : "src.sourceUpdated", { summary: catalogSummary, guide: guideSummary }),
           "notice",
         );
       } catch {
         notify(
-          `Source ${isNewSource ? "connected" : "updated"}. ${catalogSummary}. ${tvGuideFailureMessage(playlist)}`,
+          t(isNewSource ? "src.sourceConnected" : "src.sourceUpdated", { summary: catalogSummary, guide: tvGuideFailureMessage(playlist) }),
           "error",
         );
       }
     } else {
       notify(
-        `Source “${playlist.name}” updated: ${catalogSummary}. Your active source was not changed.`,
+        t("src.otherUpdated", { name: playlist.name, summary: catalogSummary }),
         "notice",
       );
     }
@@ -367,10 +367,10 @@ export function useSources(deps: SourceDeps) {
       });
       await reloadLocalData(shouldActivate ? playlist.id : activeSourceId ?? undefined);
       if (shouldActivate) setSection("Live TV");
-      notify("Development demo added locally. Its sample streams load only when played.", "notice");
+      notify(t("src.demoAdded"), "notice");
       return;
     }
-    throw new Error("Demo imports are only available during development.");
+    throw new Error(t("dlg.errDemoDev"));
   }
 
   async function refreshSource(source: Playlist, options: { background?: boolean } = {}) {
@@ -380,7 +380,7 @@ export function useSources(deps: SourceDeps) {
       return;
     }
     if (catalogRefreshInFlight.current.has(source.id)) {
-      if (!background) notify("A catalog refresh is already in progress.", "notice");
+      if (!background) notify(t("src.refreshBusy"), "notice");
       return;
     }
     catalogRefreshInFlight.current.add(source.id);
@@ -416,13 +416,13 @@ export function useSources(deps: SourceDeps) {
           importedEpisodes = importedCatalog.episodes;
           await savePlaylistDocument({ playlistId: source.id, content: DEMO_PLAYLIST_CONTENT });
         } else {
-          notify("This development-only demo source is unavailable in production.", "error");
+          notify(t("src.demoUnavailable"), "error");
           return;
         }
       } else if (source.type === "M3U") {
         const document = source.fileName ? await getPlaylistDocument(source.id) : undefined;
         const content = document?.content ?? (source.fileName ? undefined : await fetchM3u(source.url, undefined, source.userAgent));
-        if (content === undefined) throw new Error("The imported M3U file is missing from local app storage.");
+        if (content === undefined) throw new Error(t("src.m3uMissing"));
         const importedCatalog = await parseM3uCatalogAsync(content, {
           id: source.id,
           name: source.name,
@@ -451,7 +451,7 @@ export function useSources(deps: SourceDeps) {
       const savedSources = await getPlaylists();
       const currentSource = savedSources.find((entry) => entry.id === source.id);
       if (!currentSource) {
-        throw new Error("This source was removed while refreshing. Your saved catalog was not changed.");
+        throw new Error(t("src.removedDuring"));
       }
       if (
         currentSource.type !== source.type ||
@@ -464,7 +464,7 @@ export function useSources(deps: SourceDeps) {
         currentSource.epgUrl !== source.epgUrl ||
         currentSource.fileName !== source.fileName
       ) {
-        throw new Error("This source changed while refreshing. Your saved catalog was not changed; please retry.");
+        throw new Error(t("src.changedDuring"));
       }
 
       const previousCatalog = await getCatalogSnapshot(source.id);
@@ -475,8 +475,7 @@ export function useSources(deps: SourceDeps) {
       if (suspicious) {
         const outcome = background ? "review-required" : "kept-previous";
         const applyUpdate = !background && window.confirm(
-          `This refresh would replace a large part of your saved catalog (${formatCatalogChangeSummary(changeSummary)}). ` +
-          "The provider may be temporarily returning incomplete data. Apply the new catalog anyway?",
+          t("src.confirmRefresh", { summary: formatCatalogChangeSummary(changeSummary) }),
         );
         if (!applyUpdate) {
           const attemptedAt = Date.now();
@@ -489,8 +488,8 @@ export function useSources(deps: SourceDeps) {
           attemptRecorded = true;
           await reloadLocalData(background ? undefined : source.id);
           notify(background
-            ? `Your saved catalog was kept. An update would make a large change (${formatCatalogChangeSummary(changeSummary)}). Use Refresh to review it.`
-            : `Your saved catalog was kept. ${formatCatalogChangeSummary(changeSummary)} You can retry with Refresh.`,
+            ? t("src.keptBackground", { summary: formatCatalogChangeSummary(changeSummary) })
+            : t("src.keptManual", { summary: formatCatalogChangeSummary(changeSummary) }),
           "notice");
           return;
         }
@@ -522,7 +521,7 @@ export function useSources(deps: SourceDeps) {
       });
       await reloadLocalData(background ? undefined : source.id);
       if (background || source.demo) {
-        if (!background) notify("Demo playlist restored from its bundled M3U fixture.", "notice");
+        if (!background) notify(t("src.demoRestored"), "notice");
         return;
       }
       const summaryText = formatCatalogChangeSummary(changeSummary) +
@@ -530,15 +529,15 @@ export function useSources(deps: SourceDeps) {
       try {
         const count = await loadGuide(source);
         notify(count === null
-          ? `Catalog updated. ${summaryText} Open the TV guide to load recent programmes for the channels on each page.`
-          : `Catalog updated. ${summaryText} TV guide: ${count.toLocaleString()} programmes.`,
+          ? t("src.catalogUpdatedBrowse", { summary: summaryText })
+          : t("src.catalogUpdated", { summary: summaryText, count: formatNumber(count) }),
         "notice");
       } catch {
-        notify(`Catalog updated. ${summaryText} ${tvGuideFailureMessage(source)}`, "error");
+        notify(t("src.catalogUpdatedFailed", { summary: summaryText, failure: tvGuideFailureMessage(source) }), "error");
       }
     } catch (cause) {
       if (catalogCommitted || attemptRecorded) {
-        throw new Error("The refresh outcome was saved, but the app could not reload the updated local view.", { cause });
+        throw new Error(t("src.reloadFailed"), { cause });
       }
       try {
         const savedSources = await getPlaylists();
@@ -562,7 +561,7 @@ export function useSources(deps: SourceDeps) {
         console.error("Could not save the failed catalog refresh status", statusError);
         throw new AggregateError(
           [cause, statusError],
-          "The catalog refresh failed, and its status could not be saved locally.",
+          t("src.statusUnsaved"),
           { cause: statusError },
         );
       }
@@ -607,7 +606,7 @@ export function useSources(deps: SourceDeps) {
         if (cancelled) return;
         console.error("Automatic catalog refresh failed; cached catalog remains available", cause);
         const detail = cause instanceof Error ? ` ${cause.message}` : "";
-        notify(`Automatic refresh failed. Your cached catalog is still available.${detail}`, "error");
+        notify(t("src.autoFailed", { detail }), "error");
         schedule(60 * 60 * 1000);
       });
     };
@@ -628,14 +627,14 @@ export function useSources(deps: SourceDeps) {
       setEpisodes([]);
       setSection("Home");
       const source = sources.find((entry) => entry.id === sourceId);
-      if (source) notify(`Using “${source.name}”. Catalogs refresh automatically every 24 hours.`, "notice");
+      if (source) notify(t("src.using", { name: source.name }), "notice");
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not switch sources.", "error");
+      notify(cause instanceof Error ? cause.message : t("src.switchFailed"), "error");
     }
   }
 
   async function removeSource(source: Playlist) {
-    if (!window.confirm(`Delete “${source.name}” and all catalog, favorite, guide, and library data linked to it from this app?`)) return;
+    if (!window.confirm(t("src.confirmDelete", { name: source.name }))) return;
     setDeletingSource({ name: source.name, completed: 0, total: 0, phase: "preparing" });
     try {
       await deletePlaylist(source.id, (completed, total) => {
@@ -658,9 +657,9 @@ export function useSources(deps: SourceDeps) {
       await reloadLocalData(preferredSourceId);
       setSelectedSeries(null);
       setEpisodes([]);
-      notify(`“${source.name}” and its local data were deleted.`, "notice");
+      notify(t("src.deleted", { name: source.name }), "notice");
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not delete this source.", "error");
+      notify(cause instanceof Error ? cause.message : t("src.deleteFailed"), "error");
     } finally {
       setDeletingSource(null);
     }
@@ -671,7 +670,7 @@ export function useSources(deps: SourceDeps) {
     try {
       await refreshSource(activeSource);
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : "Could not refresh this source.", "error");
+      notify(cause instanceof Error ? cause.message : t("src.refreshFailed"), "error");
     }
   }
 
@@ -685,14 +684,14 @@ export function useSources(deps: SourceDeps) {
         const targets = (previouslyRequested.length > 0 ? previouslyRequested : channels.slice(0, 24))
           .slice(0, 96);
         if (targets.length === 0) {
-          notify("No live channels are available to load guide data for.", "notice");
+          notify(t("src.noLiveForGuide"), "notice");
           return;
         }
         await loadGuideForChannels(targets, true);
         return;
       }
       const count = await loadGuide(activeSource);
-      notify(`TV guide updated with ${(count ?? 0).toLocaleString()} programmes.`, "notice");
+      notify(t("src.guideUpdated", { count: formatNumber(count ?? 0) }), "notice");
     } catch {
       notify(tvGuideFailureMessage(activeSource), "error");
     }

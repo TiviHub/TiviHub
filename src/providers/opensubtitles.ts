@@ -1,4 +1,9 @@
 import { recordDiagnosticFailure } from "../lib/diagnosticLog";
+import { t } from "../lib/i18n";
+
+// Checked with instanceof: the message is translated, so it cannot be compared as text.
+class SubtitleRequestError extends Error {}
+class SubtitleTooLargeError extends Error {}
 import type { OpenSubtitleSearchResult } from "../types";
 
 export type SubtitleResult = OpenSubtitleSearchResult;
@@ -24,7 +29,7 @@ function withRequestTimeout<T>(
   const timeoutPromise = new Promise<never>((_resolve, reject) => {
     timeoutId = setTimeout(() => {
       recordDiagnosticFailure("subtitle-search", "network");
-      reject(new Error("OpenSubtitles did not respond within 20 seconds. Check your connection and try again."));
+      reject(new Error(t("err.osTimeout")));
       controller.abort();
     }, OPENSUBTITLES_REQUEST_TIMEOUT_MILLIS);
   });
@@ -41,7 +46,7 @@ async function request(
   signal?: AbortSignal,
   init: RequestInit = {},
 ): Promise<Response> {
-  if (!apiKey.trim()) throw new Error("Add an OpenSubtitles API key in Settings first.");
+  if (!apiKey.trim()) throw new Error(t("err.osNoKey"));
   try {
     const response = await fetch(url, {
       ...init,
@@ -54,15 +59,15 @@ async function request(
     });
     if (!response.ok) {
       recordDiagnosticFailure("subtitle-search", "http", response.status);
-      throw new Error(`OpenSubtitles request failed with HTTP ${response.status}.`);
+      throw new SubtitleRequestError(t("err.osHttp", { status: response.status }));
     }
     return response;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    if (error instanceof Error && error.message.startsWith("OpenSubtitles request failed")) throw error;
+    if (error instanceof SubtitleRequestError) throw error;
     recordDiagnosticFailure("subtitle-search", "network");
     throw new Error(
-      "OpenSubtitles could not be reached from TiviHub. Check your API key and cross-origin access.",
+      t("err.osNetwork"),
       { cause: error },
     );
   }
@@ -81,7 +86,7 @@ async function searchOpenSubtitlesRequest(
   query: string,
   signal: AbortSignal,
 ): Promise<SubtitleResult[]> {
-  if (!query.trim()) throw new Error("Enter a movie or episode title to search.");
+  if (!query.trim()) throw new Error(t("err.osNoQuery"));
   const url = new URL(`${API_BASE}/subtitles`);
   url.searchParams.set("query", query.trim());
   url.searchParams.set("order_by", "download_count");
@@ -92,7 +97,7 @@ async function searchOpenSubtitlesRequest(
     payload = await response.json();
   } catch {
     recordDiagnosticFailure("subtitle-search", "invalid-response");
-    throw new Error("OpenSubtitles returned invalid search results.");
+    throw new Error(t("err.osInvalidResults"));
   }
   if (!payload || typeof payload !== "object") return [];
   const results = (payload as { data?: unknown }).data;
@@ -145,7 +150,7 @@ async function downloadOpenSubtitleRequest(
   signal: AbortSignal,
 ): Promise<{ name: string; contents: string }> {
   if (!Number.isSafeInteger(fileId) || fileId <= 0) {
-    throw new Error("OpenSubtitles file ID is invalid.");
+    throw new Error(t("err.osBadId"));
   }
   const downloadRequest = await request(`${API_BASE}/download`, apiKey, signal, {
     method: "POST",
@@ -157,35 +162,35 @@ async function downloadOpenSubtitleRequest(
     value = await downloadRequest.json();
   } catch {
     recordDiagnosticFailure("subtitle-download", "invalid-response");
-    throw new Error("OpenSubtitles returned invalid download details.");
+    throw new Error(t("err.osInvalidDownload"));
   }
-  if (!value || typeof value !== "object") throw new Error("OpenSubtitles returned invalid download details.");
+  if (!value || typeof value !== "object") throw new Error(t("err.osInvalidDownload"));
   const details = value as DownloadDetails;
   if (typeof details.link !== "string") {
-    throw new Error("OpenSubtitles did not provide a secure download link.");
+    throw new Error(t("err.osNoLink"));
   }
   let downloadUrl: URL;
   try {
     downloadUrl = new URL(details.link);
   } catch {
-    throw new Error("OpenSubtitles did not provide a secure download link.");
+    throw new Error(t("err.osNoLink"));
   }
   if (downloadUrl.protocol !== "https:" || !downloadUrl.hostname || downloadUrl.username || downloadUrl.password) {
-    throw new Error("OpenSubtitles did not provide a secure download link.");
+    throw new Error(t("err.osNoLink"));
   }
   const file = await fetch(downloadUrl, { signal }).catch((error: unknown) => {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     recordDiagnosticFailure("subtitle-download", "network");
-    throw new Error("Subtitle download is blocked by cross-origin access from this app. Import a subtitle file instead.");
+    throw new Error(t("err.osBlocked"));
   });
   if (!file.ok) {
     recordDiagnosticFailure("subtitle-download", "http", file.status);
-    throw new Error(`Subtitle download failed with HTTP ${file.status}.`);
+    throw new Error(t("err.osDlHttp", { status: file.status }));
   }
-  if (!file.body) throw new Error("Subtitle provider returned an empty file.");
+  if (!file.body) throw new Error(t("err.osEmpty"));
   const declaredSize = Number(file.headers.get("content-length"));
   if (Number.isFinite(declaredSize) && declaredSize > MAX_SUBTITLE_BYTES) {
-    throw new Error("Subtitle file exceeds the 5 MB limit.");
+    throw new SubtitleTooLargeError(t("err.osTooLarge"));
   }
   const reader = file.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -197,14 +202,14 @@ async function downloadOpenSubtitleRequest(
       total += result.value.byteLength;
       if (total > MAX_SUBTITLE_BYTES) {
         await reader.cancel();
-        throw new Error("Subtitle file exceeds the 5 MB limit.");
+        throw new SubtitleTooLargeError(t("err.osTooLarge"));
       }
       chunks.push(result.value);
     }
   } catch (error) {
-    if (error instanceof Error && error.message === "Subtitle file exceeds the 5 MB limit.") throw error;
+    if (error instanceof SubtitleTooLargeError) throw error;
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-    throw new Error("Subtitle download was interrupted.", { cause: error });
+    throw new Error(t("err.osInterrupted"), { cause: error });
   } finally {
     reader.releaseLock();
   }
@@ -216,7 +221,7 @@ async function downloadOpenSubtitleRequest(
   }
   const contents = new TextDecoder().decode(buffer);
   if (!contents.trim() || /^<!DOCTYPE|^<html/i.test(contents.trim())) {
-    throw new Error("The subtitle provider returned an invalid file.");
+    throw new Error(t("err.osInvalidFile"));
   }
   return {
     name: typeof details.file_name === "string" ? details.file_name : `subtitle-${fileId}.srt`,

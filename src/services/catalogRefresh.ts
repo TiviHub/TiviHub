@@ -1,3 +1,4 @@
+import { formatNumber, t } from "../lib/i18n";
 import type {
   CatalogChangeCount,
   CatalogChangeSummary,
@@ -49,8 +50,8 @@ export function formatCatalogChangeSummary(summary: CatalogChangeSummary): strin
     .filter((count): count is CatalogChangeCount => count !== undefined);
   const added = counts.reduce((total, count) => total + count.added, 0);
   const removed = counts.reduce((total, count) => total + count.removed, 0);
-  if (added === 0 && removed === 0) return "No catalog changes.";
-  return `${added.toLocaleString()} added, ${removed.toLocaleString()} removed.`;
+  if (added === 0 && removed === 0) return t("src.noChanges");
+  return t("src.addedRemoved", { added: formatNumber(added), removed: formatNumber(removed) });
 }
 
 /** Xtream imports only live channels: the movies and series read while browsing stay as they are. Changes `next` in place. */
@@ -61,10 +62,10 @@ export function keepBrowsedTitles(next: CatalogCandidate, previous: CatalogSnaps
 
 export function validateCatalogForSource(sourceId: string, catalog: CatalogCandidate): void {
   const collections: Array<[string, Array<{ id: string; playlistId: string }>]> = [
-    ["channels", catalog.channels],
-    ["movies", catalog.movies],
-    ["series", catalog.series],
-    ...(catalog.episodes === undefined ? [] : [["episodes", catalog.episodes] as [
+    [t("src.nameChannels"), catalog.channels],
+    [t("src.nameMovies"), catalog.movies],
+    [t("src.nameSeries"), catalog.series],
+    ...(catalog.episodes === undefined ? [] : [[t("src.nameEpisodes"), catalog.episodes] as [
       string,
       Array<{ id: string; playlistId: string }>,
     ]]),
@@ -74,10 +75,10 @@ export function validateCatalogForSource(sourceId: string, catalog: CatalogCandi
     const ids = new Set<string>();
     for (const record of records) {
       if (!record.id || record.playlistId !== sourceId) {
-        throw new Error(`The refreshed ${name} list did not match this source. Your saved catalog was kept.`);
+        throw new Error(t("src.listMismatch", { name }));
       }
       if (ids.has(record.id)) {
-        throw new Error(`The refreshed ${name} list contained duplicate items. Your saved catalog was kept.`);
+        throw new Error(t("src.listDuplicates", { name }));
       }
       ids.add(record.id);
     }

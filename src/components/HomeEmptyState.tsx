@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { t } from "../lib/i18n";
 import { Icon, type IconName } from "./common";
 
 const ASSET_BASE_URL = import.meta.env.BASE_URL;
@@ -10,7 +11,7 @@ export function HomeEmptyState({
   actionLabel,
   actionIcon,
   onAction,
-  artLabel = "YOUR LIBRARY",
+  artLabel,
   className = "",
   children,
 }: {
@@ -48,10 +49,10 @@ export function HomeEmptyState({
           <span className="home-empty-star home-empty-star-two">✧</span>
           <span className="home-empty-caption">TIVIHUB / DESKTOP</span>
           <div className="home-empty-art-card home-empty-art-card-top">
-            <Icon name="movie" /><span>{artLabel}</span>
+            <Icon name="movie" /><span>{artLabel ?? t("home.yourLibrary")}</span>
           </div>
           <div className="home-empty-art-card home-empty-art-card-bottom">
-            <span className="home-empty-art-pulse" /><span>READY WHEN YOU ARE</span>
+            <span className="home-empty-art-pulse" /><span>{t("home.ready")}</span>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import type { MdblistRateLimitState } from "../types";
+import { t } from "./i18n";
 import { MdblistError } from "./mdblistError";
 
 const RATE_LIMIT_STATE_KEY = "account";
@@ -30,7 +31,7 @@ function retryAfterAt(headers: Headers, now: number): number | undefined {
 }
 
 function quotaError(retryAt?: number): MdblistError {
-  return new MdblistError("rate-limited", "MDBList request limit reached. Try again after the rate limit resets.", 429, retryAt);
+  return new MdblistError("rate-limited", t("mdblist.limitReached"), 429, retryAt);
 }
 
 export function createMdblistRateLimiter(options: {

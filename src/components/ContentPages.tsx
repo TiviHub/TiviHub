@@ -1,5 +1,6 @@
 import { Skeleton } from "./Skeleton";
 import type { EpgProgram, LiveChannel, Movie, PlayableItem, Series } from "../types";
+import { t, tCount } from "../lib/i18n";
 import { Icon } from "./common";
 
 type CatalogSection = "Live TV" | "Movies" | "Series";
@@ -63,9 +64,9 @@ export function CatalogCard({
   return (
     <article className={`catalog-card${isLive ? " live-card" : ""}`}>
       <button
-        aria-label={isLive ? `Play ${item.name}` : `View details for ${item.name}`}
+        aria-label={isLive ? t("card.play", { name: item.name }) : t("card.details", { name: item.name })}
         className="catalog-card-main"
-        data-tooltip={isLive ? `Play ${item.name}` : `View details for ${item.name}`}
+        data-tooltip={isLive ? t("card.play", { name: item.name }) : t("card.details", { name: item.name })}
         onClick={onOpen}
         type="button"
       >
@@ -80,9 +81,9 @@ export function CatalogCard({
               src={artwork}
             />
           )}
-          {isLive && <span className="live-badge"><span /> LIVE</span>}
+          {isLive && <span className="live-badge"><span /> {t("card.live")}</span>}
           {!isLive && "seasons" in item && item.seasons > 0 && (
-            <span className="catalog-meta">{item.seasons} seasons</span>
+            <span className="catalog-meta">{tCount("card.seasons", item.seasons)}</span>
           )}
         </span>
         <span className="catalog-card-copy">
@@ -97,10 +98,10 @@ export function CatalogCard({
         </span>
       </button>
       <button
-        aria-label={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+        aria-label={isFavorite ? t("card.favRemove", { name: item.name }) : t("card.favAdd", { name: item.name })}
         aria-pressed={isFavorite}
         className={`favorite-button${isFavorite ? " selected" : ""}`}
-        data-tooltip={`${isFavorite ? "Remove" : "Add"} ${isLive ? "TV Channel" : section === "Movies" ? "Movie" : "Series"} ${isFavorite ? "from" : "to"} favorites`}
+        data-tooltip={t(isFavorite ? "card.favRemoveTooltip" : "card.favAddTooltip", { kind: t(isLive ? "card.kindChannel" : section === "Movies" ? "card.kindMovie" : "card.kindSeries") })}
         onClick={onFavorite}
         type="button"
       >
@@ -108,10 +109,10 @@ export function CatalogCard({
       </button>
       {!isLive && (
         <button
-          aria-label={inLibrary ? `${item.name} is saved in your library` : `Add ${item.name} to your watchlist`}
+          aria-label={inLibrary ? t("card.inLibrary", { name: item.name }) : t("card.addWatchlist", { name: item.name })}
           aria-pressed={inLibrary}
           className={`catalog-library-button${inLibrary ? " selected" : ""}`}
-          data-tooltip={inLibrary ? "Already in your library" : "Add to watchlist"}
+          data-tooltip={inLibrary ? t("card.inLibraryTooltip") : t("card.addWatchlistTooltip")}
           disabled={inLibrary}
           onClick={onAddToLibrary}
           type="button"

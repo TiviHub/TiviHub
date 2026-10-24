@@ -1,3 +1,5 @@
+import { t } from "../lib/i18n";
+
 const RELEASES_API_URL = "https://api.github.com/repos/TiviHub/TiviHub/releases?per_page=100";
 const RELEASES_PAGE_ORIGIN = "https://github.com";
 const INSTALLER_ASSET_NAME = "TiviHub-setup.exe";
@@ -113,8 +115,8 @@ export function latestAvailableUpdate(
   currentVersion: string,
 ): AvailableUpdate | null {
   const current = parseVersion(currentVersion);
-  if (!current) throw new Error(`The installed app version is not valid: ${currentVersion}`);
-  if (!Array.isArray(payload)) throw new Error("GitHub returned an invalid releases list.");
+  if (!current) throw new Error(t("upd.invalidVersion", { version: currentVersion }));
+  if (!Array.isArray(payload)) throw new Error(t("upd.invalidList"));
 
   const candidates = payload
     .map(releaseFrom)
@@ -150,7 +152,7 @@ export async function checkForUpdate(
     signal,
   });
   if (!response.ok) {
-    throw new Error(`GitHub returned HTTP ${response.status} while checking releases.`);
+    throw new Error(t("upd.http", { status: response.status }));
   }
   return latestAvailableUpdate(await response.json() as unknown, currentVersion);
 }

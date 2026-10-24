@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ContentType } from "../types";
+import { t } from "../lib/i18n";
 import { Icon } from "./common";
 
 /** A saved title in the Library: the same card as Movies and Series, with its own round action top-right. */
@@ -28,7 +29,7 @@ export function LibraryCard({ title, subtitle, contentType, artworkUrl, openLabe
         <span className="catalog-artwork">
           <span className="catalog-artwork-fallback"><Icon name={isLive ? "live_tv" : contentType === "MOVIE" ? "movie" : "tv"} /></span>
           {artworkUrl && <img alt="" draggable={false} loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={artworkUrl} />}
-          {isLive && <span className="live-badge"><span /> LIVE</span>}
+          {isLive && <span className="live-badge"><span /> {t("card.live")}</span>}
         </span>
         <span className="catalog-card-copy">
           <strong data-tooltip={title}>{title}</strong>

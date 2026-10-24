@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../lib/i18n";
 
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -47,7 +48,7 @@ export function useAppPreferences(notify: (message: string, kind: "error" | "not
       window.localStorage.setItem("tivihub.web.theme", value);
     } catch (cause) {
       console.error("Could not save the local theme preference", cause);
-      notify("Could not save the theme preference on this device.", "error");
+      notify(t("prefs.themeSaveFailed"), "error");
     }
   }
 
@@ -57,7 +58,7 @@ export function useAppPreferences(notify: (message: string, kind: "error" | "not
       window.localStorage.setItem("tivihub.web.show-adult-content", String(value));
     } catch (cause) {
       console.error("Could not save the local adult-content preference", cause);
-      notify("Could not save the adult-content preference on this device.", "error");
+      notify(t("prefs.adultSaveFailed"), "error");
     }
   }
 

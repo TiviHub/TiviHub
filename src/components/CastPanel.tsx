@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { Icon } from "./common";
 import { RowSkeletons } from "./Skeleton";
 import type { CastDeviceInfo } from "../lib/playbackMedia";
@@ -24,16 +25,16 @@ export function CastPanel({
   castToDevice: (device: CastDeviceInfo) => Promise<void>;
 }) {
   return (
-      <section aria-label="Cast to a device" className="cast-panel">
+      <section aria-label={t("cast.aria")} className="cast-panel">
         <div className="cast-panel-heading">
-          <strong>Google Cast devices</strong>
+          <strong>{t("cast.heading")}</strong>
           <button
             className="text-button"
             disabled={castBusy}
             onClick={() => void openCastPanel()}
             type="button"
           >
-            {castBusy ? "Searching…" : "Refresh"}
+            {castBusy ? t("sub.searching") : t("cast.refresh")}
           </button>
         </div>
         {castError && (
@@ -41,7 +42,7 @@ export function CastPanel({
             <p className="form-error" role="alert">{castError}</p>
             <button className="text-button" onClick={() => void copyDiagnostics()} type="button">
               <Icon name="content_copy" />
-              Copy error details
+              {t("cast.copyDetails")}
             </button>
             {diagnosticCopyMessage && (
               <p aria-live="polite" className="playback-error-copy-status">{diagnosticCopyMessage}</p>
@@ -50,7 +51,7 @@ export function CastPanel({
         )}
         {castBusy && castDevices.length === 0 && (
           <div aria-live="polite" role="status">
-            <span className="sr-only">Searching for Google Cast devices…</span>
+            <span className="sr-only">{t("cast.searchingSr")}</span>
             <RowSkeletons count={2} />
           </div>
         )}
@@ -72,10 +73,10 @@ export function CastPanel({
           </ul>
         )}
         {!castBusy && castDevices.length === 0 && !castError && (
-          <p className="form-note">No Chromecast devices found on your local network.</p>
+          <p className="form-note">{t("cast.none")}</p>
         )}
         <p className="form-note">
-          The Chromecast fetches the stream directly from your provider. TiviHub does not relay media.
+          {t("cast.note")}
         </p>
       </section>
   );

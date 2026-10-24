@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { t } from "../lib/i18n";
 import {
   getChannels,
   getEpgPrograms,
@@ -86,7 +87,7 @@ export function useLocalData({ notify, setFavorites, setLibrary }: Options) {
       if (active) setReady(true);
     }).catch((cause: unknown) => {
       if (active) {
-        notify(cause instanceof Error ? cause.message : "Could not open local TiviHub data.", "error");
+        notify(cause instanceof Error ? cause.message : t("store.openFailed"), "error");
         setReady(true);
       }
     });

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatDate, t } from "../lib/i18n";
 import { RowSkeletons } from "./Skeleton";
 import type { DownloadRecord, DownloadTask } from "../services/downloads";
 import { Icon } from "./common";
@@ -54,30 +55,30 @@ export function DownloadsPage({
   return (
     <BrowseShell
       count={view === "active" ? tasks.length : downloads.length}
-      label="Downloads"
+      label={t("nav.downloads")}
       nav={(
         <NavPanel
           items={[
-            { id: "active", label: "In progress", icon: "download", count: tasks.length },
-            { id: "saved", label: downloads.length > 0 ? `Saved · ${formatBytes(totalSize)}` : "Saved", icon: "check_circle", count: downloads.length },
+            { id: "active", label: t("downloads.active"), icon: "download", count: tasks.length },
+            { id: "saved", label: downloads.length > 0 ? t("downloads.savedWithSize", { size: formatBytes(totalSize) }) : t("downloads.saved"), icon: "check_circle", count: downloads.length },
           ]}
           onSelect={(id) => setPicked(id as "active" | "saved")}
           selectedId={view}
-          title="Downloads"
+          title={t("nav.downloads")}
         />
       )}
-      title={view === "active" ? "In progress" : "Saved on this device"}
+      title={view === "active" ? t("downloads.active") : t("downloads.savedTitle")}
     >
       {loading ? (
         <div aria-live="polite" role="status">
-          <span className="sr-only">Loading downloads…</span>
+          <span className="sr-only">{t("downloads.loading")}</span>
           <RowSkeletons artwork count={4} />
         </div>
       ) : (
         <>
-          {view === "active" && tasks.length === 0 && <EmptyPanel icon="download" title="Nothing is downloading">Downloads you start show their progress here.</EmptyPanel>}
+          {view === "active" && tasks.length === 0 && <EmptyPanel icon="download" title={t("downloads.idleTitle")}>{t("downloads.idleBody")}</EmptyPanel>}
           {view === "saved" && downloads.length === 0 && (
-            <EmptyPanel icon="check_circle" title="Nothing saved yet">Choose Download on a movie or episode to keep it here for offline playback.</EmptyPanel>
+            <EmptyPanel icon="check_circle" title={t("downloads.emptyTitle")}>{t("downloads.emptyBody")}</EmptyPanel>
           )}
           {view === "active" && tasks.map((task) => {
             const progress = task.totalBytes && task.totalBytes > 0
@@ -92,11 +93,11 @@ export function DownloadsPage({
                 </div>
                 <div className="download-item-info">
                   <strong>{task.title}</strong>
-                  <small>{task.media.contentType === "EPISODE" ? task.media.parentTitle ?? "Episode" : "Movie"}</small>
+                  <small>{task.media.contentType === "EPISODE" ? task.media.parentTitle ?? t("downloads.kindEpisode") : t("card.kindMovie")}</small>
                   {task.status === "downloading" ? (
                     <>
                       <div
-                        aria-label={progress === null ? `Downloaded ${formatBytes(task.receivedBytes)}` : `Download progress ${Math.round(progress)}%`}
+                        aria-label={progress === null ? t("downloads.receivedAria", { size: formatBytes(task.receivedBytes) }) : t("downloads.progressAria", { percent: Math.round(progress) })}
                         className={`download-progress${progress === null ? " is-indeterminate" : ""}`}
                         role="progressbar"
                         aria-valuemin={progress === null ? undefined : 0}
@@ -105,18 +106,18 @@ export function DownloadsPage({
                       >
                         <span style={progress === null ? undefined : { width: `${progress}%` }} />
                       </div>
-                      <small>{formatBytes(task.receivedBytes)}{task.totalBytes ? ` of ${formatBytes(task.totalBytes)}` : " downloaded"}</small>
+                      <small>{task.totalBytes ? t("downloads.of", { received: formatBytes(task.receivedBytes), total: formatBytes(task.totalBytes) }) : t("downloads.downloadedSize", { received: formatBytes(task.receivedBytes) })}</small>
                     </>
                   ) : (
-                    <small className="download-item-error">{task.error ?? "Download failed."}</small>
+                    <small className="download-item-error">{task.error ?? t("downloads.failed")}</small>
                   )}
                 </div>
                 {task.status === "downloading" ? (
                   <button
-                    aria-label={`Cancel download of ${task.title}`}
+                    aria-label={t("downloads.cancelAria", { title: task.title })}
                     className="icon-button"
                     onClick={() => onCancel(task.id, task.title)}
-                    data-tooltip="Cancel download"
+                    data-tooltip={t("downloads.cancelTooltip")}
                     type="button"
                   >
                     <Icon name="close" />
@@ -124,12 +125,12 @@ export function DownloadsPage({
                 ) : (
                   <>
                     <button className="secondary-button" onClick={() => onRetry(task)} type="button">
-                      <Icon name="refresh" /> Retry
+                      <Icon name="refresh" /> {t("downloads.retry")}
                     </button>
                     <button
-                      aria-label={`Remove failed download of ${task.title}`}
+                      aria-label={t("downloads.removeFailedAria", { title: task.title })}
                       className="icon-button"
-                      data-tooltip="Remove failed download"
+                      data-tooltip={t("downloads.removeFailedTooltip")}
                       onClick={() => onRemoveFailed(task.id)}
                       type="button"
                     >
@@ -152,23 +153,23 @@ export function DownloadsPage({
                 <strong>{download.title}</strong>
                 <small>
                   {download.parentTitle ? `${download.parentTitle} · ` : ""}
-                  {formatBytes(download.sizeBytes)} · Downloaded {new Date(download.completedAt).toLocaleDateString()}
+                  {t("downloads.sizeDate", { size: formatBytes(download.sizeBytes), date: formatDate(download.completedAt, {}) })}
                 </small>
               </div>
               <button
-                aria-label={`Play downloaded ${download.title}`}
+                aria-label={t("downloads.playAria", { title: download.title })}
                 className="icon-button download-play-button"
                 onClick={() => onPlay(download)}
-                data-tooltip="Play offline"
+                data-tooltip={t("downloads.playTooltip")}
                 type="button"
               >
                 <Icon name="play_arrow" />
               </button>
               <button
-                aria-label={`Delete downloaded ${download.title}`}
+                aria-label={t("downloads.deleteAria", { title: download.title })}
                 className="icon-button download-delete-button"
                 onClick={() => onDelete(download.id, download.title)}
-                data-tooltip="Delete download"
+                data-tooltip={t("downloads.deleteTooltip")}
                 type="button"
               >
                 <Icon name="delete" />
@@ -178,7 +179,7 @@ export function DownloadsPage({
         </>
       )}
       {!loading && hasItems && (
-        <p className="panel-note">Offline downloads support direct, non-DRM video files only. HLS streams and protected videos can’t be saved.</p>
+        <p className="panel-note">{t("downloads.note")}</p>
       )}
     </BrowseShell>
   );

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { BrowseCategory, BrowseSort } from "../browse/types";
+import { formatNumber, t } from "../lib/i18n";
 import { SearchField } from "./common";
 import { EmptyPanel } from "./EmptyPanel";
 import { BrowseSortButton } from "./BrowseSortButton";
@@ -42,15 +43,15 @@ export function BrowseCategoryList({
     <aside aria-label={title} className="live-channel-sidebar browse-category-panel">
       <div className="live-channel-sidebar-heading">
         <h2>{title}</h2>
-        <span>{categories.filter((category) => !category.pinned && category.id !== "").length.toLocaleString()}</span>
+        <span>{formatNumber(categories.filter((category) => !category.pinned && category.id !== "").length)}</span>
       </div>
       <div className="browse-panel-tools">
-        <SearchField label="Filter categories" onChange={setFilter} placeholder="Filter categories" value={filter} />
-        <BrowseSortButton label="Sort categories" onChange={setSort} value={sort} />
+        <SearchField label={t("categories.filter")} onChange={setFilter} placeholder={t("categories.filter")} value={filter} />
+        <BrowseSortButton label={t("categories.sort")} onChange={setSort} value={sort} />
       </div>
       <div className={`live-channel-list browse-list${loading ? " is-loading" : ""}`}>
         {error && (
-          <EmptyPanel action={<button className="secondary-button" onClick={onRetry} type="button">Try again</button>} error icon="error_outline" title="Could not load categories">{error}</EmptyPanel>
+          <EmptyPanel action={<button className="secondary-button" onClick={onRetry} type="button">{t("common.tryAgain")}</button>} error icon="error_outline" title={t("categories.loadFailed")}>{error}</EmptyPanel>
         )}
         {shown.map((category) => (
           <button
@@ -61,16 +62,16 @@ export function BrowseCategoryList({
             type="button"
           >
             <span className="browse-category-name">{category.name}</span>
-            {category.count !== undefined && <span className="browse-category-count">{category.count.toLocaleString()}</span>}
+            {category.count !== undefined && <span className="browse-category-count">{formatNumber(category.count)}</span>}
           </button>
         ))}
         {loading && (
           <div aria-live="polite" role="status">
-            <span className="sr-only">Loading categories…</span>
+            <span className="sr-only">{t("categories.loading")}</span>
             <CategorySkeletons count={24} />
           </div>
         )}
-        {!loading && !error && shown.length === 0 && <EmptyPanel icon="search" title="No matches">No category matches your filter.</EmptyPanel>}
+        {!loading && !error && shown.length === 0 && <EmptyPanel icon="search" title={t("categories.noMatchesTitle")}>{t("categories.noMatchesBody")}</EmptyPanel>}
       </div>
     </aside>
   );

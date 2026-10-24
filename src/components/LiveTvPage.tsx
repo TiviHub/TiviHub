@@ -3,6 +3,7 @@ import { sortByName } from "../browse/lists";
 import type { BrowseSort } from "../browse/types";
 import { useLiveBrowse } from "../hooks/useLiveBrowse";
 import { FAVORITES_ID, useCategoryEntries } from "../hooks/useCategoryEntries";
+import { formatNumber, t, useT } from "../lib/i18n";
 import type { EpgProgram, Favorite, LiveChannel, PlayableItem, Playlist } from "../types";
 import { BrowseCategoryList } from "./BrowseCategoryList";
 import { BrowseSortButton } from "./BrowseSortButton";
@@ -34,7 +35,7 @@ function ChannelRow({
   return (
     <article className={`live-channel-list-item${isSelected ? " selected" : ""}`} role="listitem">
       <button
-        aria-label={`Play ${channel.name}`}
+        aria-label={t("card.play", { name: channel.name })}
         aria-pressed={isSelected}
         className="live-channel-select"
         data-tooltip={`${channel.name} · ${channel.group}${current ? ` · ${current.title}` : ""}`}
@@ -52,13 +53,13 @@ function ChannelRow({
           {current && <small className="live-channel-current-program">{current.title}</small>}
           {!current && guideLoading && <Skeleton className="skeleton-line" />}
         </span>
-        {isPlaying && <span aria-label="Playing" className="live-channel-playing"><Icon name="play_arrow" /></span>}
+        {isPlaying && <span aria-label={t("live.playing")} className="live-channel-playing"><Icon name="play_arrow" /></span>}
       </button>
       <button
-        aria-label={isFavorite ? `Remove ${channel.name} from favorites` : `Add ${channel.name} to favorites`}
+        aria-label={isFavorite ? t("card.favRemove", { name: channel.name }) : t("card.favAdd", { name: channel.name })}
         aria-pressed={isFavorite}
         className={`live-channel-favorite${isFavorite ? " selected" : ""}`}
-        data-tooltip={isFavorite ? "Remove TV Channel from favorites" : "Add TV Channel to favorites"}
+        data-tooltip={t(isFavorite ? "card.favRemoveTooltip" : "card.favAddTooltip", { kind: t("card.kindChannel") })}
         onClick={onToggleFavorite}
         type="button"
       >
@@ -122,18 +123,19 @@ export function LiveTvPage({
     return () => window.clearInterval(timer);
   }, []);
 
+  const tr = useT();
   const favoriteChannels = useMemo<LiveChannel[]>(() => favorites
     .filter((favorite) => favorite.contentType === "LIVE" && favorite.playlistId === source?.id && favorite.streamUrl)
     .map((favorite) => ({
       id: favorite.contentId,
       playlistId: favorite.playlistId,
       name: favorite.title,
-      group: "Favorites",
+      group: tr("browse.favorites"),
       streamUrl: favorite.streamUrl!,
       logoUrl: favorite.artworkUrl,
       drmLicenseUrl: favorite.drmLicenseUrl,
       drmSystem: favorite.drmSystem,
-    })), [favorites, source?.id]);
+    })), [favorites, source?.id, tr]);
   const favoriteIds = useMemo(() => new Set(favoriteChannels.map((channel) => channel.id)), [favoriteChannels]);
   const shownChannels = useMemo(() => {
     if (!showingFavorites) return browse.items;
@@ -180,9 +182,9 @@ export function LiveTvPage({
   const categoryEntries = useCategoryEntries(browse, query, favoriteChannels.length, showingFavorites, storedCounts);
   const effectiveId = showingFavorites ? FAVORITES_ID : browse.categoryId;
   const categoryName = showingFavorites
-    ? "Favorites"
+    ? t("browse.favorites")
     : effectiveId === null || effectiveId === undefined
-      ? "All"
+      ? t("browse.all")
       : browse.categories.find((category) => category.id === effectiveId)?.name ?? "";
   const visibleChannel = selectedChannel ?? shownChannels.find((channel) => channel.id === livePlaybackItemId) ?? shownChannels[0];
 
@@ -196,7 +198,7 @@ export function LiveTvPage({
 
   return (
     <section className={`catalog-page${livePlayerMini ? " live-tv-mini-page" : ""}`}>
-      <h1 className="sr-only">Live TV</h1>
+      <h1 className="sr-only">{t("nav.liveTv")}</h1>
       <div className="live-tv-layout browse-layout">
         <div className="live-channel-columns has-categories">
           <BrowseCategoryList
@@ -206,31 +208,31 @@ export function LiveTvPage({
             onRetry={browse.retry}
             onSelect={setChosen}
             selectedId={effectiveId}
-            title="Live categories"
+            title={t("live.categories")}
           />
-          <aside aria-label="Live TV channels" className="live-channel-sidebar">
+          <aside aria-label={t("live.channelsAria")} className="live-channel-sidebar">
             <div className="live-channel-sidebar-heading">
-              <h2>{categoryName || "Channels"}</h2>
-              <span>{(showingFavorites ? favoriteChannels.length : browse.total ?? shownChannels.length).toLocaleString()}</span>
+              <h2>{categoryName || t("live.heading")}</h2>
+              <span>{formatNumber(showingFavorites ? favoriteChannels.length : browse.total ?? shownChannels.length)}</span>
             </div>
             <div className="browse-panel-tools">
-              <SearchField label="Search Live TV" onChange={setQuery} placeholder="Search live tv" value={query} />
-              <BrowseSortButton label="Sort channels" onChange={setSort} value={sort} />
+              <SearchField label={t("live.searchLabel")} onChange={setQuery} placeholder={t("live.searchPlaceholder")} value={query} />
+              <BrowseSortButton label={t("live.sort")} onChange={setSort} value={sort} />
             </div>
             <div className={`live-channel-list browse-list${browse.loading ? " is-loading" : ""}`} ref={listRef} role="list">
               {browse.loading && (
                 <div aria-live="polite" role="status">
-                  <span className="sr-only">Loading channels…</span>
+                  <span className="sr-only">{t("live.loading")}</span>
                   <ChannelSkeletons count={20} />
                 </div>
               )}
               {showingFavorites && shownChannels.length === 0 && (
-                <EmptyPanel icon="favorite_border" title="No favorite channels">Tap the heart on a channel to keep it here.</EmptyPanel>
+                <EmptyPanel icon="favorite_border" title={t("live.noFavoritesTitle")}>{t("live.noFavoritesBody")}</EmptyPanel>
               )}
               {!browse.loading && !showingFavorites && !browse.error && shownChannels.length === 0 && (
                 query.trim()
-                  ? <EmptyPanel icon="search" title="No matches">No channels match your search.</EmptyPanel>
-                  : <EmptyPanel icon="live_tv" title="No channels">There are no channels in this category.</EmptyPanel>
+                  ? <EmptyPanel icon="search" title={t("categories.noMatchesTitle")}>{t("live.noMatchesBody")}</EmptyPanel>
+                  : <EmptyPanel icon="live_tv" title={t("live.noChannelsTitle")}>{t("live.noChannelsBody")}</EmptyPanel>
               )}
               {shownChannels.map((channel) => (
                 <ChannelRow
@@ -246,29 +248,29 @@ export function LiveTvPage({
                 />
               ))}
               {browse.error && (
-                <EmptyPanel action={<button className="secondary-button" onClick={browse.retry} type="button">Try again</button>} error icon="error_outline" title="Could not load channels">{browse.error}</EmptyPanel>
+                <EmptyPanel action={<button className="secondary-button" onClick={browse.retry} type="button">{t("common.tryAgain")}</button>} error icon="error_outline" title={t("live.loadFailed")}>{browse.error}</EmptyPanel>
               )}
               {hasMore && !showingFavorites && (canObserve
                 ? <div aria-hidden="true" className="browse-sentinel" ref={sentinelRef} />
-                : <button className="text-button" onClick={loadMore} type="button">Load more</button>)}
+                : <button className="text-button" onClick={loadMore} type="button">{t("browse.loadMore")}</button>)}
             </div>
           </aside>
         </div>
         <div className="live-tv-main">
-          <section aria-label="Live player" className={`live-tv-player${livePlayer ? " has-live-player" : ""}`}>
+          <section aria-label={t("live.player")} className={`live-tv-player${livePlayer ? " has-live-player" : ""}`}>
             {livePlayer ?? (
               <>
                 <div className="live-channel-sidebar-heading">
-                  <h2>{visibleChannel?.name ?? "Choose a channel"}</h2>
+                  <h2>{visibleChannel?.name ?? t("live.chooseChannel")}</h2>
                 </div>
                 <div className="live-player-empty">
                   <div className="live-player-empty-art">
                     {visibleChannel?.logoUrl ? <img alt="" src={visibleChannel.logoUrl} /> : <Icon name="live_tv" />}
                   </div>
-                  <p>{visibleChannel ? (onNow ? `On now: ${onNow.title}` : visibleChannel.group) : "Select a channel to start its live stream."}</p>
+                  <p>{visibleChannel ? (onNow ? t("live.onNow", { title: onNow.title }) : visibleChannel.group) : t("live.selectChannel")}</p>
                   {visibleChannel && (
                     <button className="primary-button" onClick={() => play(visibleChannel)} type="button">
-                      <Icon name="play_arrow" /> Watch live
+                      <Icon name="play_arrow" /> {t("live.watch")}
                     </button>
                   )}
                 </div>
