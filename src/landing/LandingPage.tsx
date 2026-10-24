@@ -102,6 +102,17 @@ const features: { title: string; text: string[]; shot: string; alt: string }[] =
   },
 ];
 
+const more: { title: string; text: string }[] = [
+  { title: "Multiview", text: "Watch up to four live channels side by side, with sound on one." },
+  { title: "Reminders", text: "Ring the bell on a guide programme and get told a minute before it starts." },
+  { title: "Seven languages", text: "English, Dutch, Spanish, French, German, Portuguese and Turkish." },
+  { title: "PIN for adult content", text: "Keep adult titles hidden until you enter a PIN." },
+  { title: "Cast", text: "Send compatible streams to a Chromecast on your network." },
+  { title: "Offline downloads", text: "Save movies and episodes of up to 8 GB for offline playback." },
+  { title: "Light, dark or system", text: "Pick the theme that suits your room." },
+  { title: "Encrypted backup", text: "Export and restore everything when you move to a new computer." },
+];
+
 export default function LandingPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<FaqCategory>("All");
@@ -202,6 +213,18 @@ export default function LandingPage() {
             </div>
           </article>
         ))}
+      </section>
+
+      <section aria-labelledby="more-title" className="more">
+        <h2 className="section-title" data-reveal id="more-title">And more.</h2>
+        <ul>
+          {more.map((item, i) => (
+            <li data-reveal key={item.title} style={{ "--d": `${(i % 4) * 60}ms` } as CSSProperties}>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section aria-labelledby="download-title" className="platforms" id="download">
