@@ -11,6 +11,8 @@ Tauri 2 desktop app (Rust in `src-tauri/`) with a React 19 + Vite + TypeScript U
 | `database` | SQLite/IndexedDB stores, migrations, caches, secrets |
 | `ui` | every UI/CSS change: tokens, shared components, style guide |
 | `testing-and-ci` | tests, lint, perf measuring, CI workflows |
+| `playback` | streams: Shaka, native path, proxy, DRM, errors, cast, `PlaybackDialog` |
+| `security` | trust boundaries, network policy, credentials, capabilities, new Tauri commands |
 | `release` | version, release notes, tags, commit format |
 | `karpathy-guidelines` | how to work: assumptions, small diffs, verify |
 | `landing-design` | the marketing page in `src/landing/` only |

@@ -16,7 +16,7 @@ providers/*  ->  storage/*  ->  hooks/*  ->  components/*  ->  App.tsx
 
 | Layer | Path | Owns | Must not |
 |---|---|---|---|
-| Browse | `src/browse/` (`types`, `lists`, `live`, `movies`, `series`) | A source seen as categories plus pages of items: the `Browser<T>` interface, `memoryBrowser` (M3U and a portal's live channels: read once, grouped in memory), `cachedBrowser` (Xtream: one category per request, kept in `liveCategoryCache`) and `pagedBrowser` (Stalker movies and series: a batch of portal pages per request, `stalker.ts`) | Touch React |
+| Browse | `src/browse/` (`types`, `lists`, `live`, `movies`, `series`, `stalker`) | A source seen as categories plus pages of items: the `Browser<T>` interface, `memoryBrowser` (M3U and a portal's live channels: read once, grouped in memory), `cachedBrowser` (Xtream: one category per request, kept in `liveCategoryCache`) and `pagedBrowser` (Stalker movies and series: a batch of portal pages per request, `stalker.ts`) | Touch React |
 | Providers | `src/providers/` (`m3u`, `xtream`, `stalker`, `xmltv`, `mdblist`, `opensubtitles`, `http`, `transport`) | Fetching and parsing one source into the types in `src/types.ts` | Touch storage or React |
 | Storage | `src/storage/` (`database.ts` facade, `sqliteBackend`, `idbBackend`, `codec`, `migration`) | Reads/writes, encryption of secrets, backend choice | Import hooks or components |
 | Services | `src/services/` (`ratingsService`, `subtitleService`, `catalogRefresh`, `downloads`, `backup`, ...) | Business rules, caching with TTLs, anything that touches storage, network or Tauri | Import React |

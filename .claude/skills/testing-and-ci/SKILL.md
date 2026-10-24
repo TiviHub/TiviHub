@@ -32,11 +32,11 @@ description: How to test, lint, measure performance and what CI runs. Use when a
 
 ## Lint
 
-ESLint (`eslint.config.js`) is the gate, and `npm run lint` fails above 20 warnings (`--max-warnings`): lower that number whenever you fix one, never raise it. Rules the old code still breaks are warnings; raise one to `error` when its count hits zero. Do not add Prettier or Stylelint (would rewrite every line for no user benefit). `cargo fmt` formats Rust.
+ESLint (`eslint.config.js`) is the gate, and `npm run lint` fails above 20 warnings (`--max-warnings`): it is at 20 of 20 now, so a new warning breaks CI: fix it, never raise the number, and lower it whenever you fix one. Rules the old code still breaks are warnings; raise one to `error` when its count hits zero. Do not add Prettier or Stylelint (would rewrite every line for no user benefit). `cargo fmt` formats Rust.
 
 ## CI (`.github/workflows/`)
 
 - `ci.yml`: "Checks" on Windows, Linux, macOS arm64 and macOS x64 (typecheck, lint, tests, Rust tests, desktop build); Linux only: rustfmt, Clippy, npm and Rust audits. Plus "Browser E2E and website build".
 - `release.yml`: a `vX.Y.Z` tag builds installers and creates a draft release from `docs/releases/vX.Y.Z.md`. Labelling a PR `release-dry-run` rehearses it without publishing.
-- Rust advisories are listed in `src-tauri/.cargo/audit.toml`; do not add to it without maintainer approval.
+- Rust advisories are listed in `src-tauri/.cargo/audit.toml`, plus `RUSTSEC-2024-0437` passed with `--ignore` in `ci.yml`; do not add to either without maintainer approval.
 - Pin action versions. Never put secrets in a workflow file.

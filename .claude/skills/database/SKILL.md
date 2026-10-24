@@ -14,7 +14,7 @@ Two backends behind one interface (`StorageBackend` in `src/storage/backend.ts`)
 
 ## Shape
 
-Each store is one table: `key TEXT PRIMARY KEY, playlist_id, series_id, channel_id, source, json TEXT NOT NULL`. The record is the `json` column; the other columns exist only for indexes. The store list and key field live in `STORES` in `storage.rs` and must match the IndexedDB stores and `StoreValues` in `backend.ts`. Schema version is `PRAGMA user_version` (currently 2) in `migrate()`.
+Each store is one table: `key TEXT PRIMARY KEY, playlist_id, series_id, channel_id, source, json TEXT NOT NULL`. The record is the `json` column; the other columns exist only for indexes. The store list and key field live in `STORES` in `storage.rs` and must match the IndexedDB stores and `StoreValues` in `backend.ts`. Schema version is `PRAGMA user_version` (currently 3) in `migrate()`.
 
 ## Adding a stored thing
 
@@ -22,7 +22,7 @@ Each store is one table: `key TEXT PRIMARY KEY, playlist_id, series_id, channel_
 2. Add the store to `STORES` in `storage.rs` (name, key field) and to the IndexedDB schema.
 3. **Add a migration step** `if version < N { ... PRAGMA user_version = N; }` in `migrate()`. Never edit an earlier step: existing users already ran it. Steps are idempotent (`IF NOT EXISTS`).
 4. Add a typed getter/setter in `database.ts`. Components never touch the backend.
-5. Add the store to the backup/export path (`src/backup.ts`) if it is user data, or leave it out on purpose if it is a cache.
+5. Add the store to the backup/export path (`src/services/backup.ts`) if it is user data, or leave it out on purpose if it is a cache.
 6. Tests: extend `storageContract.ts` (runs against both backends), and add a migration test next to `sqliteMigration*.test.ts` that opens an old-version database and checks the data survives.
 
 ## Rules
@@ -32,7 +32,7 @@ Each store is one table: `key TEXT PRIMARY KEY, playlist_id, series_id, channel_
 - **Playlist-scoped data** (`PLAYLIST_SCOPED_STORES`) is removed with `storage_delete_playlist`. A new per-playlist store goes in that list and gets a `playlist_id` index.
 - **Index what you query.** A new "get all by X" needs an index on X in the migration. Never filter a whole catalog in JS when SQLite can do it.
 - **Secrets** are encrypted (`storage_encrypt` / `storage_decrypt`, key in the OS keychain) and stored in `secrets`. A keychain failure shows an error and stops; it must never create a new key (that locks users out of saved logins).
-- **Caches** (`ratings`, `liveCategoryCache`, `subtitleSearch`, ...) have a TTL constant next to their service and tolerate being wiped. Never put the only copy of user data in a cache store. `liveCategoryCache` also holds the Xtream category lists and per-category answers of Movies and Series (keys `<playlistId>:series:...`); `popularCatalog` is an unused leftover of the removed Top 5 row: do not write to it, and drop it only in a new migration step.
+- **Caches** (`ratings`, `liveCategoryCache`, `subtitleSearch`, ...) have a TTL constant next to their service and tolerate being wiped. Never put the only copy of user data in a cache store. `liveCategoryCache` also holds the Xtream category lists and per-category answers of Movies and Series (keys `<playlistId>:series:...`); `popularCatalog` is an unused leftover of the removed Top 5 row (only a getter/setter in `database.ts` and one test still touch it): do not write to it, and drop it, with that code, only in a new migration step.
 - **Never** destroy data to fix a schema problem. Migrate it, or ask.
 - No new storage mechanism (second DB, files, `localStorage` for data).
 
