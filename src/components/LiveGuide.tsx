@@ -3,7 +3,10 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } fr
 import type { EpgProgram, LiveChannel } from "../types";
 import { canReplay, canStartOver } from "../lib/catchup";
 import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../lib/liveGuideLayout";
-import { CustomSelect, Icon } from "./common";
+import { Icon, SearchField } from "./common";
+import { BrowseCategoryList, type BrowseCategoryEntry } from "./BrowseCategoryList";
+import { BrowseShell } from "./BrowseShell";
+import { EmptyPanel } from "./EmptyPanel";
 
 const CHANNEL_COLUMN_WIDTH = 214;
 const GUIDE_OVERSCAN_ROWS = 8;
@@ -27,7 +30,6 @@ export function LiveGuide({
   epg,
   favoriteIds,
   activeChannelId,
-  selectedChannelId,
   loading,
   onLoadGuideForChannels,
   onPlay,
@@ -38,7 +40,6 @@ export function LiveGuide({
   epg: EpgProgram[];
   favoriteIds: ReadonlySet<string>;
   activeChannelId?: string;
-  selectedChannelId?: string;
   loading: boolean;
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (channel: LiveChannel) => void;
@@ -123,8 +124,6 @@ export function LiveGuide({
   const timelineWidth = Math.max(trackWidth, 1);
   const columns = single ? `${timelineWidth}px` : `${channelColumn}px ${timelineWidth}px`;
   const canvasWidth = Math.max(viewportSize.width, channelColumn + timelineWidth);
-  const currentChannel = channels.find((channel) => channel.id === activeChannelId)
-    ?? channels.find((channel) => channel.id === selectedChannelId);
   const nowX = now >= bounds.startMillis && now < bounds.endMillis
     ? ((now - bounds.startMillis) / (bounds.endMillis - bounds.startMillis)) * trackWidth
     : null;
@@ -163,44 +162,11 @@ export function LiveGuide({
 
   const dateLabel = date.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 
-  return (
-    <section aria-label={single ? `Programme guide for ${channels[0]?.name ?? "the channel"}` : "Full TV guide"} className={`live-guide-workspace${single ? " is-single" : ""}`}>
-      {!single && <header className="page-intro catalog-intro live-guide-page-heading">
-        <div>
-          <p className="eyebrow">CHANNELS · PROGRAMME TIMES</p>
-          <h1>TV Guide</h1>
-          <p>{rows.length.toLocaleString()} of {channels.length.toLocaleString()} channels{loading && <span className="sr-only"> · Loading listings…</span>}</p>
-        </div>
-        <div className="catalog-controls live-guide-page-controls">
-          <label className="search-field">
-            <Icon name="search" />
-            <span className="sr-only">Filter channels</span>
-            <input onChange={(event) => setChannelQuery(event.target.value)} placeholder="Filter channels…" value={channelQuery} />
-          </label>
-          <label className="search-field">
-            <Icon name="search" />
-            <span className="sr-only">Search programmes</span>
-            <input onChange={(event) => setProgramQuery(event.target.value)} placeholder="Search programmes…" value={programQuery} />
-          </label>
-          <div className="live-guide-select">
-            <Icon name="filter_list" />
-            <CustomSelect
-              ariaLabel="Channel group"
-              onValueChange={setScope}
-              options={[
-                { label: "All", value: "all" },
-                { label: "Favorites", value: "favorites" },
-                ...groups.map((group) => ({ label: group, value: group })),
-              ]}
-              value={scope}
-              variant="embedded"
-            />
-          </div>
-        </div>
-      </header>}
-
-      <div className="live-guide-toolbar">
-        <div className="live-guide-date-controls">
+  const tools = (
+    <>
+      <SearchField label="Filter channels" onChange={setChannelQuery} placeholder="Filter channels" value={channelQuery} />
+      <SearchField label="Search programmes" onChange={setProgramQuery} placeholder="Search programmes" value={programQuery} />
+      <div className="live-guide-date-controls">
           <button aria-label="Previous day" className="icon-button" data-tooltip="Previous day" onClick={() => shiftDay(-1)} type="button">
             <Icon name="chevron_left" />
           </button>
@@ -208,9 +174,9 @@ export function LiveGuide({
           <button aria-label="Next day" className="icon-button" data-tooltip="Next day" onClick={() => shiftDay(1)} type="button">
             <Icon name="chevron_right" />
           </button>
-          {!single && <button className="secondary-button" onClick={jumpToNow} type="button">Now</button>}
+          {<button className="secondary-button" onClick={jumpToNow} type="button">Now</button>}
         </div>
-        {!single && (
+        {(
           <>
             <label className="live-guide-only-epg">
               <input checked={onlyWithEpg} onChange={(event) => setOnlyWithEpg(event.target.checked)} type="checkbox" />
@@ -227,7 +193,7 @@ export function LiveGuide({
             </button>
           </>
         )}
-        {!single && (
+        {(
           <label className="live-guide-zoom">
             <Icon name="search" />
             <span className="sr-only">Timeline zoom</span>
@@ -243,144 +209,177 @@ export function LiveGuide({
             />
           </label>
         )}
-      </div>
+    </>
+  );
 
+  const scopeId = scope === "all" ? null : scope === "favorites" ? "@@favorites" : scope;
+  const groupCounts = new Map<string, number>();
+  for (const channel of channels) groupCounts.set(channel.group, (groupCounts.get(channel.group) ?? 0) + 1);
+  const categories: BrowseCategoryEntry[] = [
+    { id: "@@favorites", name: "Favorites", count: channels.filter((channel) => favoriteIds.has(channel.id)).length, pinned: true },
+    { id: "", name: "All", count: channels.length, pinned: true },
+    ...groups.map((group) => ({ id: group, name: group, count: groupCounts.get(group) })),
+  ];
+
+  const grid = (
+    <>
       <div
-        aria-label="Programme schedule"
-        className="live-guide-scroll"
-        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-        ref={scrollRef}
-        role="grid"
-        style={{ "--live-guide-row-height": `${rowHeight}px` } as CSSProperties}
-      >
-        <div className="live-guide-canvas" style={{ width: `${canvasWidth}px` }}>
-          <div className="live-guide-ruler" style={{ gridTemplateColumns: columns }}>
-            {!single && <div aria-label="Channel" className="live-guide-channel-heading">CHANNEL</div>}
-            <div className="live-guide-ruler-track" style={{ width: `${timelineWidth}px` }}>
-              {ticks.map((tick) => (
-                <span
-                  className={`live-guide-tick${new Date(tick.millis).getMinutes() === 0 ? " is-hour" : ""}`}
-                  key={tick.millis}
-                  style={{ left: `${tick.left}px` }}
-                >
-                  {formatTime(tick.millis)}
-                </span>
-              ))}
-              {nowX !== null && (
-                <span className="live-guide-now-badge" style={{ left: `${nowX}px` }}>{formatTime(now)}</span>
-              )}
-            </div>
+      aria-label="Programme schedule"
+      className="live-guide-scroll"
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      ref={scrollRef}
+      role="grid"
+      style={{ "--live-guide-row-height": `${rowHeight}px` } as CSSProperties}
+    >
+      <div className="live-guide-canvas" style={{ width: `${canvasWidth}px` }}>
+        <div className="live-guide-ruler" style={{ gridTemplateColumns: columns }}>
+          {!single && <div aria-label="Channel" className="live-guide-channel-heading">CHANNEL</div>}
+          <div className="live-guide-ruler-track" style={{ width: `${timelineWidth}px` }}>
+            {ticks.map((tick) => (
+              <span
+                className={`live-guide-tick${new Date(tick.millis).getMinutes() === 0 ? " is-hour" : ""}`}
+                key={tick.millis}
+                style={{ left: `${tick.left}px` }}
+              >
+                {formatTime(tick.millis)}
+              </span>
+            ))}
+            {nowX !== null && (
+              <span className="live-guide-now-badge" style={{ left: `${nowX}px` }}>{formatTime(now)}</span>
+            )}
           </div>
+        </div>
 
-          <div aria-rowcount={rows.length} className="live-guide-rows">
-            {beforeHeight > 0 && <div aria-hidden="true" className="live-guide-spacer" style={{ height: `${beforeHeight}px` }} />}
-            {visibleRows.map((channel, index) => {
-              const programs = programsByChannel.get(channelGuideId(channel)) ?? [];
-              const rowIndex = startIndex + index;
-              return (
-                <div
-                  aria-rowindex={rowIndex + 1}
-                  className="live-guide-row"
-                  key={channel.id}
-                  role="row"
-                  style={{ gridTemplateColumns: columns, height: `${rowHeight}px` }}
-                >
-                  {!single && (
-                    <button
-                      aria-label={`Play ${channel.name} live`}
-                      className={`live-guide-channel${channel.id === activeChannelId ? " is-playing" : ""}`}
-                      onClick={() => onPlay(channel)}
-                      role="rowheader"
-                      data-tooltip={`${channel.name} · ${channel.group}`}
-                      type="button"
-                    >
-                      <span className="live-guide-channel-logo">
-                        {channel.logoUrl ? <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={channel.logoUrl} /> : <Icon name="live_tv" />}
-                      </span>
-                      <span className="live-guide-channel-name">
-                        <strong>{channel.name}</strong>
-                        <small>{channel.group}</small>
-                      </span>
-                    </button>
-                  )}
-                  <div className="live-guide-program-track" role="presentation" style={{ width: `${timelineWidth}px` }}>
-                    {ticks.map((tick) => (
-                      <span aria-hidden="true" className={`live-guide-gridline${new Date(tick.millis).getMinutes() === 0 ? " is-hour" : ""}`} key={tick.millis} style={{ left: `${tick.left}px` }} />
-                    ))}
-                    {loading && programs.length === 0 && <Skeleton className="live-guide-program-skeleton" />}
-                    {programs.filter((program) =>
-                      !normalizedProgramQuery || program.title.toLocaleLowerCase().includes(normalizedProgramQuery),
-                    ).map((program) => {
-                      const block = guideProgramBlock(program, bounds, hourWidth);
-                      if (!block) return null;
-                      const isCurrent = program.startMillis <= now && program.endMillis > now;
-                      const replayable = canReplay(channel, program, now);
-                      const startOver = isCurrent && block.width >= 96 && canStartOver(channel, program, now);
-                      return (
-                        <Fragment key={program.id}>
+        <div aria-rowcount={rows.length} className="live-guide-rows">
+          {beforeHeight > 0 && <div aria-hidden="true" className="live-guide-spacer" style={{ height: `${beforeHeight}px` }} />}
+          {visibleRows.map((channel, index) => {
+            const programs = programsByChannel.get(channelGuideId(channel)) ?? [];
+            const rowIndex = startIndex + index;
+            return (
+              <div
+                aria-rowindex={rowIndex + 1}
+                className="live-guide-row"
+                key={channel.id}
+                role="row"
+                style={{ gridTemplateColumns: columns, height: `${rowHeight}px` }}
+              >
+                {!single && (
+                  <button
+                    aria-label={`Play ${channel.name} live`}
+                    className={`live-guide-channel${channel.id === activeChannelId ? " is-playing" : ""}`}
+                    onClick={() => onPlay(channel)}
+                    role="rowheader"
+                    data-tooltip={`${channel.name} · ${channel.group}`}
+                    type="button"
+                  >
+                    <span className="live-guide-channel-logo">
+                      {channel.logoUrl ? <img alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} src={channel.logoUrl} /> : <Icon name="live_tv" />}
+                    </span>
+                    <span className="live-guide-channel-name">
+                      <strong>{channel.name}</strong>
+                      <small>{channel.group}</small>
+                    </span>
+                  </button>
+                )}
+                <div className="live-guide-program-track" role="presentation" style={{ width: `${timelineWidth}px` }}>
+                  {ticks.map((tick) => (
+                    <span aria-hidden="true" className={`live-guide-gridline${new Date(tick.millis).getMinutes() === 0 ? " is-hour" : ""}`} key={tick.millis} style={{ left: `${tick.left}px` }} />
+                  ))}
+                  {loading && programs.length === 0 && <Skeleton className="live-guide-program-skeleton" />}
+                  {programs.filter((program) =>
+                    !normalizedProgramQuery || program.title.toLocaleLowerCase().includes(normalizedProgramQuery),
+                  ).map((program) => {
+                    const block = guideProgramBlock(program, bounds, hourWidth);
+                    if (!block) return null;
+                    const isCurrent = program.startMillis <= now && program.endMillis > now;
+                    const replayable = canReplay(channel, program, now);
+                    const startOver = isCurrent && block.width >= 96 && canStartOver(channel, program, now);
+                    return (
+                      <Fragment key={program.id}>
+                      <button
+                        aria-label={`${channel.name}: ${program.title}, ${formatTime(program.startMillis)} to ${formatTime(program.endMillis)}. ${replayable ? "Select to watch the recording." : "Select to play channel live."}`}
+                        className={`live-guide-program${isCurrent ? " is-current" : ""}${replayable ? " is-replayable" : ""}`}
+                        onClick={() => replayable ? onReplay(channel, program) : onPlay(channel)}
+                        style={{ left: `${block.left}px`, width: `${block.width}px` }}
+                        data-tooltip={`${program.title} · ${formatTime(program.startMillis)}–${formatTime(program.endMillis)}${replayable ? " · Watch recording" : ""}`}
+                        type="button"
+                      >
+                        <small>{formatTime(program.startMillis)} – {formatTime(program.endMillis)}</small>
+                        <strong>{program.title}</strong>
+                        {isCurrent && <span className="live-guide-program-progress" style={{ width: `${Math.max(0, Math.min(100, ((now - program.startMillis) / (program.endMillis - program.startMillis)) * 100))}%` }} />}
+                      </button>
+                      {startOver && (
                         <button
-                          aria-label={`${channel.name}: ${program.title}, ${formatTime(program.startMillis)} to ${formatTime(program.endMillis)}. ${replayable ? "Select to watch the recording." : "Select to play channel live."}`}
-                          className={`live-guide-program${isCurrent ? " is-current" : ""}${replayable ? " is-replayable" : ""}`}
-                          onClick={() => replayable ? onReplay(channel, program) : onPlay(channel)}
-                          style={{ left: `${block.left}px`, width: `${block.width}px` }}
-                          data-tooltip={`${program.title} · ${formatTime(program.startMillis)}–${formatTime(program.endMillis)}${replayable ? " · Watch recording" : ""}`}
+                          aria-label={`Start over ${program.title} on ${channel.name}`}
+                          className="icon-button live-guide-startover"
+                          data-tooltip="Start over"
+                          onClick={() => onReplay(channel, program)}
+                          style={{ left: `${block.left + block.width - 34}px` }}
                           type="button"
                         >
-                          <small>{formatTime(program.startMillis)} – {formatTime(program.endMillis)}</small>
-                          <strong>{program.title}</strong>
-                          {isCurrent && <span className="live-guide-program-progress" style={{ width: `${Math.max(0, Math.min(100, ((now - program.startMillis) / (program.endMillis - program.startMillis)) * 100))}%` }} />}
+                          <Icon name="restart_alt" />
                         </button>
-                        {startOver && (
-                          <button
-                            aria-label={`Start over ${program.title} on ${channel.name}`}
-                            className="icon-button live-guide-startover"
-                            data-tooltip="Start over"
-                            onClick={() => onReplay(channel, program)}
-                            style={{ left: `${block.left + block.width - 34}px` }}
-                            type="button"
-                          >
-                            <Icon name="restart_alt" />
-                          </button>
-                        )}
-                        </Fragment>
-                      );
-                    })}
-                  </div>
+                      )}
+                      </Fragment>
+                    );
+                  })}
                 </div>
-              );
-            })}
-            {single && !loading && visibleRows.length > 0 && !programsByChannel.get(channelGuideId(visibleRows[0])) && (
-              <p className="live-guide-empty live-guide-single-empty">No programme information for this channel.</p>
-            )}
-            {afterHeight > 0 && <div aria-hidden="true" className="live-guide-spacer" style={{ height: `${afterHeight}px` }} />}
-            {rows.length === 0 && (
-              <p className="live-guide-empty">No channels match these filters.</p>
-            )}
-          </div>
-
-          {nowX !== null && visibleRows.length > 0 && (
-            <span
-              aria-hidden="true"
-              className="live-guide-now-line"
-              style={{
-                height: `${visibleRows.length * rowHeight}px`,
-                left: `${channelColumn + nowX}px`,
-                top: `${42 + beforeHeight}px`,
-              }}
-            />
+              </div>
+            );
+          })}
+          {single && !loading && visibleRows.length > 0 && !programsByChannel.get(channelGuideId(visibleRows[0])) && (
+            <EmptyPanel compact icon="schedule" title="No programme information">There is no schedule for this channel.</EmptyPanel>
           )}
+          {afterHeight > 0 && <div aria-hidden="true" className="live-guide-spacer" style={{ height: `${afterHeight}px` }} />}
         </div>
-      </div>
-      {!single && <footer className="live-guide-footer">
-        <span>{currentChannel ? `Playing: ${currentChannel.name}` : "Select a channel to start playback"}</span>
-        <span>Click a programme to play its channel live. Marked programmes can be watched again.</span>
-        {loading && (
-          <span className="live-guide-loading" role="status">
-            <span className="sr-only">Loading guide data</span>
-            <Skeleton className="live-guide-footer-skeleton" />
-          </span>
+
+        {nowX !== null && visibleRows.length > 0 && (
+          <span
+            aria-hidden="true"
+            className="live-guide-now-line"
+            style={{
+              height: `${visibleRows.length * rowHeight}px`,
+              left: `${channelColumn + nowX}px`,
+              top: `${42 + beforeHeight}px`,
+            }}
+          />
         )}
-      </footer>}
-    </section>
+      </div>
+    </div>
+    </>
+  );
+
+  if (single) {
+    return (
+      <section aria-label={`Programme guide for ${channels[0]?.name ?? "the channel"}`} className="live-guide-workspace is-single">
+        {grid}
+      </section>
+    );
+  }
+
+  return (
+    <BrowseShell
+      bodyClassName="live-guide-body"
+      count={rows.length}
+      label="TV Guide"
+      nav={(
+        <BrowseCategoryList
+          categories={categories}
+          loading={false}
+          onRetry={() => undefined}
+          onSelect={(id) => setScope(id === null ? "all" : id === "@@favorites" ? "favorites" : id)}
+          selectedId={scopeId}
+          title="Channel groups"
+        />
+      )}
+      title="TV Guide"
+      tools={tools}
+    >
+      {loading && <span className="sr-only" role="status">Loading listings…</span>}
+      {grid}
+      {rows.length === 0 && (
+        <EmptyPanel className="live-guide-empty-panel" icon="search" title="No channels match">Change the filters, or turn off Only with EPG.</EmptyPanel>
+      )}
+    </BrowseShell>
   );
 }

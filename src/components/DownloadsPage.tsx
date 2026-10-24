@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { RowSkeletons } from "./Skeleton";
 import type { DownloadRecord, DownloadTask } from "../services/downloads";
 import { Icon } from "./common";
-import { HomeEmptyState } from "./HomeEmptyState";
+import { BrowseShell } from "./BrowseShell";
+import { EmptyPanel } from "./EmptyPanel";
+import { NavPanel } from "./NavPanel";
 import { NoSourceEmptyState } from "./NoSourceEmptyState";
 
 function formatBytes(bytes: number): string {
@@ -27,7 +30,6 @@ export function DownloadsPage({
   onRetry,
   onPlay,
   onAddPlaylist,
-  onBrowseMovies,
 }: {
   downloads: DownloadRecord[];
   tasks: DownloadTask[];
@@ -39,54 +41,45 @@ export function DownloadsPage({
   onRetry: (task: DownloadTask) => void;
   onPlay: (download: DownloadRecord) => void;
   onAddPlaylist: () => void;
-  onBrowseMovies: () => void;
 }) {
+  const [picked, setPicked] = useState<"active" | "saved" | null>(null);
+  const view = picked ?? (tasks.length > 0 ? "active" : "saved");
+  const totalSize = downloads.reduce((total, download) => total + download.sizeBytes, 0);
   const hasItems = downloads.length > 0 || tasks.length > 0;
-  const showEmptyState = !loading && !hasItems;
 
   if (sourceCount === 0) {
     return <NoSourceEmptyState onAddSource={onAddPlaylist} />;
   }
 
-  if (showEmptyState) {
-    return (
-      <HomeEmptyState
-        actionIcon="movie"
-        actionLabel="Browse movies"
-        artLabel="OFFLINE DOWNLOADS"
-        description="Browse movies or episodes and choose Download to save supported videos for offline playback. HLS streams and protected videos can’t be downloaded."
-        eyebrow="YOUR OFFLINE LIBRARY"
-        onAction={onBrowseMovies}
-        title="No downloads yet"
-      />
-    );
-  }
-
   return (
-    <section className="downloads-page">
-      <header className="page-intro downloads-page-heading">
-        <div>
-          <p className="eyebrow">OFFLINE LIBRARY</p>
-          <h1>Downloads</h1>
-          <p>
-            {[
-              `${downloads.length} saved`,
-              downloads.length > 0 ? formatBytes(downloads.reduce((total, download) => total + download.sizeBytes, 0)) : null,
-              tasks.length > 0 ? `${tasks.length} in progress` : null,
-            ].filter(Boolean).join(" · ")}
-          </p>
-        </div>
-      </header>
-
+    <BrowseShell
+      count={view === "active" ? tasks.length : downloads.length}
+      label="Downloads"
+      nav={(
+        <NavPanel
+          items={[
+            { id: "active", label: "In progress", icon: "download", count: tasks.length },
+            { id: "saved", label: downloads.length > 0 ? `Saved · ${formatBytes(totalSize)}` : "Saved", icon: "check_circle", count: downloads.length },
+          ]}
+          onSelect={(id) => setPicked(id as "active" | "saved")}
+          selectedId={view}
+          title="Downloads"
+        />
+      )}
+      title={view === "active" ? "In progress" : "Saved on this device"}
+    >
       {loading ? (
         <div aria-live="polite" role="status">
           <span className="sr-only">Loading downloads…</span>
           <RowSkeletons artwork count={4} />
         </div>
       ) : (
-        <div className="downloads-list" aria-label="Downloads">
-          {tasks.length > 0 && downloads.length > 0 && <h2 className="downloads-group-title">In progress</h2>}
-          {tasks.map((task) => {
+        <>
+          {view === "active" && tasks.length === 0 && <EmptyPanel icon="download" title="Nothing is downloading">Downloads you start show their progress here.</EmptyPanel>}
+          {view === "saved" && downloads.length === 0 && (
+            <EmptyPanel icon="check_circle" title="Nothing saved yet">Choose Download on a movie or episode to keep it here for offline playback.</EmptyPanel>
+          )}
+          {view === "active" && tasks.map((task) => {
             const progress = task.totalBytes && task.totalBytes > 0
               ? Math.min(100, (task.receivedBytes / task.totalBytes) * 100)
               : null;
@@ -148,8 +141,7 @@ export function DownloadsPage({
             );
           })}
 
-          {tasks.length > 0 && downloads.length > 0 && <h2 className="downloads-group-title">Saved on this device</h2>}
-          {downloads.map((download) => (
+          {view === "saved" && downloads.map((download) => (
             <article className="download-item is-complete" key={download.id}>
               <div className="download-item-artwork">
                 {download.artworkUrl
@@ -183,13 +175,11 @@ export function DownloadsPage({
               </button>
             </article>
           ))}
-        </div>
+        </>
       )}
       {!loading && hasItems && (
-        <p className="downloads-format-note">
-          Offline downloads support direct, non-DRM video files only. HLS streams and protected videos can’t be saved.
-        </p>
+        <p className="panel-note">Offline downloads support direct, non-DRM video files only. HLS streams and protected videos can’t be saved.</p>
       )}
-    </section>
+    </BrowseShell>
   );
 }

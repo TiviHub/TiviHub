@@ -290,7 +290,6 @@ describe("offline downloads", () => {
         onRetry={vi.fn()}
         onPlay={vi.fn()}
         onAddPlaylist={vi.fn()}
-        onBrowseMovies={vi.fn()}
       />,
     );
 
@@ -302,8 +301,7 @@ describe("offline downloads", () => {
     expect(document.querySelector(".home-empty-source-types")?.getAttribute("aria-label")).toBe("Supported source types");
   });
 
-  it("uses the same empty panel when a playlist exists but no videos are downloaded", () => {
-    const onBrowseMovies = vi.fn();
+  it("shows an empty message in the panel when a playlist exists but no videos are downloaded", () => {
     render(
       <DownloadsPage
         downloads={[]}
@@ -316,16 +314,11 @@ describe("offline downloads", () => {
         onRetry={vi.fn()}
         onPlay={vi.fn()}
         onAddPlaylist={vi.fn()}
-        onBrowseMovies={onBrowseMovies}
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "No downloads yet" })).toBeTruthy();
-    expect(document.querySelector(".home-empty .home-empty-panel")).toBeTruthy();
-    expect(document.querySelector(".downloads-page")).toBeNull();
-    expect(document.querySelector(".home-empty-source-types")).toBeNull();
-    screen.getByRole("button", { name: "Browse movies" }).click();
-    expect(onBrowseMovies).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Choose Download on a movie or episode/)).toBeTruthy();
+    expect(document.querySelector(".browse-layout")).toBeTruthy();
   });
 
   it("lets a failed download be retried or removed", () => {
@@ -353,7 +346,6 @@ describe("offline downloads", () => {
         onRetry={onRetry}
         onPlay={vi.fn()}
         onAddPlaylist={vi.fn()}
-        onBrowseMovies={vi.fn()}
       />,
     );
 

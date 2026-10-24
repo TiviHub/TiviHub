@@ -1,3 +1,4 @@
+import { EmptyPanel } from "./EmptyPanel";
 import { RowSkeletons } from "./Skeleton";
 import { ExternalRatingsPanel } from "./ExternalRatings";
 import type { RatingsService } from "../services/ratingsService";
@@ -447,7 +448,7 @@ export function SeriesDetail({
       )}
       {error && <p className="form-error" role="alert">{error}</p>}
       {!loading && !error && availableEpisodes.length === 0 && (
-        <div className="catalog-empty compact-empty"><h2>No episodes found</h2><p>The provider returned no episode details for this series.</p></div>
+        <EmptyPanel icon="tv" title="No episodes found">The provider returned no episode details for this series.</EmptyPanel>
       )}
       <div className="episode-list">
         {visible.map((episode) => (

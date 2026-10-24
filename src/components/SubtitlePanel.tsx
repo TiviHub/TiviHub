@@ -1,5 +1,6 @@
+import { EmptyPanel } from "./EmptyPanel";
 import type { SubtitleResult } from "../providers/opensubtitles";
-import { Icon } from "./common";
+import { Icon, SearchField } from "./common";
 import { RowSkeletons } from "./Skeleton";
 
 export function SubtitlePanel({
@@ -38,15 +39,7 @@ export function SubtitlePanel({
               void searchSubtitles();
             }}
           >
-            <label className="search-field">
-              <Icon name="search" />
-              <input
-                aria-label="Subtitle search"
-                onChange={(event) => setSubtitleQuery(event.target.value)}
-                placeholder="Movie or episode title"
-                value={subtitleQuery}
-              />
-            </label>
+            <SearchField label="Subtitle search" onChange={setSubtitleQuery} placeholder="Movie or episode title" value={subtitleQuery} />
             <button className="secondary-button selected" disabled={subtitleBusy} type="submit">
               {subtitleBusy ? "Searching…" : "Search"}
             </button>
@@ -90,10 +83,7 @@ export function SubtitlePanel({
             {savedSubtitles.length > 0 && <span className="subtitle-count">{savedSubtitles.length}</span>}
           </strong>
           {savedSubtitles.length === 0 && (
-            <div className="subtitle-empty">
-              <Icon name="subtitles" />
-              <p>Nothing saved yet. Download a subtitle and it will appear here.</p>
-            </div>
+            <EmptyPanel icon="subtitles" title="Nothing saved yet">Download a subtitle and it will appear here.</EmptyPanel>
           )}
           {savedSubtitles.length > 0 && (
             <ul className="subtitle-results">

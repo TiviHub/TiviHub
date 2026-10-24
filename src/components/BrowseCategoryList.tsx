@@ -1,7 +1,9 @@
 import { useState } from "react";
-import type { BrowseCategory } from "../browse/types";
-import { Icon } from "./common";
-import { RowSkeletons } from "./Skeleton";
+import type { BrowseCategory, BrowseSort } from "../browse/types";
+import { SearchField } from "./common";
+import { EmptyPanel } from "./EmptyPanel";
+import { BrowseSortButton } from "./BrowseSortButton";
+import { CategorySkeletons } from "./Skeleton";
 
 export interface BrowseCategoryEntry extends BrowseCategory {
   /** Entries that are not categories of the source (Favorites); they sit above the real ones. */
@@ -27,8 +29,15 @@ export function BrowseCategoryList({
   onRetry: () => void;
 }) {
   const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState<BrowseSort>("default");
   const needle = filter.trim().toLowerCase();
-  const shown = needle ? categories.filter((category) => category.pinned || category.name.toLowerCase().includes(needle)) : categories;
+  const matching = needle ? categories.filter((category) => category.pinned || category.name.toLowerCase().includes(needle)) : categories;
+  // Pinned entries (Favorites, All) stay on top; only the source's own categories are reordered.
+  const byName = (left: BrowseCategoryEntry, right: BrowseCategoryEntry) =>
+    left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }) * (sort === "za" ? -1 : 1);
+  const shown = sort === "default"
+    ? matching
+    : [...matching.filter((category) => category.pinned), ...matching.filter((category) => !category.pinned).sort(byName)];
   return (
     <aside aria-label={title} className="live-channel-sidebar browse-category-panel">
       <div className="live-channel-sidebar-heading">
@@ -36,24 +45,12 @@ export function BrowseCategoryList({
         <span>{categories.filter((category) => !category.pinned && category.id !== "").length.toLocaleString()}</span>
       </div>
       <div className="browse-panel-tools">
-        <label className="search-field">
-          <Icon name="search" />
-          <span className="sr-only">Filter categories</span>
-          <input onChange={(event) => setFilter(event.target.value)} placeholder="Filter categories" value={filter} />
-        </label>
+        <SearchField label="Filter categories" onChange={setFilter} placeholder="Filter categories" value={filter} />
+        <BrowseSortButton label="Sort categories" onChange={setSort} value={sort} />
       </div>
-      <div className="live-channel-list browse-list">
-        {loading && (
-          <div aria-live="polite" role="status">
-            <span className="sr-only">Loading categories…</span>
-            <RowSkeletons count={8} />
-          </div>
-        )}
+      <div className={`live-channel-list browse-list${loading ? " is-loading" : ""}`}>
         {error && (
-          <div className="browse-message" role="alert">
-            <p>{error}</p>
-            <button className="text-button" onClick={onRetry} type="button">Try again</button>
-          </div>
+          <EmptyPanel action={<button className="secondary-button" onClick={onRetry} type="button">Try again</button>} error icon="error_outline" title="Could not load categories">{error}</EmptyPanel>
         )}
         {shown.map((category) => (
           <button
@@ -67,7 +64,13 @@ export function BrowseCategoryList({
             {category.count !== undefined && <span className="browse-category-count">{category.count.toLocaleString()}</span>}
           </button>
         ))}
-        {!loading && !error && shown.length === 0 && <p className="browse-message">No categories match.</p>}
+        {loading && (
+          <div aria-live="polite" role="status">
+            <span className="sr-only">Loading categories…</span>
+            <CategorySkeletons count={24} />
+          </div>
+        )}
+        {!loading && !error && shown.length === 0 && <EmptyPanel icon="search" title="No matches">No category matches your filter.</EmptyPanel>}
       </div>
     </aside>
   );

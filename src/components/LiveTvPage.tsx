@@ -1,13 +1,16 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
+import { sortByName } from "../browse/lists";
+import type { BrowseSort } from "../browse/types";
 import { useLiveBrowse } from "../hooks/useLiveBrowse";
+import { FAVORITES_ID, useCategoryEntries } from "../hooks/useCategoryEntries";
 import type { EpgProgram, Favorite, LiveChannel, PlayableItem, Playlist } from "../types";
-import { BrowseCategoryList, type BrowseCategoryEntry } from "./BrowseCategoryList";
+import { BrowseCategoryList } from "./BrowseCategoryList";
+import { BrowseSortButton } from "./BrowseSortButton";
 import { playableChannel } from "./ContentPages";
-import { Icon } from "./common";
+import { Icon, SearchField } from "./common";
+import { EmptyPanel } from "./EmptyPanel";
 import { LiveGuide } from "./LiveGuide";
-import { RowSkeletons, Skeleton } from "./Skeleton";
-
-const FAVORITES_ID = "@@favorites";
+import { ChannelSkeletons, Skeleton } from "./Skeleton";
 
 function ChannelRow({
   channel,
@@ -100,6 +103,7 @@ export function LiveTvPage({
 }) {
   const [chosen, setChosen] = useState<string | null | undefined>(undefined);
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<BrowseSort>("default");
   const [selectedChannel, setSelectedChannel] = useState<LiveChannel | null>(null);
   const [now, setNow] = useState(Date.now);
   const showingFavorites = chosen === FAVORITES_ID;
@@ -109,6 +113,7 @@ export function LiveTvPage({
     showAdultContent,
     chosenCategoryId: showingFavorites ? undefined : chosen,
     query,
+    sort,
     paused: showingFavorites,
   });
 
@@ -133,8 +138,9 @@ export function LiveTvPage({
   const shownChannels = useMemo(() => {
     if (!showingFavorites) return browse.items;
     const needle = query.trim().toLowerCase();
-    return favoriteChannels.filter((channel) => !needle || channel.name.toLowerCase().includes(needle));
-  }, [browse.items, favoriteChannels, query, showingFavorites]);
+    const matching = favoriteChannels.filter((channel) => !needle || channel.name.toLowerCase().includes(needle));
+    return sort === "default" ? matching : sortByName(matching, sort);
+  }, [browse.items, favoriteChannels, query, showingFavorites, sort]);
 
   const currentByChannel = useMemo(() => {
     const current = new Map<string, EpgProgram>();
@@ -163,11 +169,15 @@ export function LiveTvPage({
     return () => observer.disconnect();
   }, [canObserve, hasMore, loadMore, showingFavorites, shownChannels.length]);
 
-  const categoryEntries = useMemo<BrowseCategoryEntry[]>(() => [
-    { id: FAVORITES_ID, name: "Favorites", count: favoriteChannels.length, pinned: true },
-    ...(browse.supportsAll ? [{ id: "", name: "All", pinned: true }] : []),
-    ...browse.categories,
-  ], [browse.categories, browse.supportsAll, favoriteChannels.length]);
+  // Every source imports all its live channels, so what is stored counts each category exactly.
+  const storedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const channel of storedChannels) {
+      if (channel.playlistId === source?.id) counts.set(channel.group, (counts.get(channel.group) ?? 0) + 1);
+    }
+    return counts;
+  }, [source?.id, storedChannels]);
+  const categoryEntries = useCategoryEntries(browse, query, favoriteChannels.length, showingFavorites, storedCounts);
   const effectiveId = showingFavorites ? FAVORITES_ID : browse.categoryId;
   const categoryName = showingFavorites
     ? "Favorites"
@@ -204,24 +214,23 @@ export function LiveTvPage({
               <span>{(showingFavorites ? favoriteChannels.length : browse.total ?? shownChannels.length).toLocaleString()}</span>
             </div>
             <div className="browse-panel-tools">
-              <label className="search-field">
-                <Icon name="search" />
-                <span className="sr-only">Search Live TV</span>
-                <input onChange={(event) => setQuery(event.target.value)} placeholder="Search live tv" value={query} />
-              </label>
-                </div>
-            <div className="live-channel-list browse-list" ref={listRef} role="list">
+              <SearchField label="Search Live TV" onChange={setQuery} placeholder="Search live tv" value={query} />
+              <BrowseSortButton label="Sort channels" onChange={setSort} value={sort} />
+            </div>
+            <div className={`live-channel-list browse-list${browse.loading ? " is-loading" : ""}`} ref={listRef} role="list">
               {browse.loading && (
                 <div aria-live="polite" role="status">
                   <span className="sr-only">Loading channels…</span>
-                  <RowSkeletons artwork count={8} />
+                  <ChannelSkeletons count={20} />
                 </div>
               )}
               {showingFavorites && shownChannels.length === 0 && (
-                <div className="live-guide-empty">Tap the heart on a channel to add it here.</div>
+                <EmptyPanel icon="favorite_border" title="No favorite channels">Tap the heart on a channel to keep it here.</EmptyPanel>
               )}
               {!browse.loading && !showingFavorites && !browse.error && shownChannels.length === 0 && (
-                <div className="live-guide-empty">{query.trim() ? "No channels match your search." : "No channels in this category."}</div>
+                query.trim()
+                  ? <EmptyPanel icon="search" title="No matches">No channels match your search.</EmptyPanel>
+                  : <EmptyPanel icon="live_tv" title="No channels">There are no channels in this category.</EmptyPanel>
               )}
               {shownChannels.map((channel) => (
                 <ChannelRow
@@ -237,10 +246,7 @@ export function LiveTvPage({
                 />
               ))}
               {browse.error && (
-                <div className="browse-message" role="alert">
-                  <p>{browse.error}</p>
-                  <button className="text-button" onClick={browse.retry} type="button">Try again</button>
-                </div>
+                <EmptyPanel action={<button className="secondary-button" onClick={browse.retry} type="button">Try again</button>} error icon="error_outline" title="Could not load channels">{browse.error}</EmptyPanel>
               )}
               {hasMore && !showingFavorites && (canObserve
                 ? <div aria-hidden="true" className="browse-sentinel" ref={sentinelRef} />
@@ -269,7 +275,7 @@ export function LiveTvPage({
               </>
             )}
           </section>
-          {livePlayer && visibleChannel && (
+          {livePlayer && visibleChannel && !livePlayerMini && (
             <LiveGuide
               activeChannelId={livePlaybackItemId}
               channels={guideChannels}

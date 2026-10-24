@@ -21,6 +21,9 @@ import { CustomSelect, Icon } from "./common";
 import { Skeleton } from "./Skeleton";
 import { CastPanel } from "./CastPanel";
 import { SubtitlePanel } from "./SubtitlePanel";
+import { PlayerMenu } from "./PlayerMenu";
+import { PlayerControls } from "./PlayerControls";
+import { ProgressIndicator } from "./ProgressIndicator";
 import { MAX_SUBTITLE_BYTES, NATIVE_TRACK_EVENTS, asWebVtt, directMediaUrl, mediaDuration, nativeHlsUrl, type CastDeviceInfo, type ShakaPlayer, type ShakaRuntime, type ShakaVariantTrack, type TextTrackOption } from "../lib/playbackMedia";
 
 export function PlaybackDialog({
@@ -54,6 +57,7 @@ export function PlaybackDialog({
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [soundMissing, setSoundMissing] = useState(false);
   const restoreFocusFrameRef = useRef<number | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -595,6 +599,22 @@ export function PlaybackDialog({
     }
   }
 
+  function selectSubtitleTrack(value: string) {
+    const selectedId = value === "" ? null : Number(value);
+    if (playerRef.current) {
+      playerRef.current.selectTextTrack(tracks.find((track) => track.id === selectedId) ?? null);
+      syncTracks(playerRef.current);
+      return;
+    }
+    const video = videoRef.current;
+    if (video) Array.from(video.textTracks)
+      .filter((track) => track.kind === "captions" || track.kind === "subtitles")
+      .forEach((track) => {
+        track.mode = nativeTrackIdsRef.current.get(track) === selectedId ? "showing" : "disabled";
+      });
+    syncNativeTracks();
+  }
+
   async function searchSubtitles() {
     setSubtitleBusy(true);
     setSubtitleError(null);
@@ -847,10 +867,11 @@ export function PlaybackDialog({
         ref={dialogRef}
         role={inline ? "region" : "dialog"}
       >
+        {/* First, so a message at the bottom of the player is its last child (see the notice spacing in styles.css). */}
+        <input accept=".srt,.vtt,text/vtt,application/x-subrip" hidden onChange={(event) => void importSubtitle(event)} ref={importInputRef} type="file" />
         <header className="playback-header">
           <div>
             <h2 id="playback-title">
-              {item.live && <span className="playback-badge">{item.radio ? "Radio" : "Live"}</span>}
               {item.title}
             </h2>
             <p aria-live="polite" className="playback-status" role="status">
@@ -859,17 +880,6 @@ export function PlaybackDialog({
             </p>
           </div>
           <div className="playback-header-actions">
-            {onOpenExternal && !item.offline && !item.drmLicenseUrl && (
-              <button
-                aria-label="Open in VLC or mpv"
-                className="icon-button"
-                data-tooltip="Open in VLC or mpv"
-                onClick={() => onOpenExternal(item)}
-                type="button"
-              >
-                <Icon name="open_in_new" />
-              </button>
-            )}
             {castingDevice && (
               <button
                 className="secondary-button"
@@ -900,11 +910,94 @@ export function PlaybackDialog({
         )}
         <video
           autoPlay
-          controls
-          playsInline
+                    playsInline
           ref={videoRef}
           style={castingDevice ? { visibility: "hidden" } : undefined}
         />
+        {!error && !castingDevice && /^(Preparing|Retrying|Connecting|Buffering|Waiting)/.test(status) && (
+          <ProgressIndicator className="player-loading" label={item.replay ? "Preparing the recording" : "Loading the stream"} />
+        )}
+        <PlayerControls trailing={isTauri() && !item.offline ? (
+            <button
+              aria-expanded={castOpen}
+              aria-label={castingDevice ? `Casting to ${castingDevice.name}` : "Cast"}
+              className={`icon-button${castingDevice ? " selected" : ""}`}
+              data-tooltip={castingDevice ? `Casting to ${castingDevice.name}` : "Cast"}
+              onClick={() => {
+                if (castOpen) setCastOpen(false);
+                else void openCastPanel();
+              }}
+              type="button"
+            >
+              <Icon name={castingDevice ? "cast_connected" : "cast"} />
+            </button>
+          ) : undefined} badge={item.live ? <span className="playback-badge">{item.radio ? "Radio" : "Live"}</span> : undefined} fullscreenRef={dialogRef} live={item.live} videoRef={videoRef}>
+            <PlayerMenu
+              actions={item.live ? [] : [
+                { label: "Import subtitle file…", icon: "library_add", onClick: () => importInputRef.current?.click() },
+                { label: "Search OpenSubtitles…", icon: "search", onClick: () => setSubtitleOpen((open) => !open) },
+              ]}
+              sections={[
+                ...(item.live ? [] : [{
+                  title: "Subtitles",
+                  options: [
+                    { label: "Subtitles off", value: "", active: !tracks.some((track) => track.active) },
+                    ...tracks.map((track) => ({ label: track.label, value: String(track.id), active: track.active })),
+                  ],
+                  onSelect: selectSubtitleTrack,
+                }]),
+                ...(audioLanguages.length > 1 ? [{
+                  title: "Audio",
+                  options: audioLanguages.map((track) => ({ label: track.label, value: track.language, active: track.language === selectedAudioLanguage })),
+                  onSelect: selectAudioLanguage,
+                }] : []),
+                ...(qualityHeights.length > 1 ? [{
+                  title: "Quality",
+                  options: [
+                    { label: "Auto", value: "auto", active: qualityChoice === "auto" },
+                    ...qualityHeights.map((height) => ({ label: `${height}p`, value: String(height), active: qualityChoice === String(height) })),
+                  ],
+                  onSelect: selectQuality,
+                }] : []),
+              ]}
+            />
+            {!item.live && (
+              <div className="player-track-select">
+                <Icon name="speed" />
+                <CustomSelect
+                  ariaLabel="Playback speed"
+                  onValueChange={(value) => {
+                    const speed = Number(value);
+                    const video = videoRef.current;
+                    if (!video || !Number.isFinite(speed)) return;
+                    try {
+                      video.playbackRate = speed;
+                      setPlaybackSpeed(speed);
+                    } catch (cause) {
+                      setError(cause instanceof Error ? `Could not change playback speed: ${cause.message}` : "Could not change playback speed.");
+                    }
+                  }}
+                  options={[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => ({
+                    label: speed === 1 ? "Normal speed" : `${speed}×`,
+                    value: String(speed),
+                  }))}
+                  value={String(playbackSpeed)}
+                  variant="embedded"
+                />
+              </div>
+            )}
+            {onOpenExternal && !item.offline && !item.drmLicenseUrl && (
+              <button
+                aria-label="Open in VLC or mpv"
+                className="icon-button"
+                data-tooltip="Open in VLC or mpv"
+                onClick={() => onOpenExternal(item)}
+                type="button"
+              >
+                <Icon name="open_in_new" />
+              </button>
+            )}
+          </PlayerControls>
         {castingDevice && (
           <div className="player-casting-status" role="status">
             <Icon name="cast_connected" />
@@ -918,7 +1011,7 @@ export function PlaybackDialog({
         {soundMissing && !error && (
           <p className="player-error" role="status">
             This file has no sound in the built-in player: its audio (usually AC-3 or E-AC-3) cannot be decoded here.
-            {onOpenExternal && " Use the Open in VLC or mpv button at the top to watch it with sound."}
+            {onOpenExternal && " Use the Open in VLC or mpv button in the player controls to watch it with sound."}
           </p>
         )}
         {error && <p className="player-error" role="alert">{error}</p>}
@@ -942,145 +1035,55 @@ export function PlaybackDialog({
           </div>
         )}
         {saveError && <p className="player-error" role="alert">{saveError}</p>}
-        <div className="player-tools">
-          <div className="player-track-select">
-            <Icon name="subtitles" />
-            <CustomSelect
-              ariaLabel="Subtitle track"
-              onValueChange={(value) => {
-                const selectedId = value === "" ? null : Number(value);
-                if (playerRef.current) {
-                  playerRef.current.selectTextTrack(
-                    tracks.find((track) => track.id === selectedId) ?? null,
-                  );
-                  syncTracks(playerRef.current);
-                } else {
-                  const video = videoRef.current;
-                  if (video) Array.from(video.textTracks)
-                    .filter((track) => track.kind === "captions" || track.kind === "subtitles")
-                    .forEach((track) => {
-                      track.mode = nativeTrackIdsRef.current.get(track) === selectedId ? "showing" : "disabled";
-                    });
-                  syncNativeTracks();
-                }
-              }}
-              options={[
-                { label: "Subtitles off", value: "" },
-                ...tracks.map((track) => ({ label: track.label, value: String(track.id) })),
-              ]}
-              value={String(tracks.find((track) => track.active)?.id ?? "")}
-              variant="embedded"
-            />
-          </div>
-          {audioLanguages.length > 1 && (
-            <div className="player-track-select">
-              <Icon name="graphic_eq" />
-              <CustomSelect
-                ariaLabel="Audio track"
-                onValueChange={selectAudioLanguage}
-                options={audioLanguages.map((track) => ({ label: track.label, value: track.language }))}
-                value={selectedAudioLanguage}
-                variant="embedded"
-              />
-            </div>
-          )}
-          {qualityHeights.length > 1 && (
-            <div className="player-track-select">
-              <Icon name="high_quality" />
-              <CustomSelect
-                ariaLabel="Video quality"
-                onValueChange={selectQuality}
-                options={[
-                  { label: "Auto quality", value: "auto" },
-                  ...qualityHeights.map((height) => ({ label: `${height}p`, value: String(height) })),
-                ]}
-                value={qualityChoice}
-                variant="embedded"
-              />
-            </div>
-          )}
-          {!item.live && (
-            <div className="player-track-select">
-              <Icon name="speed" />
-              <CustomSelect
-                ariaLabel="Playback speed"
-                onValueChange={(value) => {
-                  const speed = Number(value);
-                  const video = videoRef.current;
-                  if (!video || !Number.isFinite(speed)) return;
-                  try {
-                    video.playbackRate = speed;
-                    setPlaybackSpeed(speed);
-                  } catch (cause) {
-                    setError(cause instanceof Error ? `Could not change playback speed: ${cause.message}` : "Could not change playback speed.");
-                  }
-                }}
-                options={[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => ({
-                  label: speed === 1 ? "Normal speed" : `${speed}×`,
-                  value: String(speed),
-                }))}
-                value={String(playbackSpeed)}
-                variant="embedded"
-              />
-            </div>
-          )}
-          {!item.live && (
-            <>
-              <label className="secondary-button subtitle-file-button">
-                <Icon name="library_add" />
-                Import subtitle
-                <input accept=".srt,.vtt,text/vtt,application/x-subrip" onChange={(event) => void importSubtitle(event)} type="file" />
-              </label>
-              <button className="secondary-button" onClick={() => setSubtitleOpen((open) => !open)} type="button">
-                <Icon name="search" />
-                OpenSubtitles
-              </button>
-            </>
-          )}
-          {isTauri() && !item.offline && (
-            <button
-              aria-expanded={castOpen}
-              className="secondary-button"
-              onClick={() => {
-                if (castOpen) setCastOpen(false);
-                else void openCastPanel();
-              }}
-              type="button"
-            >
-              <Icon name="cast" />
-              {castingDevice ? `Casting to ${castingDevice.name}` : "Cast"}
-            </button>
-          )}
-        </div>
 
         {castOpen && (
-          <CastPanel
-            castBusy={castBusy}
-            castDevices={castDevices}
-            castError={castError}
-            castingDevice={castingDevice}
-            castToDevice={castToDevice}
-            copyDiagnostics={copyDiagnostics}
-            diagnosticCopyMessage={diagnosticCopyMessage}
-            drm={Boolean(item.drmLicenseUrl)}
-            openCastPanel={openCastPanel}
-          />
+          <div className="player-overlay" onClick={(event) => { if (event.target === event.currentTarget) setCastOpen(false); }}>
+            <section aria-label="Cast to a device" className="player-overlay-card" role="dialog">
+              <header className="player-overlay-header">
+                <h3>Cast to a device</h3>
+                <button aria-label="Close casting" className="icon-button" onClick={() => setCastOpen(false)} type="button">
+                  <Icon name="close" />
+                </button>
+              </header>
+              <CastPanel
+                castBusy={castBusy}
+                castDevices={castDevices}
+                castError={castError}
+                castingDevice={castingDevice}
+                castToDevice={castToDevice}
+                copyDiagnostics={copyDiagnostics}
+                diagnosticCopyMessage={diagnosticCopyMessage}
+                drm={Boolean(item.drmLicenseUrl)}
+                openCastPanel={openCastPanel}
+              />
+            </section>
+          </div>
         )}
 
         {!item.live && subtitleOpen && (
-          <SubtitlePanel
-            applySavedSubtitle={applySavedSubtitle}
-            downloadSubtitle={downloadSubtitle}
-            forgetSavedSubtitle={forgetSavedSubtitle}
-            savedSubtitles={savedSubtitles}
-            searchSubtitles={searchSubtitles}
-            setSubtitleQuery={setSubtitleQuery}
-            subtitleApiKey={subtitleApiKey}
-            subtitleBusy={subtitleBusy}
-            subtitleError={subtitleError}
-            subtitleQuery={subtitleQuery}
-            subtitleResults={subtitleResults}
-          />
+          <div className="player-overlay" onClick={(event) => { if (event.target === event.currentTarget) setSubtitleOpen(false); }}>
+            <section aria-label="Subtitles" className="player-overlay-card" role="dialog">
+              <header className="player-overlay-header">
+                <h3>Subtitles</h3>
+                <button aria-label="Close subtitle search" className="icon-button" onClick={() => setSubtitleOpen(false)} type="button">
+                  <Icon name="close" />
+                </button>
+              </header>
+              <SubtitlePanel
+                applySavedSubtitle={applySavedSubtitle}
+                downloadSubtitle={downloadSubtitle}
+                forgetSavedSubtitle={forgetSavedSubtitle}
+                savedSubtitles={savedSubtitles}
+                searchSubtitles={searchSubtitles}
+                setSubtitleQuery={setSubtitleQuery}
+                subtitleApiKey={subtitleApiKey}
+                subtitleBusy={subtitleBusy}
+                subtitleError={subtitleError}
+                subtitleQuery={subtitleQuery}
+                subtitleResults={subtitleResults}
+              />
+            </section>
+          </div>
         )}
       </section>
   );

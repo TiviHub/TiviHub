@@ -27,11 +27,9 @@ import {
 import {
   getEpisodes,
   getMdblistApiKey,
-  getMdblistPopularCacheEntry,
   getMdblistRateLimitState,
   getRatingsCacheEntry,
   saveMdblistApiKey,
-  saveMdblistPopularCacheEntry,
   saveMdblistRateLimitState,
   saveRatingsCacheEntry,
   saveEpisodes,
@@ -39,11 +37,13 @@ import {
 } from "./storage/database";
 import type { ContentType, Episode, Favorite, LiveChannel, Movie, PlayableItem, Playlist, Series } from "./types";
 import { createRatingsService } from "./services/ratingsService";
-import { createPopularCatalogService } from "./services/popularCatalogService";
 import { configureMdblistRateLimiter } from "./lib/mdblistRateLimit";
-import { CatalogPage, playableChannel } from "./components/ContentPages";
+import { playableChannel } from "./components/ContentPages";
 import { MovieDetail, SeriesDetail } from "./components/DetailPages";
 import { LiveTvPage } from "./components/LiveTvPage";
+import { CatalogBrowsePage } from "./components/CatalogBrowsePage";
+import { useMovieBrowse } from "./hooks/useMovieBrowse";
+import { useSeriesBrowse } from "./hooks/useSeriesBrowse";
 import { LibraryPage } from "./components/LibraryPage";
 import { Icon, TooltipLayer } from "./components/common";
 import { MobileNav, Sidebar, Topbar } from "./components/AppShell";
@@ -57,6 +57,7 @@ import { PlaylistDeletionProgress } from "./components/PlaylistDeletionProgress"
 import { ProgressIndicator } from "./components/ProgressIndicator";
 import { PlaylistDialog } from "./components/PlaylistDialog";
 import { SettingsPage } from "./components/SettingsPage";
+import { Toast } from "./components/Toast";
 import { StartupScreen } from "./components/StartupScreen";
 
 type Section = SearchSection;
@@ -70,9 +71,6 @@ type NavigationEntry = {
 const ratingsService = createRatingsService({
   cache: { get: getRatingsCacheEntry, put: saveRatingsCacheEntry },
   getApiKey: getMdblistApiKey,
-});
-const popularCatalogService = createPopularCatalogService({
-  cache: { get: getMdblistPopularCacheEntry, put: saveMdblistPopularCacheEntry },
 });
 configureMdblistRateLimiter({
   get: () => getMdblistRateLimitState("account"),
@@ -110,7 +108,7 @@ function App() {
     changeLibraryStatus, deleteLibraryItem, removeFromLibrary, removeFavorite,
   } = useLibrary(notify);
   const {
-    sources, activeSourceId, channels, movies, series, epg, setEpg, subtitleApiKey, setSubtitleApiKey,
+    sources, activeSourceId, channels, movies, series, addMovies, addSeries, epg, setEpg, subtitleApiKey, setSubtitleApiKey,
     mdblistApiKey, setMdblistApiKey, ready, reloadLocalData,
   } = useLocalData({ notify, setFavorites, setLibrary });
   const {
@@ -477,7 +475,7 @@ function App() {
         section={section}
       />
 
-      <main className={`main-content${section === "Live TV" && activeSource ? " main-content--browse" : ""}`} inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}>
+      <main className={`main-content${((section === "Live TV" || section === "TV Guide" || (section === "Movies" && !selectedMovie) || (section === "Series" && !selectedSeries)) && activeSource) || section === "Settings" || ((section === "Library" || section === "Downloads") && sources.length > 0) ? " main-content--browse" : ""}`} inert={refreshing || globalSearchOpen || blockingDialogOpen || Boolean(deletingSource)}>
         <Topbar
           activeSourceExpired={activeSourceExpired}
           activeSourceName={activeSource?.name}
@@ -556,7 +554,11 @@ function App() {
                 onOpenMovie={openMovie}
                 onOpenSeries={(item) => void openSeries(item)}
                 onNavigate={navigateToSection}
-                onPlay={(item, position) => openPlayback(item, position)}
+                onPlay={(item, position) => {
+                  // A channel plays on the Live TV page, not in the floating player.
+                  if (item.live) navigateToSection("Live TV");
+                  openPlayback(item, position);
+                }}
                 onPreferenceError={(message) => notify(message, "error")}
               />
             ) : section === "TV Guide" && !activeSource ? (
@@ -573,7 +575,6 @@ function App() {
                 onLoadGuideForChannels={(guideChannels) => void loadGuideForChannels(guideChannels)}
                 onPlay={(channel) => openPlayback(playableChannel(channel))}
                 onReplay={openReplay}
-                selectedChannelId={inlineLivePlayback && playableItem?.live ? playableItem.id : undefined}
               />
             ) : section === "Downloads" ? (
               <DownloadsPage
@@ -587,11 +588,6 @@ function App() {
                 onRetry={(task) => void startDownload(task.media)}
                 onPlay={(download) => void playDownload(download)}
                 onAddPlaylist={openAddSource}
-                onBrowseMovies={() => {
-                  setSelectedMovie(null);
-                  setSelectedSeries(null);
-                  navigateToSection("Movies");
-                }}
               />
             ) : section === "Settings" ? (
               <SettingsPage
@@ -669,12 +665,20 @@ function App() {
                 }}
               />
             ) : section === "Movies" ? (
-              <CatalogPage
-                {...catalogProps}
-                key="Movies"
-                mdblistApiKey={mdblistApiKey}
-                popularCatalogService={popularCatalogService}
+              <CatalogBrowsePage
+                // One page per section: the chosen category, search and sort of Movies mean nothing in Series.
+                key={section}
+                favorites={visibleFavorites}
+                library={visibleLibrary}
+                onAddToLibrary={(item) => void addToWatchlist(item, "MOVIE")}
+                onOpen={openMovie}
+                onToggleFavorite={(item) => void toggleFavorite(item, "MOVIE")}
                 section="Movies"
+                source={activeSource ?? undefined}
+                storedItems={movies}
+                showAdultContent={showAdultContent}
+                useItems={useMovieBrowse}
+                onFetched={addMovies}
               />
             ) : section === "Series" ? (
               selectedSeries && (showAdultContent || !isAdultContent(selectedSeries.name, selectedSeries.category)) ? (
@@ -724,13 +728,20 @@ function App() {
                   onOpenSeries={(item) => void openSeries(item)}
                 />
               ) : (
-                <CatalogPage
-                  {...catalogProps}
-                  key="Series"
-                  mdblistApiKey={mdblistApiKey}
-                  onOpenMovie={setSelectedMovie}
-                  popularCatalogService={popularCatalogService}
+                <CatalogBrowsePage
+                // One page per section: the chosen category, search and sort of Movies mean nothing in Series.
+                key={section}
+                  favorites={visibleFavorites}
+                  library={visibleLibrary}
+                  onAddToLibrary={(item) => void addToWatchlist(item, "SERIES")}
+                  onOpen={(item) => void openSeries(item)}
+                  onToggleFavorite={(item) => void toggleFavorite(item, "SERIES")}
                   section="Series"
+                  source={activeSource ?? undefined}
+                  storedItems={series}
+                  showAdultContent={showAdultContent}
+                  useItems={useSeriesBrowse}
+                  onFetched={addSeries}
                 />
               )
             ) : (
@@ -740,10 +751,13 @@ function App() {
                 sourceCount={sources.length}
                 onAddSource={openAddSource}
                 onChangeStatus={(item, status) => void changeLibraryStatus(item, status)}
-                onPlay={(item, position) => openPlayback(item, position)}
+                onPlay={(item, position) => {
+                  // A channel plays on the Live TV page, not in the floating player.
+                  if (item.live) navigateToSection("Live TV");
+                  openPlayback(item, position);
+                }}
                 onRemove={(id, title) => void deleteLibraryItem(id, title)}
                 onRemoveFavorite={(favorite) => void removeFavorite(favorite)}
-                onBrowseMovies={() => navigateToSection("Movies")}
                 onOpenFavorite={openFavorite}
               />
             )}
@@ -753,15 +767,7 @@ function App() {
 
       {(error || notice) && (
         <div aria-live={error ? "assertive" : "polite"} className="notification-stack" inert={refreshing || globalSearchOpen || Boolean(deletingSource)}>
-          <div
-            className={`app-message notification-toast ${error ? "error-message" : "notice-message"}`}
-            key={notificationKey}
-            role={error ? "alert" : "status"}
-          >
-            <Icon name={error ? "error_outline" : "info"} />
-            <span>{error ?? notice}</span>
-            <button aria-label="Dismiss notification" onClick={clearNotifications} type="button"><Icon name="close" /></button>
-          </div>
+          <Toast key={notificationKey} kind={error ? "error" : "notice"} onDismiss={clearNotifications}>{error ?? notice}</Toast>
         </div>
       )}
 

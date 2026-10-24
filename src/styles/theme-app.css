@@ -163,8 +163,16 @@ textarea {
 :is(.catalog-card, .feature-card):hover {
   background: var(--row);
 }
-
-:is(.source-row.active, .live-channel-list-item.selected, .live-guide-channel.is-playing, .library-tabs button.active, .library-content-tabs button.active, .browse-category.active, .catalog-view-switch button.active, .custom-select-option.active, .custom-select-option[aria-selected="true"], .theme-option.selected, .source-type.active, .source-mode.active) {
+:is(.source-row.active,
+.live-channel-list-item.selected,
+.live-guide-channel.is-playing,
+.browse-category.active,
+.catalog-view-switch button.active,
+.custom-select-option.active,
+.custom-select-option[aria-selected="true"],
+.theme-option.selected,
+.source-type.active,
+.source-mode.active) {
   border-color: transparent;
   background: var(--row-selected);
   box-shadow: inset 3px 0 var(--primary);
@@ -191,10 +199,6 @@ textarea {
 
 :is(.theme-option, .secondary-button, .source-type, .source-mode, .icon-button):hover {
   background-color: var(--surface-hover);
-}
-
-:is(.settings-nav) {
-  background-color: var(--panel);
 }
 
 :is(input, select, textarea):focus-visible {
@@ -238,22 +242,10 @@ textarea {
 }
 
 /* Episode rows and library tabs follow the Live TV channel list: separate grey tiles, grey hover, purple selection bar. */
-.browse-category:hover:not(.active),
-.library-tabs button:hover:not(.active),
-.library-content-tabs button:hover:not(.active) {
+.browse-category:hover:not(.active) {
   border-color: transparent;
   background: var(--surface-hover);
   color: var(--text);
-}
-
-.library-tabs {
-  border-bottom-color: transparent;
-}
-
-.library-tabs button,
-.library-content-tabs button {
-  border: 0;
-  background: var(--row);
 }
 
 
@@ -273,11 +265,6 @@ button.icon-button.selected {
 
 button.icon-button.selected {
   color: var(--secondary);
-}
-
-/* Same as the eyebrow labels: the settings menu has no small caps caption. */
-.settings-nav > p {
-  display: none;
 }
 
 /* File inputs get the same flat grey field as the other form inputs. */
