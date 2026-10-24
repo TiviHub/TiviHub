@@ -3,6 +3,8 @@ import { decryptBackup, encryptBackup } from "../services/backup";
 import { formatCatalogChangeSummary } from "../services/catalogRefresh";
 import { createSnapshot, restoreSnapshot } from "../storage/database";
 import { clearSubtitleCache, countSavedSubtitles } from "../services/subtitleService";
+import { formatDateTime, LOCALES, setLocale, t, tCount, useLocale, type Locale } from "../lib/i18n";
+import type { MessageKey } from "../locales";
 import type { Playlist, UserDataSnapshot } from "../types";
 import { Icon } from "./common";
 import { BrowseShell } from "./BrowseShell";
@@ -11,18 +13,18 @@ import { NavPanel, type NavPanelItem } from "./NavPanel";
 
 type ThemePreference = "system" | "light" | "dark";
 
-const themeChoices: { value: ThemePreference; label: string; icon: "brightness_auto" | "dark_mode" | "light_mode" }[] = [
-  { value: "system", label: "System", icon: "brightness_auto" },
-  { value: "dark", label: "Dark", icon: "dark_mode" },
-  { value: "light", label: "Light", icon: "light_mode" },
+const themeChoices: { value: ThemePreference; label: MessageKey; icon: "brightness_auto" | "dark_mode" | "light_mode" }[] = [
+  { value: "system", label: "settings.theme.system", icon: "brightness_auto" },
+  { value: "dark", label: "settings.theme.dark", icon: "dark_mode" },
+  { value: "light", label: "settings.theme.light", icon: "light_mode" },
 ];
 
 function refreshOutcomeLabel(outcome: NonNullable<Playlist["lastCatalogRefreshOutcome"]>): string {
   switch (outcome) {
-    case "success": return "Updated successfully";
-    case "review-required": return "Large change paused for review";
-    case "kept-previous": return "Kept the previous catalog";
-    case "failed": return "Failed; saved catalog kept";
+    case "success": return t("settings.refresh.success");
+    case "review-required": return t("settings.refresh.reviewRequired");
+    case "kept-previous": return t("settings.refresh.keptPrevious");
+    case "failed": return t("settings.refresh.failed");
   }
 }
 
@@ -106,6 +108,18 @@ export function SettingsPage({
   const [subtitleCacheNotice, setSubtitleCacheNotice] = useState<string | null>(null);
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
   const [diagnosticsNotice, setDiagnosticsNotice] = useState<string | null>(null);
+  const locale = useLocale();
+  const [languageError, setLanguageError] = useState<string | null>(null);
+
+  function chooseLanguage(value: Locale) {
+    setLanguageError(null);
+    try {
+      setLocale(value);
+    } catch (cause) {
+      console.error("Could not save the local language preference", cause);
+      setLanguageError(t("settings.language.saveFailed"));
+    }
+  }
 
   async function downloadDiagnostics() {
     setDiagnosticsNotice(null);
@@ -113,10 +127,10 @@ export function SettingsPage({
     try {
       const storageAvailable = await onDownloadDiagnostics();
       setDiagnosticsNotice(storageAvailable
-        ? "Diagnostic log downloaded. Review it before sharing."
-        : "Diagnostic log downloaded, but older errors could not be saved on this device.");
+        ? t("settings.diagnostics.downloaded")
+        : t("settings.diagnostics.downloadedPartial"));
     } catch {
-      setDiagnosticsNotice("Could not create the diagnostic log. No file was downloaded.");
+      setDiagnosticsNotice(t("settings.diagnostics.failed"));
     } finally {
       setDiagnosticsBusy(false);
     }
@@ -130,9 +144,9 @@ export function SettingsPage({
     try {
       await clearSubtitleCache();
       setSavedSubtitleCount(0);
-      setSubtitleCacheNotice("Subtitle cache cleared.");
+      setSubtitleCacheNotice(t("settings.subtitles.cleared"));
     } catch {
-      setSubtitleCacheNotice("Could not clear the subtitle cache.");
+      setSubtitleCacheNotice(t("settings.subtitles.clearFailed"));
     }
   }
 
@@ -141,9 +155,9 @@ export function SettingsPage({
     setKeyNotice(null);
     try {
       await onSaveApiKey(keyDraft);
-      setKeyNotice(keyDraft.trim() ? "OpenSubtitles API key saved on this device." : "OpenSubtitles API key removed.");
+      setKeyNotice(keyDraft.trim() ? t("settings.subtitles.keySaved") : t("settings.subtitles.keyRemoved"));
     } catch (cause) {
-      setKeyNotice(cause instanceof Error ? cause.message : "Could not save the API key.");
+      setKeyNotice(cause instanceof Error ? cause.message : t("settings.apiKey.saveFailed"));
     }
   }
 
@@ -152,9 +166,9 @@ export function SettingsPage({
     setMdblistNotice(null);
     try {
       await onSaveMdblistApiKey?.(mdblistDraft);
-      setMdblistNotice(mdblistDraft.trim() ? "MDBList API key saved on this device." : "MDBList API key removed.");
+      setMdblistNotice(mdblistDraft.trim() ? t("settings.ratings.keySaved") : t("settings.ratings.keyRemoved"));
     } catch (cause) {
-      setMdblistNotice(cause instanceof Error ? cause.message : "Could not save the API key.");
+      setMdblistNotice(cause instanceof Error ? cause.message : t("settings.apiKey.saveFailed"));
     }
   }
 
@@ -163,7 +177,7 @@ export function SettingsPage({
     setBackupError(null);
     setBackupNotice(null);
     if (backupPassword !== backupConfirm) {
-      setBackupError("The backup passwords do not match.");
+      setBackupError(t("settings.backup.mismatch"));
       return;
     }
     setBackupBusy(true);
@@ -176,11 +190,11 @@ export function SettingsPage({
       anchor.download = `tivihub-backup-${new Date().toISOString().slice(0, 10)}.tivihub`;
       anchor.click();
       URL.revokeObjectURL(url);
-      setBackupNotice("Encrypted backup downloaded. Keep its password safe; it cannot be recovered.");
+      setBackupNotice(t("settings.backup.downloaded"));
       setBackupPassword("");
       setBackupConfirm("");
     } catch (cause) {
-      setBackupError(cause instanceof Error ? cause.message : "Could not create the backup.");
+      setBackupError(cause instanceof Error ? cause.message : t("settings.backup.createFailed"));
     } finally {
       setBackupBusy(false);
     }
@@ -191,18 +205,18 @@ export function SettingsPage({
     setBackupError(null);
     setBackupNotice(null);
     if (!backupFile) {
-      setBackupError("Choose a TiviHub backup file.");
+      setBackupError(t("settings.backup.chooseFile"));
       return;
     }
     if (backupFile.size > 100 * 1024 * 1024) {
-      setBackupError("Backup file exceeds the 100 MB limit.");
+      setBackupError(t("settings.backup.tooLarge"));
       return;
     }
     setBackupBusy(true);
     try {
       setPendingSnapshot(await decryptBackup(await backupFile.text(), importPassword));
     } catch (cause) {
-      setBackupError(cause instanceof Error ? cause.message : "Could not read this backup.");
+      setBackupError(cause instanceof Error ? cause.message : t("settings.backup.readFailed"));
     } finally {
       setBackupBusy(false);
     }
@@ -210,7 +224,7 @@ export function SettingsPage({
 
   async function applyBackup() {
     if (!pendingSnapshot) return;
-    if (!window.confirm("Replace all TiviHub data saved by this app with this backup? This cannot be undone.")) return;
+    if (!window.confirm(t("settings.backup.confirmReplace"))) return;
     setBackupBusy(true);
     setBackupError(null);
     try {
@@ -222,49 +236,49 @@ export function SettingsPage({
       setPendingSnapshot(null);
       setBackupFile(null);
       setImportPassword("");
-      setBackupNotice("Backup restored to this app.");
+      setBackupNotice(t("settings.backup.restored"));
     } catch (cause) {
-      setBackupError(cause instanceof Error ? cause.message : "Could not restore this backup.");
+      setBackupError(cause instanceof Error ? cause.message : t("settings.backup.restoreFailed"));
     } finally {
       setBackupBusy(false);
     }
   }
 
   const sections: NavPanelItem[] = [
-    { id: "sources", label: "Sources", icon: "playlist_play", count: sources.length },
-    { id: "appearance", label: "Appearance", icon: "dark_mode" },
-    { id: "content-visibility", label: "Adult content", icon: "shield" },
-    { id: "downloads", label: "Downloads", icon: "download" },
-    { id: "subtitles", label: "Subtitles", icon: "subtitles" },
-    ...(onSaveMdblistApiKey ? [{ id: "ratings", label: "External ratings", icon: "high_quality" } as const] : []),
-    { id: "data", label: "Backup and diagnostics", icon: "backup" },
-    { id: "privacy", label: "Privacy and legal", icon: "lock" },
-    ...(isDesktopApp ? [{ id: "updates", label: "App updates", icon: "refresh" } as const] : []),
+    { id: "sources", label: t("settings.section.sources"), icon: "playlist_play", count: sources.length },
+    { id: "appearance", label: t("settings.section.appearance"), icon: "dark_mode" },
+    { id: "content-visibility", label: t("settings.section.adult"), icon: "shield" },
+    { id: "downloads", label: t("settings.section.downloads"), icon: "download" },
+    { id: "subtitles", label: t("settings.section.subtitles"), icon: "subtitles" },
+    ...(onSaveMdblistApiKey ? [{ id: "ratings", label: t("settings.section.ratings"), icon: "high_quality" } as const] : []),
+    { id: "data", label: t("settings.section.data"), icon: "backup" },
+    { id: "privacy", label: t("settings.section.privacy"), icon: "lock" },
+    ...(isDesktopApp ? [{ id: "updates", label: t("settings.section.updates"), icon: "refresh" } as const] : []),
   ];
 
   return (
     <BrowseShell
       bodyClassName="live-channel-list browse-list settings-body"
-      label="Settings"
+      label={t("settings.title")}
       nav={(
         <NavPanel
           items={sections}
           onSelect={setGroup}
           selectedId={group}
-          title="Settings"
+          title={t("settings.title")}
         />
       )}
-      title={sections.find((entry) => entry.id === group)?.label ?? "Settings"}
+      title={sections.find((entry) => entry.id === group)?.label ?? t("settings.title")}
     >
       <div className="settings-content">
           <section aria-labelledby="settings-appearance-heading" className="settings-group" id="settings-appearance" hidden={group !== "appearance"}>
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="dark_mode" /></div>
-                <div><h2 id="settings-appearance-heading">Appearance</h2><p>Choose a theme that feels right on this device.</p></div>
+                <div><h2 id="settings-appearance-heading">{t("settings.section.appearance")}</h2><p>{t("settings.appearance.intro")}</p></div>
               </div>
               <fieldset className="theme-options">
-                <legend className="sr-only">Color theme</legend>
+                <legend className="sr-only">{t("settings.appearance.themeLegend")}</legend>
                 {themeChoices.map((choice) => (
                   <button
                     aria-pressed={theme === choice.value}
@@ -274,11 +288,32 @@ export function SettingsPage({
                     type="button"
                   >
                     <span className="theme-option-icon"><Icon name={choice.icon} /></span>
-                    <span>{choice.label}</span>
+                    <span>{t(choice.label)}</span>
                     {theme === choice.value && <Icon name="check" />}
                   </button>
                 ))}
               </fieldset>
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="language" /></div>
+                <div><h2 id="settings-language-heading">{t("settings.language.heading")}</h2><p>{t("settings.language.intro")}</p></div>
+              </div>
+              <fieldset className="theme-options">
+                <legend className="sr-only">{t("settings.language.heading")}</legend>
+                {LOCALES.map((choice) => (
+                  <button
+                    aria-pressed={locale === choice.value}
+                    className={`theme-option${locale === choice.value ? " selected" : ""}`}
+                    key={choice.value}
+                    lang={choice.value}
+                    onClick={() => chooseLanguage(choice.value)}
+                    type="button"
+                  >
+                    <span>{choice.name}</span>
+                    {locale === choice.value && <Icon name="check" />}
+                  </button>
+                ))}
+              </fieldset>
+              {languageError && <p className="form-error" role="alert">{languageError}</p>}
             </div>
           </section>
 
@@ -286,12 +321,12 @@ export function SettingsPage({
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="shield" /></div>
-                <div><h2 id="settings-content-heading">Adult content</h2><p>Choose whether adult movies, series, and TV are shown.</p></div>
+                <div><h2 id="settings-content-heading">{t("settings.section.adult")}</h2><p>{t("settings.adult.intro")}</p></div>
               </div>
               <label className="adult-content-toggle">
                 <span>
-                  <strong>Show adult content</strong>
-                  <small>Matches Adult, XXX, Porn, Erotic, and 18+ labels in titles and categories.</small>
+                  <strong>{t("settings.adult.toggle")}</strong>
+                  <small>{t("settings.adult.hint")}</small>
                 </span>
                 <input
                   checked={showAdultContent}
@@ -306,10 +341,10 @@ export function SettingsPage({
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="playlist_play" /></div>
-                <div><h2 id="settings-sources-heading">Your sources</h2><p>Remote catalogs are cached locally, auto-refresh every 24 hours, and can be refreshed anytime.</p></div>
+                <div><h2 id="settings-sources-heading">{t("settings.sources.heading")}</h2><p>{t("settings.sources.intro")}</p></div>
               </div>
               {sources.length === 0 ? (
-                <EmptyPanel icon="playlist_play" title="No sources yet">Add an M3U playlist, an Xtream Codes account or a portal to browse your media.</EmptyPanel>
+                <EmptyPanel icon="playlist_play" title={t("settings.sources.emptyTitle")}>{t("settings.sources.emptyBody")}</EmptyPanel>
               ) : (
                 <div className="source-list">
                   {sources.map((source) => (
@@ -318,38 +353,40 @@ export function SettingsPage({
                       <div className="source-row-copy">
                         <strong>{source.name}</strong>
                         <small>{source.type}{source.expiresAtMillis
-                          ? ` · ${source.expiresAtMillis <= Date.now() ? "Expired" : "Expires"} ${new Date(source.expiresAtMillis).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+                          ? ` · ${t(source.expiresAtMillis <= Date.now() ? "settings.sources.expired" : "settings.sources.expires", { date: formatDateTime(source.expiresAtMillis, "medium") })}`
                           : ""}</small>
                         <small data-tooltip={source.lastCatalogRefreshAt
-                          ? `Last successful catalog refresh: ${new Date(source.lastCatalogRefreshAt).toLocaleString()}`
-                          : "A catalog refresh has not been recorded for this source yet."}>
-                          Last successful refresh: {source.lastCatalogRefreshAt
-                            ? new Date(source.lastCatalogRefreshAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })
-                            : "Not recorded"}
+                          ? t("settings.sources.lastRefreshTooltip", { date: formatDateTime(source.lastCatalogRefreshAt, "medium") })
+                          : t("settings.sources.noRefreshTooltip")}>
+                          {t("settings.sources.lastRefresh", {
+                            date: source.lastCatalogRefreshAt ? formatDateTime(source.lastCatalogRefreshAt) : t("settings.sources.notRecorded"),
+                          })}
                         </small>
                         {source.lastCatalogRefreshAttemptAt && source.lastCatalogRefreshOutcome && (
                           <small>
-                            Latest attempt: {refreshOutcomeLabel(source.lastCatalogRefreshOutcome)} ·{" "}
-                            {new Date(source.lastCatalogRefreshAttemptAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                            {t("settings.sources.latestAttempt", {
+                              outcome: refreshOutcomeLabel(source.lastCatalogRefreshOutcome),
+                              date: formatDateTime(source.lastCatalogRefreshAttemptAt),
+                            })}
                           </small>
                         )}
                         {source.lastCatalogRefreshSummary && (
-                          <small>Changes: {formatCatalogChangeSummary(source.lastCatalogRefreshSummary)}</small>
+                          <small>{t("settings.sources.changes", { summary: formatCatalogChangeSummary(source.lastCatalogRefreshSummary) })}</small>
                         )}
                       </div>
                       {source.id !== activeSourceId && (
-                        <button className="secondary-button source-select-button" onClick={() => onActivate(source.id)} type="button">Use</button>
+                        <button className="secondary-button source-select-button" onClick={() => onActivate(source.id)} type="button">{t("settings.sources.use")}</button>
                       )}
-                      {source.id === activeSourceId && <span className="active-source-tag"><Icon name="check_circle" /> Active</span>}
-                      <button aria-label={`Edit ${source.name}`} className="icon-button settings-source-action" data-tooltip="Edit playlist" onClick={() => onEdit(source)} type="button"><Icon name="edit" /></button>
-                      <button aria-label={`Delete ${source.name}`} className="icon-button danger-button settings-source-action" data-tooltip="Remove playlist" onClick={() => onDelete(source)} type="button"><Icon name="delete" /></button>
+                      {source.id === activeSourceId && <span className="active-source-tag"><Icon name="check_circle" /> {t("settings.sources.active")}</span>}
+                      <button aria-label={t("settings.sources.editAria", { name: source.name })} className="icon-button settings-source-action" data-tooltip={t("settings.sources.editTooltip")} onClick={() => onEdit(source)} type="button"><Icon name="edit" /></button>
+                      <button aria-label={t("settings.sources.deleteAria", { name: source.name })} className="icon-button danger-button settings-source-action" data-tooltip={t("settings.sources.deleteTooltip")} onClick={() => onDelete(source)} type="button"><Icon name="delete" /></button>
                     </article>
                   ))}
                 </div>
               )}
               <div className="settings-actions">
                 <button className="secondary-button" onClick={onAddSource} type="button">
-                  <Icon name="add" /> {sources.length === 0 ? "Add source" : "Add another source"}
+                  <Icon name="add" /> {sources.length === 0 ? t("settings.sources.add") : t("settings.sources.addAnother")}
                 </button>
                 {activeSourceId && (
                   <button
@@ -358,7 +395,7 @@ export function SettingsPage({
                     onClick={onRefreshSource}
                     type="button"
                   >
-                    <Icon name="refresh" /> {refreshing ? "Refreshing source…" : "Refresh source"}
+                    <Icon name="refresh" /> {refreshing ? t("settings.sources.refreshing") : t("settings.sources.refresh")}
                   </button>
                 )}
                 {activeSourceId && (
@@ -371,7 +408,7 @@ export function SettingsPage({
                     }}
                     type="button"
                   >
-                    <Icon name="schedule" /> {epgBusy ? "Updating guide…" : "Refresh TV guide"}
+                    <Icon name="schedule" /> {epgBusy ? t("settings.sources.updatingGuide") : t("settings.sources.refreshGuide")}
                   </button>
                 )}
               </div>
@@ -383,27 +420,27 @@ export function SettingsPage({
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="download" /></div>
                 <div>
-                  <h2 id="settings-downloads-heading">Downloads</h2>
-                  <p>Choose where downloaded videos are copied and manage completed offline downloads.</p>
+                  <h2 id="settings-downloads-heading">{t("settings.section.downloads")}</h2>
+                  <p>{t("settings.downloads.intro")}</p>
                 </div>
               </div>
               <div className="settings-download-location">
                 <div>
-                  <span>Download folder</span>
+                  <span>{t("settings.downloads.folder")}</span>
                   <strong>
-                    {downloadDirectoryPath ?? "No additional folder selected"}
+                    {downloadDirectoryPath ?? t("settings.downloads.noFolder")}
                   </strong>
-                  <small>New downloads will be copied to this default folder. Offline playback continues using TiviHub’s local copy.</small>
+                  <small>{t("settings.downloads.folderHint")}</small>
                 </div>
                 <button className="secondary-button" onClick={onChangeDownloadDirectory} type="button">
-                  <Icon name="folder_open" /> Change folder
+                  <Icon name="folder_open" /> {t("settings.downloads.change")}
                 </button>
               </div>
               <div className="settings-download-location">
                 <div>
-                  <span>Completed downloads</span>
-                  <strong>{completedDownloadCount.toLocaleString()} saved {completedDownloadCount === 1 ? "video" : "videos"}</strong>
-                  <small>Remove completed offline downloads from this device. Active downloads are not affected.</small>
+                  <span>{t("settings.downloads.completed")}</span>
+                  <strong>{tCount("settings.downloads.saved", completedDownloadCount)}</strong>
+                  <small>{t("settings.downloads.completedHint")}</small>
                 </div>
                 <button
                   className="secondary-button danger-button"
@@ -411,7 +448,7 @@ export function SettingsPage({
                   onClick={onClearCompletedDownloads}
                   type="button"
                 >
-                  <Icon name="delete_sweep" /> Clear completed downloads
+                  <Icon name="delete_sweep" /> {t("settings.downloads.clear")}
                 </button>
               </div>
             </div>
@@ -421,21 +458,21 @@ export function SettingsPage({
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="subtitles" /></div>
-                <div><h2 id="settings-subtitles-heading">Subtitles</h2><p>Optional OpenSubtitles search from this app.</p></div>
+                <div><h2 id="settings-subtitles-heading">{t("settings.section.subtitles")}</h2><p>{t("settings.subtitles.intro")}</p></div>
               </div>
               <form className="settings-form" onSubmit={(event) => void saveKey(event)}>
                 <label className="form-field">
-                  <span>OpenSubtitles API key <em>{apiKey.trim() ? "Saved" : "Optional"}</em></span>
+                  <span>{t("settings.subtitles.keyLabel")} <em>{apiKey.trim() ? t("settings.apiKey.saved") : t("settings.apiKey.optional")}</em></span>
                   <input
                     autoComplete="off"
                     onChange={(event) => setKeyDraft(event.target.value)}
-                    placeholder="Paste your personal API key"
+                    placeholder={t("settings.apiKey.placeholder")}
                     type="password"
                     value={keyDraft}
                   />
                 </label>
                 <p className="form-note">
-                  Encrypted in this app and sent only to OpenSubtitles when you search. Cross-origin or account restrictions can prevent downloads.{" "}
+                  {t("settings.subtitles.note")}{" "}
                   <a
                     href="https://www.opensubtitles.com/en/consumers"
                     onClick={(event) => {
@@ -446,18 +483,18 @@ export function SettingsPage({
                     rel="noreferrer"
                     target="_blank"
                   >
-                    Get an OpenSubtitles API key
+                    {t("settings.subtitles.getKey")}
                   </a>
                   .
                 </p>
-                <button className="secondary-button" type="submit"><Icon name="lock" /> Save key</button>
+                <button className="secondary-button" type="submit"><Icon name="lock" /> {t("settings.subtitles.saveKey")}</button>
                 {keyNotice && <p className="settings-message" role="status">{keyNotice}</p>}
               </form>
               <div className="settings-download-location">
                 <div>
-                  <span>Downloaded subtitles</span>
-                  <strong>{savedSubtitleCount.toLocaleString()} saved {savedSubtitleCount === 1 ? "subtitle" : "subtitles"}</strong>
-                  <small>Kept on this device so a subtitle you downloaded once never needs another OpenSubtitles request.</small>
+                  <span>{t("settings.subtitles.downloaded")}</span>
+                  <strong>{tCount("settings.subtitles.saved", savedSubtitleCount)}</strong>
+                  <small>{t("settings.subtitles.cacheHint")}</small>
                   {subtitleCacheNotice && <small role="status">{subtitleCacheNotice}</small>}
                 </div>
                 <button
@@ -466,7 +503,7 @@ export function SettingsPage({
                   onClick={() => void clearCache()}
                   type="button"
                 >
-                  <Icon name="delete_sweep" /> Clear subtitle cache
+                  <Icon name="delete_sweep" /> {t("settings.subtitles.clear")}
                 </button>
               </div>
             </div>
@@ -477,21 +514,21 @@ export function SettingsPage({
               <div className="settings-card">
                 <div className="settings-card-heading">
                   <div className="settings-heading-icon"><Icon name="high_quality" /></div>
-                  <div><h2 id="settings-ratings-heading">External ratings</h2><p>Optional MDBList ratings on movie and series details.</p></div>
+                  <div><h2 id="settings-ratings-heading">{t("settings.section.ratings")}</h2><p>{t("settings.ratings.intro")}</p></div>
                 </div>
                 <form className="settings-form" onSubmit={(event) => void saveMdblistKey(event)}>
                   <label className="form-field">
-                    <span>MDBList API key <em>{mdblistApiKey.trim() ? "Saved" : "Optional"}</em></span>
+                    <span>{t("settings.ratings.keyLabel")} <em>{mdblistApiKey.trim() ? t("settings.apiKey.saved") : t("settings.apiKey.optional")}</em></span>
                     <input
                       autoComplete="off"
                       onChange={(event) => setMdblistDraft(event.target.value)}
-                      placeholder="Paste your personal API key"
+                      placeholder={t("settings.apiKey.placeholder")}
                       type="password"
                       value={mdblistDraft}
                     />
                   </label>
                   <p className="form-note">
-                    Encrypted in this app, never included in backups, and sent only to MDBList when you open a title. Re-enter it after restoring a backup.{" "}
+                    {t("settings.ratings.note")}{" "}
                     <a
                       href="https://mdblist.com/preferences/#api"
                       onClick={(event) => {
@@ -502,11 +539,11 @@ export function SettingsPage({
                       rel="noreferrer"
                       target="_blank"
                     >
-                      Get an MDBList API key
+                      {t("settings.ratings.getKey")}
                     </a>
                     .
                   </p>
-                  <button className="secondary-button" type="submit"><Icon name="lock" /> Save MDBList key</button>
+                  <button className="secondary-button" type="submit"><Icon name="lock" /> {t("settings.ratings.saveKey")}</button>
                   {mdblistNotice && <p className="settings-message" role="status">{mdblistNotice}</p>}
                 </form>
               </div>
@@ -514,63 +551,63 @@ export function SettingsPage({
           )}
 
           <section aria-labelledby="settings-data-heading" className="settings-group settings-data" id="settings-data" hidden={group !== "data"}>
-            <h2 className="sr-only" id="settings-data-heading">Data and diagnostics</h2>
+            <h2 className="sr-only" id="settings-data-heading">{t("settings.data.heading")}</h2>
             <div className="settings-card" id="settings-backup">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="backup" /></div>
-                <div><h2>Encrypted backup</h2><p>Move or restore your data without a TiviHub account.</p></div>
+                <div><h2>{t("settings.backup.heading")}</h2><p>{t("settings.backup.intro")}</p></div>
               </div>
               <div className="backup-grid">
                 <form className="backup-form" onSubmit={(event) => void exportBackup(event)}>
-                  <h3>Export</h3>
+                  <h3>{t("settings.backup.export")}</h3>
                   <label className="form-field">
-                    <span>Backup password</span>
+                    <span>{t("settings.backup.password")}</span>
                     <input autoComplete="new-password" minLength={12} onChange={(event) => setBackupPassword(event.target.value)} required type="password" value={backupPassword} />
                   </label>
                   <label className="form-field">
-                    <span>Confirm password</span>
+                    <span>{t("settings.backup.confirm")}</span>
                     <input autoComplete="new-password" minLength={12} onChange={(event) => setBackupConfirm(event.target.value)} required type="password" value={backupConfirm} />
                   </label>
-                  <button className="primary-button" disabled={backupBusy} type="submit"><Icon name="download" /> Download encrypted backup</button>
+                  <button className="primary-button" disabled={backupBusy} type="submit"><Icon name="download" /> {t("settings.backup.download")}</button>
                 </form>
                 <form className="backup-form" onSubmit={(event) => void inspectBackup(event)}>
-                  <h3>Import</h3>
+                  <h3>{t("settings.backup.import")}</h3>
                   <label className="form-field">
-                    <span>Backup file</span>
+                    <span>{t("settings.backup.file")}</span>
                     <input accept=".tivihub,.json,application/json" onChange={(event) => { setBackupFile(event.target.files?.[0] ?? null); setPendingSnapshot(null); }} required type="file" />
                   </label>
                   <label className="form-field">
-                    <span>Backup password</span>
+                    <span>{t("settings.backup.password")}</span>
                     <input autoComplete="current-password" onChange={(event) => setImportPassword(event.target.value)} required type="password" value={importPassword} />
                   </label>
-                  <button className="secondary-button" disabled={backupBusy} type="submit"><Icon name="search" /> Check backup</button>
+                  <button className="secondary-button" disabled={backupBusy} type="submit"><Icon name="search" /> {t("settings.backup.check")}</button>
                 </form>
               </div>
               {pendingSnapshot && (
                 <div className="backup-preview">
                   <div>
-                    <strong>Backup is valid</strong>
-                    <p>{pendingSnapshot.playlists.length} sources · {pendingSnapshot.channels.length + pendingSnapshot.movies.length + pendingSnapshot.series.length} catalog items · {pendingSnapshot.favorites.length} favorites · {pendingSnapshot.library.length} library items</p>
+                    <strong>{t("settings.backup.valid")}</strong>
+                    <p>{t("settings.backup.summary", {
+                      sources: pendingSnapshot.playlists.length,
+                      items: pendingSnapshot.channels.length + pendingSnapshot.movies.length + pendingSnapshot.series.length,
+                      favorites: pendingSnapshot.favorites.length,
+                      library: pendingSnapshot.library.length,
+                    })}</p>
                   </div>
-                  <button className="primary-button" disabled={backupBusy} onClick={() => void applyBackup()} type="button"><Icon name="restore" /> Replace local data</button>
+                  <button className="primary-button" disabled={backupBusy} onClick={() => void applyBackup()} type="button"><Icon name="restore" /> {t("settings.backup.replace")}</button>
                 </div>
               )}
               {backupError && <p className="form-error" role="alert">{backupError}</p>}
               {backupNotice && <p className="settings-message" role="status">{backupNotice}</p>}
-              <p className="form-note">Backups use AES-256-GCM encryption. Choose a strong password of at least 12 characters and keep it safe; TiviHub cannot recover it.</p>
+              <p className="form-note">{t("settings.backup.note")}</p>
             </div>
 
             <div className="settings-card" id="settings-diagnostics">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="download" /></div>
-                <div><h2>Diagnostics</h2><p>Download recent request errors and playlist-import summaries for troubleshooting.</p></div>
+                <div><h2>{t("settings.diagnostics.heading")}</h2><p>{t("settings.diagnostics.intro")}</p></div>
               </div>
-              <p className="diagnostics-description">
-                The log is stored only on this device and keeps up to 100 recent failures plus 20 import
-                summaries. Import summaries contain only source type, elapsed time, and catalog counts.
-                The export excludes media titles, source names, URLs, credentials, raw error messages,
-                and stack traces. Review the file before sharing it.
-              </p>
+              <p className="diagnostics-description">{t("settings.diagnostics.description")}</p>
               <div className="diagnostics-download-row">
                 <button
                   className="secondary-button"
@@ -578,44 +615,37 @@ export function SettingsPage({
                   onClick={() => void downloadDiagnostics()}
                   type="button"
                 >
-                  <Icon name="download" /> {diagnosticsBusy ? "Preparing log…" : "Download diagnostic log"}
+                  <Icon name="download" /> {diagnosticsBusy ? t("settings.diagnostics.preparing") : t("settings.diagnostics.download")}
                 </button>
                 {diagnosticsNotice && (
                   <p aria-live="polite" className="settings-message" role="status">{diagnosticsNotice}</p>
                 )}
               </div>
               <p className="form-note">
-                TiviHub saves the log automatically in your Downloads folder as{" "}
+                {t("settings.diagnostics.autosave")}{" "}
                 <code>tivihub-diagnostics-YYYY-MM-DD.json</code>.
               </p>
             </div>
           </section>
 
           <section aria-labelledby="settings-privacy-heading" className="settings-group settings-privacy" id="settings-privacy" hidden={group !== "privacy"}>
-            <h2 className="sr-only" id="settings-privacy-heading">Privacy and legal</h2>
+            <h2 className="sr-only" id="settings-privacy-heading">{t("settings.section.privacy")}</h2>
             <div className="settings-card privacy-settings" id="settings-privacy-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="shield" /></div>
-                <div><h2>Privacy by design</h2><p>No TiviHub account or application server.</p></div>
+                <div><h2>{t("settings.privacy.heading")}</h2><p>{t("settings.privacy.intro")}</p></div>
               </div>
-              <p className="privacy-description">
-                Playlists, credentials, favorites, playback progress, and settings stay on this device.
-                Backups are encrypted files that you choose where to save. The installed app does not
-                contact TiviHub servers. Playback and subtitle requests go directly to their configured
-                providers, which receive your connection and request details. The website host may log
-                visits and installer downloads. Cached stream links can contain provider tokens.
-                Local storage is not protection against malicious code running on this device or
-                extensions.
-              </p>
-              <div className="privacy-tag"><span className="status-pulse" /> DATA STAYS ON THIS DEVICE</div>
+              <p className="privacy-description">{t("settings.privacy.description")}</p>
+              <div className="privacy-tag"><span className="status-pulse" /> {t("settings.privacy.tag")}</div>
             </div>
 
             <div className="settings-card legal-settings" id="settings-legal">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="info" /></div>
-                <div><h2>Legal and content rights</h2><p>Important information about using third-party sources.</p></div>
+                <div><h2>{t("settings.legal.heading")}</h2><p>{t("settings.legal.intro")}</p></div>
               </div>
-              <div className="legal-notice-copy">
+              {/* The notice itself stays English on purpose: a loose translation of legal text is riskier than none. */}
+              <div className="legal-notice-copy" lang="en">
                 <p>
                   TiviHub is a desktop player and catalog organizer for sources you configure.
                   It does not supply, sell, license, or host your channels or media, and it does not
@@ -652,23 +682,23 @@ export function SettingsPage({
               <div className="settings-card">
                 <div className="settings-card-heading">
                   <div className="settings-heading-icon"><Icon name="download" /></div>
-                  <div><h2 id="settings-updates-heading">Application updates</h2><p>Check for the latest TiviHub desktop version.</p></div>
+                  <div><h2 id="settings-updates-heading">{t("settings.updates.heading")}</h2><p>{t("settings.updates.intro")}</p></div>
                 </div>
                 <div className="settings-update-row">
                   <div className="settings-update-details">
-                    <p className="settings-version">Installed version · v{version}</p>
+                    <p className="settings-version">{t("settings.updates.installed", { version })}</p>
                     <div aria-live="polite" className="settings-update-status" role="status">
                       <span className={`settings-update-indicator ${updateStatus}`} />
                       <span>
                         {updateStatus === "checking"
-                          ? "Checking for updates…"
+                          ? t("settings.updates.checking")
                           : updateStatus === "current"
-                            ? "Up to date"
+                            ? t("settings.updates.current")
                             : updateStatus === "available" && availableUpdateVersion
-                              ? `Update available · v${availableUpdateVersion}`
+                              ? t("settings.updates.available", { version: availableUpdateVersion })
                               : updateStatus === "error"
-                                ? availableUpdateVersion ? "Could not open installer" : "Update check failed"
-                                : "Check for updates"}
+                                ? availableUpdateVersion ? t("settings.updates.openFailed") : t("settings.updates.checkFailed")
+                                : t("settings.updates.check")}
                       </span>
                     </div>
                   </div>
@@ -680,10 +710,10 @@ export function SettingsPage({
                   >
                     <Icon name={availableUpdateVersion ? "download" : "refresh"} />
                     {availableUpdateVersion
-                      ? `Download v${availableUpdateVersion}`
+                      ? t("settings.updates.download", { version: availableUpdateVersion })
                       : updateStatus === "checking"
-                        ? "Checking…"
-                        : updateStatus === "error" ? "Retry check" : "Check for updates"}
+                        ? t("settings.updates.checkingShort")
+                        : updateStatus === "error" ? t("settings.updates.retry") : t("settings.updates.check")}
                   </button>
                 </div>
               </div>

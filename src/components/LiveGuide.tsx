@@ -2,6 +2,7 @@ import { Skeleton } from "./Skeleton";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { EpgProgram, LiveChannel } from "../types";
 import { canReplay, canStartOver } from "../lib/catchup";
+import { formatDate, formatTimeOfDay, t } from "../lib/i18n";
 import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../lib/liveGuideLayout";
 import { Icon, SearchField } from "./common";
 import { BrowseCategoryList, type BrowseCategoryEntry } from "./BrowseCategoryList";
@@ -16,7 +17,7 @@ function channelGuideId(channel: LiveChannel): string {
 }
 
 function formatTime(millis: number): string {
-  return new Date(millis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatTimeOfDay(millis);
 }
 
 function startOfLocalDay(date: Date): Date {
@@ -160,33 +161,33 @@ export function LiveGuide({
     viewport.scrollTo({ left: Math.max(0, x - visibleTimelineWidth / 2), behavior: "auto" });
   }, [bounds, channelColumn, date, hourWidth]);
 
-  const dateLabel = date.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const dateLabel = formatDate(date.getTime(), { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 
   const tools = (
     <>
-      <SearchField label="Filter channels" onChange={setChannelQuery} placeholder="Filter channels" value={channelQuery} />
-      <SearchField label="Search programmes" onChange={setProgramQuery} placeholder="Search programmes" value={programQuery} />
+      <SearchField label={t("guide.filterChannels")} onChange={setChannelQuery} placeholder={t("guide.filterChannels")} value={channelQuery} />
+      <SearchField label={t("guide.searchPrograms")} onChange={setProgramQuery} placeholder={t("guide.searchPrograms")} value={programQuery} />
       <div className="live-guide-date-controls">
-          <button aria-label="Previous day" className="icon-button" data-tooltip="Previous day" onClick={() => shiftDay(-1)} type="button">
+          <button aria-label={t("guide.prevDay")} className="icon-button" data-tooltip={t("guide.prevDay")} onClick={() => shiftDay(-1)} type="button">
             <Icon name="chevron_left" />
           </button>
-          <span>{date.getTime() === startOfLocalDay(new Date()).getTime() ? `Today · ${dateLabel}` : dateLabel}</span>
-          <button aria-label="Next day" className="icon-button" data-tooltip="Next day" onClick={() => shiftDay(1)} type="button">
+          <span>{date.getTime() === startOfLocalDay(new Date()).getTime() ? t("guide.today", { date: dateLabel }) : dateLabel}</span>
+          <button aria-label={t("guide.nextDay")} className="icon-button" data-tooltip={t("guide.nextDay")} onClick={() => shiftDay(1)} type="button">
             <Icon name="chevron_right" />
           </button>
-          {<button className="secondary-button" onClick={jumpToNow} type="button">Now</button>}
+          {<button className="secondary-button" onClick={jumpToNow} type="button">{t("guide.now")}</button>}
         </div>
         {(
           <>
             <label className="live-guide-only-epg">
               <input checked={onlyWithEpg} onChange={(event) => setOnlyWithEpg(event.target.checked)} type="checkbox" />
-              <span>Only with EPG</span>
+              <span>{t("guide.onlyEpg")}</span>
             </label>
             <button
               aria-pressed={compact}
               className={`icon-button${compact ? " selected" : ""}`}
               onClick={() => setCompact((value) => !value)}
-              data-tooltip={compact ? "Comfortable row height" : "Compact row height"}
+              data-tooltip={compact ? t("guide.rowComfortable") : t("guide.rowCompact")}
               type="button"
             >
               <Icon name="view_list" />
@@ -196,9 +197,9 @@ export function LiveGuide({
         {(
           <label className="live-guide-zoom">
             <Icon name="search" />
-            <span className="sr-only">Timeline zoom</span>
+            <span className="sr-only">{t("guide.zoom")}</span>
             <input
-              aria-label={`Timeline zoom (${zoomPercent}%)`}
+              aria-label={t("guide.zoomAria", { percent: zoomPercent })}
               max="175"
               min="50"
               onChange={(event) => setZoomPercent(Number(event.target.value))}
@@ -216,15 +217,15 @@ export function LiveGuide({
   const groupCounts = new Map<string, number>();
   for (const channel of channels) groupCounts.set(channel.group, (groupCounts.get(channel.group) ?? 0) + 1);
   const categories: BrowseCategoryEntry[] = [
-    { id: "@@favorites", name: "Favorites", count: channels.filter((channel) => favoriteIds.has(channel.id)).length, pinned: true },
-    { id: "", name: "All", count: channels.length, pinned: true },
+    { id: "@@favorites", name: t("browse.favorites"), count: channels.filter((channel) => favoriteIds.has(channel.id)).length, pinned: true },
+    { id: "", name: t("browse.all"), count: channels.length, pinned: true },
     ...groups.map((group) => ({ id: group, name: group, count: groupCounts.get(group) })),
   ];
 
   const grid = (
     <>
       <div
-      aria-label="Programme schedule"
+      aria-label={t("guide.schedule")}
       className="live-guide-scroll"
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       ref={scrollRef}
@@ -233,7 +234,7 @@ export function LiveGuide({
     >
       <div className="live-guide-canvas" style={{ width: `${canvasWidth}px` }}>
         <div className="live-guide-ruler" style={{ gridTemplateColumns: columns }}>
-          {!single && <div aria-label="Channel" className="live-guide-channel-heading">CHANNEL</div>}
+          {!single && <div aria-label={t("guide.channelAria")} className="live-guide-channel-heading">{t("guide.channelHeading")}</div>}
           <div className="live-guide-ruler-track" style={{ width: `${timelineWidth}px` }}>
             {ticks.map((tick) => (
               <span
@@ -265,7 +266,7 @@ export function LiveGuide({
               >
                 {!single && (
                   <button
-                    aria-label={`Play ${channel.name} live`}
+                    aria-label={t("guide.playLive", { name: channel.name })}
                     className={`live-guide-channel${channel.id === activeChannelId ? " is-playing" : ""}`}
                     onClick={() => onPlay(channel)}
                     role="rowheader"
@@ -297,11 +298,11 @@ export function LiveGuide({
                     return (
                       <Fragment key={program.id}>
                       <button
-                        aria-label={`${channel.name}: ${program.title}, ${formatTime(program.startMillis)} to ${formatTime(program.endMillis)}. ${replayable ? "Select to watch the recording." : "Select to play channel live."}`}
+                        aria-label={t("guide.programAria", { channel: channel.name, title: program.title, start: formatTime(program.startMillis), end: formatTime(program.endMillis), action: replayable ? t("guide.selectRecording") : t("guide.selectLive") })}
                         className={`live-guide-program${isCurrent ? " is-current" : ""}${replayable ? " is-replayable" : ""}`}
                         onClick={() => replayable ? onReplay(channel, program) : onPlay(channel)}
                         style={{ left: `${block.left}px`, width: `${block.width}px` }}
-                        data-tooltip={`${program.title} · ${formatTime(program.startMillis)}–${formatTime(program.endMillis)}${replayable ? " · Watch recording" : ""}`}
+                        data-tooltip={`${program.title} · ${formatTime(program.startMillis)}–${formatTime(program.endMillis)}${replayable ? ` · ${t("guide.watchRecording")}` : ""}`}
                         type="button"
                       >
                         <small>{formatTime(program.startMillis)} – {formatTime(program.endMillis)}</small>
@@ -310,9 +311,9 @@ export function LiveGuide({
                       </button>
                       {startOver && (
                         <button
-                          aria-label={`Start over ${program.title} on ${channel.name}`}
+                          aria-label={t("guide.startOverAria", { title: program.title, channel: channel.name })}
                           className="icon-button live-guide-startover"
-                          data-tooltip="Start over"
+                          data-tooltip={t("guide.startOver")}
                           onClick={() => onReplay(channel, program)}
                           style={{ left: `${block.left + block.width - 34}px` }}
                           type="button"
@@ -328,7 +329,7 @@ export function LiveGuide({
             );
           })}
           {single && !loading && visibleRows.length > 0 && !programsByChannel.get(channelGuideId(visibleRows[0])) && (
-            <EmptyPanel compact icon="schedule" title="No programme information">There is no schedule for this channel.</EmptyPanel>
+            <EmptyPanel compact icon="schedule" title={t("guide.noInfoTitle")}>{t("guide.noInfoBody")}</EmptyPanel>
           )}
           {afterHeight > 0 && <div aria-hidden="true" className="live-guide-spacer" style={{ height: `${afterHeight}px` }} />}
         </div>
@@ -351,7 +352,7 @@ export function LiveGuide({
 
   if (single) {
     return (
-      <section aria-label={`Programme guide for ${channels[0]?.name ?? "the channel"}`} className="live-guide-workspace is-single">
+      <section aria-label={t("guide.singleAria", { name: channels[0]?.name ?? t("guide.theChannel") })} className="live-guide-workspace is-single">
         {grid}
       </section>
     );
@@ -361,7 +362,7 @@ export function LiveGuide({
     <BrowseShell
       bodyClassName="live-guide-body"
       count={rows.length}
-      label="TV Guide"
+      label={t("nav.tvGuide")}
       nav={(
         <BrowseCategoryList
           categories={categories}
@@ -369,16 +370,16 @@ export function LiveGuide({
           onRetry={() => undefined}
           onSelect={(id) => setScope(id === null ? "all" : id === "@@favorites" ? "favorites" : id)}
           selectedId={scopeId}
-          title="Channel groups"
+          title={t("guide.groups")}
         />
       )}
-      title="TV Guide"
+      title={t("nav.tvGuide")}
       tools={tools}
     >
-      {loading && <span className="sr-only" role="status">Loading listings…</span>}
+      {loading && <span className="sr-only" role="status">{t("guide.loadingListings")}</span>}
       {grid}
       {rows.length === 0 && (
-        <EmptyPanel className="live-guide-empty-panel" icon="search" title="No channels match">Change the filters, or turn off Only with EPG.</EmptyPanel>
+        <EmptyPanel className="live-guide-empty-panel" icon="search" title={t("guide.noMatchTitle")}>{t("guide.noMatchBody")}</EmptyPanel>
       )}
     </BrowseShell>
   );

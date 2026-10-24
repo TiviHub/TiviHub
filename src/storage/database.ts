@@ -1,4 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { t } from "../lib/i18n";
 import type {
   EpgProgram,
   Episode,
@@ -44,7 +45,7 @@ async function selectBackend(): Promise<StorageBackend> {
   } catch (cause) {
     // Once migrated, IndexedDB is a stale copy: using it would show old data and lose new writes.
     if (migratedHint()) {
-      throw new Error("TiviHub's local database could not be opened. Restart TiviHub to try again.", { cause });
+      throw new Error(t("store.dbOpenFailed"), { cause });
     }
     console.error("SQLite storage is unavailable; using IndexedDB", cause);
     return idbBackend;
@@ -136,7 +137,7 @@ export async function saveCatalog(catalog: {
 }): Promise<void> {
   const b = await backend();
   if (catalog.sourceUpdate && catalog.sourceUpdate.id !== catalog.playlistId) {
-    throw new Error("The source metadata does not match the catalog being saved.");
+    throw new Error(t("store.metadataMismatch"));
   }
   const { sourceUpdate, ...rest } = catalog;
   await b.saveCatalog({

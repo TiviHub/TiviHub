@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { BROWSE_PAGE_SIZE, type Browser, type BrowseCategory, type BrowseSort } from "../browse/types";
 import { isAdultContent } from "../lib/adultContent";
+import { t } from "../lib/i18n";
 
 type Loaded<T> = { browser: unknown; sourceKey?: string; value: T } | { browser: unknown; sourceKey?: string; error: string };
 
@@ -16,7 +17,7 @@ type PageState<T> = {
   error?: string;
 };
 
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Could not load this list.");
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : t("browse.listFailed"));
 const isAbort = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
 
 /**

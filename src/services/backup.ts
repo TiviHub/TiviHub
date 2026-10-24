@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import type { UserDataSnapshot } from "../types";
 
 const BACKUP_FORMAT = "tivihub-web-backup";
@@ -31,7 +32,7 @@ function fromBase64(value: string): Uint8Array<ArrayBuffer> {
   try {
     binary = atob(value);
   } catch {
-    throw new Error("The backup file is damaged or has an invalid encoding.");
+    throw new Error(t("bk.damagedEncoding"));
   }
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
@@ -54,12 +55,12 @@ async function deriveKey(password: string, salt: Uint8Array<ArrayBuffer>): Promi
 }
 
 export async function encryptBackup(snapshot: UserDataSnapshot, password: string): Promise<string> {
-  if (password.length < 12) throw new Error("Use a backup password with at least 12 characters.");
+  if (password.length < 12) throw new Error(t("bk.passwordShort"));
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(password, salt);
   const plaintext = encoder.encode(JSON.stringify(snapshot));
-  if (plaintext.byteLength > MAX_BACKUP_BYTES) throw new Error("Backup data exceeds the 100 MB limit.");
+  if (plaintext.byteLength > MAX_BACKUP_BYTES) throw new Error(t("bk.dataTooLarge"));
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
   const backup: EncryptedBackup = {
     format: BACKUP_FORMAT,
@@ -73,20 +74,20 @@ export async function encryptBackup(snapshot: UserDataSnapshot, password: string
   };
   const serialized = JSON.stringify(backup);
   if (encoder.encode(serialized).byteLength > MAX_BACKUP_BYTES) {
-    throw new Error("Encrypted backup exceeds the 100 MB file limit.");
+    throw new Error(t("bk.encryptedTooLarge"));
   }
   return serialized;
 }
 
 export async function decryptBackup(contents: string, password: string): Promise<UserDataSnapshot> {
   if (encoder.encode(contents).byteLength > MAX_BACKUP_BYTES) {
-    throw new Error("Backup file exceeds the 100 MB limit.");
+    throw new Error(t("settings.backup.tooLarge"));
   }
   let backup: Partial<EncryptedBackup>;
   try {
     backup = JSON.parse(contents) as Partial<EncryptedBackup>;
   } catch {
-    throw new Error("This is not a valid TiviHub backup file.");
+    throw new Error(t("bk.notValid"));
   }
   if (
     backup.format !== BACKUP_FORMAT ||
@@ -98,14 +99,14 @@ export async function decryptBackup(contents: string, password: string): Promise
     typeof backup.iv !== "string" ||
     typeof backup.ciphertext !== "string"
   ) {
-    throw new Error("This backup format is not supported.");
+    throw new Error(t("bk.formatUnsupported"));
   }
 
   const salt = fromBase64(backup.salt);
   const iv = fromBase64(backup.iv);
   const ciphertext = fromBase64(backup.ciphertext);
   if (salt.byteLength !== 16 || iv.byteLength !== 12 || ciphertext.byteLength < 16) {
-    throw new Error("The backup file is damaged or has invalid encryption data.");
+    throw new Error(t("bk.damagedCrypto"));
   }
 
   let plaintext: ArrayBuffer;
@@ -116,20 +117,20 @@ export async function decryptBackup(contents: string, password: string): Promise
       ciphertext,
     );
   } catch {
-    throw new Error("Backup could not be decrypted. Check the password and try again.");
+    throw new Error(t("bk.decryptFailed"));
   }
 
   let value: unknown;
   try {
     value = JSON.parse(decoder.decode(plaintext));
   } catch {
-    throw new Error("Decrypted backup data is invalid.");
+    throw new Error(t("bk.decryptedInvalid"));
   }
   return validateSnapshot(value);
 }
 
 function validateSnapshot(value: unknown): UserDataSnapshot {
-  if (!value || typeof value !== "object") throw new Error("Backup data has an invalid structure.");
+  if (!value || typeof value !== "object") throw new Error(t("bk.structure"));
   const snapshot = value as Partial<UserDataSnapshot>;
   const arrayFields: (keyof UserDataSnapshot)[] = [
     "playlists",
@@ -151,7 +152,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
     !["system", "light", "dark"].includes(snapshot.theme ?? "") ||
     (snapshot.showAdultContent !== undefined && typeof snapshot.showAdultContent !== "boolean")
   ) {
-    throw new Error("Backup data is incomplete or from an unsupported version.");
+    throw new Error(t("bk.incomplete"));
   }
   const playlists = snapshot.playlists as unknown[];
   const documents = snapshot.documents as unknown[];
@@ -166,7 +167,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
   if (!playlists.every(isRecord) || !channels.every(isRecord) || !movies.every(isRecord) ||
       !series.every(isRecord) || !episodes.every(isRecord) || !favorites.every(isRecord) ||
       !library.every(isRecord) || !epg.every(isRecord) || !documents.every(isRecord)) {
-    throw new Error("Backup contains an invalid record.");
+    throw new Error(t("bk.invalidRecord"));
   }
 
   const playlistIds = new Set<string>();
@@ -196,12 +197,12 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !validUserAgent(playlist.userAgent) ||
       !optionalFinite(playlist.lastCatalogRefreshAt)
     ) {
-      throw new Error("Backup contains an invalid playlist.");
+      throw new Error(t("bk.invalidPlaylist"));
     }
     playlistIds.add(playlist.id);
   }
   if (playlists.filter((playlist) => playlist.active === true).length > 1) {
-    throw new Error("Backup contains more than one active playlist.");
+    throw new Error(t("bk.multipleActive"));
   }
 
   const documentIds = new Set<string>();
@@ -212,7 +213,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       documentIds.has(document.playlistId) ||
       typeof document.content !== "string"
     ) {
-      throw new Error("Backup contains an invalid local playlist file.");
+      throw new Error(t("bk.invalidFile"));
     }
     documentIds.add(document.playlistId);
   }
@@ -238,7 +239,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !optionalSecureUrl(episode.drmLicenseUrl) ||
       !optionalDrmSystem(episode.drmSystem)
     ) {
-      throw new Error("Backup contains an invalid episode.");
+      throw new Error(t("bk.invalidEpisode"));
     }
     episodeIds.add(String(episode.id));
   }
@@ -258,7 +259,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !optionalDrmSystem(favorite.drmSystem) ||
       !Number.isFinite(favorite.addedAt)
     ) {
-      throw new Error("Backup contains an invalid favorite.");
+      throw new Error(t("bk.invalidFavorite"));
     }
     favoriteIds.add(String(favorite.id));
   }
@@ -283,7 +284,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !optionalText(item.parentTitle, 2048) ||
       !Number.isFinite(item.updatedAt)
     ) {
-      throw new Error("Backup contains an invalid library entry.");
+      throw new Error(t("bk.invalidLibrary"));
     }
     libraryIds.add(String(item.id));
   }
@@ -301,7 +302,7 @@ function validateSnapshot(value: unknown): UserDataSnapshot {
       !finiteNumber(program.endMillis) ||
       program.startMillis >= program.endMillis
     ) {
-      throw new Error("Backup contains an invalid TV guide programme.");
+      throw new Error(t("bk.invalidProgramme"));
     }
     epgIds.add(String(program.id));
   }
@@ -406,7 +407,7 @@ function validateCatalogRecords(
           !optionalSecureUrl(record.drmLicenseUrl) ||
           !optionalDrmSystem(record.drmSystem)
         : !nonNegativeFinite(record.seasons);
-    if (commonInvalid || kindInvalid) throw new Error(`Backup contains an invalid ${kind}.`);
+    if (commonInvalid || kindInvalid) throw new Error(t(kind === "channel" ? "bk.invalidChannel" : kind === "movie" ? "bk.invalidMovie" : "bk.invalidSeries"));
     ids.add(String(record.id));
   }
   return ids;

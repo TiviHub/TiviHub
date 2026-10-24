@@ -3,6 +3,9 @@ import { sortByName } from "../browse/lists";
 import type { BrowseSort } from "../browse/types";
 import type { useBrowse } from "../hooks/useBrowse";
 import { FAVORITES_ID, useCategoryEntries } from "../hooks/useCategoryEntries";
+import { formatNumber, t } from "../lib/i18n";
+import { sectionLabel } from "../lib/sectionLabel";
+import type { MessageKey } from "../locales";
 import type { Favorite, LibraryItem, Movie, Playlist, Series } from "../types";
 import { BrowseCategoryList } from "./BrowseCategoryList";
 import { BrowseSortButton } from "./BrowseSortButton";
@@ -10,6 +13,21 @@ import { CatalogCard } from "./ContentPages";
 import { SearchField } from "./common";
 import { EmptyPanel } from "./EmptyPanel";
 import { GridCardSkeletons } from "./Skeleton";
+
+const SECTION_KEYS = {
+  Movies: {
+    categories: "catalog.movies.categories", search: "catalog.movies.search", sort: "catalog.movies.sort",
+    loading: "catalog.movies.loading", noFavoritesTitle: "catalog.movies.noFavoritesTitle",
+    noMatchesBody: "catalog.movies.noMatchesBody", noItemsTitle: "catalog.movies.noItemsTitle",
+    noItemsBody: "catalog.movies.noItemsBody", loadFailed: "catalog.movies.loadFailed",
+  },
+  Series: {
+    categories: "catalog.series.categories", search: "catalog.series.search", sort: "catalog.series.sort",
+    loading: "catalog.series.loading", noFavoritesTitle: "catalog.series.noFavoritesTitle",
+    noMatchesBody: "catalog.series.noMatchesBody", noItemsTitle: "catalog.series.noItemsTitle",
+    noItemsBody: "catalog.series.noItemsBody", loadFailed: "catalog.series.loadFailed",
+  },
+} as const satisfies Record<"Movies" | "Series", Record<string, MessageKey>>;
 
 /**
  * Movies and Series: categories on the left, the titles of the chosen one next to it, loaded a batch at a time as
@@ -53,7 +71,7 @@ export function CatalogBrowsePage<T extends Movie | Series>({
   onFetched?: (items: T[]) => void;
 }) {
   const contentType = section === "Movies" ? "MOVIE" : "SERIES";
-  const noun = section.toLowerCase();
+  const k = SECTION_KEYS[section];
   const [chosen, setChosen] = useState<string | null | undefined>(undefined);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<BrowseSort>("default");
@@ -96,14 +114,14 @@ export function CatalogBrowsePage<T extends Movie | Series>({
   const categoryEntries = useCategoryEntries(browse, query, favoriteItems.length, showingFavorites);
   const effectiveId = showingFavorites ? FAVORITES_ID : browse.categoryId;
   const categoryName = showingFavorites
-    ? "Favorites"
+    ? t("browse.favorites")
     : effectiveId === null || effectiveId === undefined
-      ? "All"
+      ? t("browse.all")
       : browse.categories.find((category) => category.id === effectiveId)?.name ?? "";
 
   return (
     <section className="catalog-page">
-      <h1 className="sr-only">{section}</h1>
+      <h1 className="sr-only">{sectionLabel(section)}</h1>
       <div className="live-tv-layout browse-layout movies-layout">
         <BrowseCategoryList
           categories={categoryEntries}
@@ -112,31 +130,31 @@ export function CatalogBrowsePage<T extends Movie | Series>({
           onRetry={browse.retry}
           onSelect={setChosen}
           selectedId={effectiveId}
-          title={`${section === "Movies" ? "Movie" : "Series"} categories`}
+          title={t(k.categories)}
         />
-        <aside aria-label={section} className="live-channel-sidebar">
+        <aside aria-label={sectionLabel(section)} className="live-channel-sidebar">
           <div className="live-channel-sidebar-heading">
-            <h2>{categoryName || section}</h2>
-            <span>{(showingFavorites ? favoriteItems.length : browse.total ?? shownItems.length).toLocaleString()}</span>
+            <h2>{categoryName || sectionLabel(section)}</h2>
+            <span>{formatNumber(showingFavorites ? favoriteItems.length : browse.total ?? shownItems.length)}</span>
           </div>
           <div className="browse-panel-tools">
-            <SearchField label={`Search ${noun}`} onChange={setQuery} placeholder={`Search ${noun}`} value={query} />
-            <BrowseSortButton label={`Sort ${noun}`} onChange={setSort} value={sort} />
+            <SearchField label={t(k.search)} onChange={setQuery} placeholder={t(k.search)} value={query} />
+            <BrowseSortButton label={t(k.sort)} onChange={setSort} value={sort} />
           </div>
           <div className={`live-channel-list browse-list movies-grid${browse.loading ? " is-loading" : ""}`} ref={listRef}>
             {browse.loading && (
               <>
-                <span aria-live="polite" className="sr-only" role="status">Loading {noun}…</span>
+                <span aria-live="polite" className="sr-only" role="status">{t(k.loading)}</span>
                 <GridCardSkeletons count={36} />
               </>
             )}
             {showingFavorites && shownItems.length === 0 && (
-              <EmptyPanel className="movies-grid-message" icon="favorite_border" title={`No favorite ${noun}`}>Tap the heart on a title to keep it here.</EmptyPanel>
+              <EmptyPanel className="movies-grid-message" icon="favorite_border" title={t(k.noFavoritesTitle)}>{t("catalog.noFavoritesBody")}</EmptyPanel>
             )}
             {!browse.loading && !showingFavorites && !browse.error && shownItems.length === 0 && (
               query.trim()
-                ? <EmptyPanel className="movies-grid-message" icon="search" title="No matches">{`No ${noun} match your search.`}</EmptyPanel>
-                : <EmptyPanel className="movies-grid-message" icon={section === "Movies" ? "movie" : "tv"} title={`No ${noun}`}>{`There are no ${noun} in this category.`}</EmptyPanel>
+                ? <EmptyPanel className="movies-grid-message" icon="search" title={t("categories.noMatchesTitle")}>{t(k.noMatchesBody)}</EmptyPanel>
+                : <EmptyPanel className="movies-grid-message" icon={section === "Movies" ? "movie" : "tv"} title={t(k.noItemsTitle)}>{t(k.noItemsBody)}</EmptyPanel>
             )}
             {shownItems.map((item) => (
               <CatalogCard
@@ -151,11 +169,11 @@ export function CatalogBrowsePage<T extends Movie | Series>({
               />
             ))}
             {browse.error && (
-              <EmptyPanel action={<button className="secondary-button" onClick={browse.retry} type="button">Try again</button>} className="movies-grid-message" error icon="error_outline" title={`Could not load ${noun}`}>{browse.error}</EmptyPanel>
+              <EmptyPanel action={<button className="secondary-button" onClick={browse.retry} type="button">{t("common.tryAgain")}</button>} className="movies-grid-message" error icon="error_outline" title={t(k.loadFailed)}>{browse.error}</EmptyPanel>
             )}
             {hasMore && !showingFavorites && (canObserve
               ? <div aria-hidden="true" className="browse-sentinel movies-grid-message" ref={sentinelRef} />
-              : <button className="text-button movies-grid-message" onClick={loadMore} type="button">Load more</button>)}
+              : <button className="text-button movies-grid-message" onClick={loadMore} type="button">{t("browse.loadMore")}</button>)}
           </div>
         </aside>
       </div>

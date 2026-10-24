@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { isTauri } from "@tauri-apps/api/core";
+import { t } from "../lib/i18n";
 import type { DrmSystem, Playlist, PlaylistType } from "../types";
 import { validateHttpsUrl } from "../providers/http";
 import { MAX_M3U_BYTES } from "../providers/m3u";
@@ -15,9 +16,9 @@ export interface PlaylistDraft {
   onProgress?: (completed: number, total: number) => void;
 }
 
-const DRM_SYSTEM_OPTIONS: readonly CustomSelectOption<DrmSystem>[] = [
-  { label: "Widevine (Chrome / Edge)", value: "com.widevine.alpha" },
-  { label: "FairPlay (Safari)", value: "com.apple.fps" },
+const drmSystemOptions = (): readonly CustomSelectOption<DrmSystem>[] => [
+  { label: t("dlg.drmWidevine"), value: "com.widevine.alpha" },
+  { label: t("dlg.drmFairplay"), value: "com.apple.fps" },
 ];
 
 export function PlaylistDialog({
@@ -127,52 +128,52 @@ export function PlaylistDialog({
       !file &&
       !(editing?.type === "M3U" && editing.fileName)
     ) {
-      setError("Choose an M3U playlist file.");
+      setError(t("dlg.errChooseFile"));
       fileInputRef.current?.focus();
       return;
     }
     if (file && file.size > MAX_M3U_BYTES) {
-      setError("Playlist files are limited to 200 MB.");
+      setError(t("dlg.errFileSize"));
       fileInputRef.current?.focus();
       return;
     }
     if ((type === "XTREAM" || sourceMode === "url") && !url.trim()) {
-      setError("Enter the playlist or provider URL.");
+      setError(t("dlg.errUrl"));
       return;
     }
     if (type === "XTREAM" && (!username.trim() || !password)) {
-      setError("Enter the Xtream username and password.");
+      setError(t("dlg.errXtream"));
       return;
     }
     if (type === "STALKER" && !normalizeMac(macAddress)) {
-      setError("Enter the portal's MAC address, for example 00:1A:79:12:34:56.");
+      setError(t("dlg.errMac"));
       return;
     }
     // eslint-disable-next-line no-control-regex -- control characters must not reach a header
     if (/[\u0000-\u001f\u007f]/.test(userAgent)) {
-      setError("The User-Agent cannot contain line breaks or control characters.");
+      setError(t("dlg.errUserAgent"));
       return;
     }
     if (drmLicenseUrl) {
       try {
-        validateHttpsUrl(drmLicenseUrl, "DRM license URL");
+        validateHttpsUrl(drmLicenseUrl, t("dlg.drmLicense"));
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "DRM license URL is invalid.");
+        setError(cause instanceof Error ? cause.message : t("dlg.errDrmInvalid"));
         drmLicenseUrlRef.current?.focus();
         return;
       }
     }
     if (drmCertificateUrl) {
       try {
-        validateHttpsUrl(drmCertificateUrl, "FairPlay certificate URL");
+        validateHttpsUrl(drmCertificateUrl, t("dlg.fairplayCert"));
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "FairPlay certificate URL is invalid.");
+        setError(cause instanceof Error ? cause.message : t("dlg.errFairplayInvalid"));
         drmCertificateUrlRef.current?.focus();
         return;
       }
     }
     if (drmSystem === "com.apple.fps" && drmLicenseUrl && !drmCertificateUrl) {
-      setError("FairPlay requires the HTTPS server certificate URL from your provider.");
+      setError(t("dlg.errFairplayRequired"));
       drmCertificateUrlRef.current?.focus();
       return;
     }
@@ -184,16 +185,14 @@ export function PlaylistDialog({
       sourceProtocol = undefined;
     }
     if (sourceProtocol === "http:" && window.location.protocol === "https:") {
-      const confirmed = window.confirm(
-        "This source uses unencrypted HTTP. Browsers may block it from the secure TiviHub site, and your provider credentials or requests may be exposed in transit. Continue anyway?",
-      );
+      const confirmed = window.confirm(t("dlg.confirmHttp"));
       if (!confirmed) return;
     }
 
     const createdAt = Date.now();
     const playlist: Playlist = {
       id: editing?.id ?? crypto.randomUUID(),
-      name: name.trim() || file?.name.replace(/\.[^.]+$/, "") || "My playlist",
+      name: name.trim() || file?.name.replace(/\.[^.]+$/, "") || t("dlg.defaultName"),
       type,
       url: type === "M3U" && sourceMode === "file" ? "" : url.trim(),
       username: type === "M3U" ? "" : username.trim(),
@@ -231,7 +230,7 @@ export function PlaylistDialog({
       onClose();
     } catch (cause) {
       if (!controller.signal.aborted) {
-        setError(cause instanceof Error ? cause.message : "Could not connect to this source.");
+        setError(cause instanceof Error ? cause.message : t("dlg.errConnect"));
       }
     } finally {
       if (connectAbortController.current === controller) connectAbortController.current = null;
@@ -241,7 +240,7 @@ export function PlaylistDialog({
 
   async function loadDemo() {
     if (!onLoadDemo) {
-      setError("Demo imports are only available during development.");
+      setError(t("dlg.errDemoDev"));
       return;
     }
     setError(null);
@@ -250,7 +249,7 @@ export function PlaylistDialog({
       await onLoadDemo();
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load the demo playlist.");
+      setError(cause instanceof Error ? cause.message : t("dlg.errDemo"));
     } finally {
       setBusyAction(null);
     }
@@ -268,11 +267,11 @@ export function PlaylistDialog({
       >
         <header className="dialog-heading">
           <div>
-                <p className="eyebrow">YOUR SOURCES / 01</p>
-                <h2 id="source-dialog-title">{editing ? "Edit playlist" : "Add a playlist"}</h2>
+                <p className="eyebrow">{t("dlg.eyebrow")}</p>
+                <h2 id="source-dialog-title">{editing ? t("dlg.editTitle") : t("dlg.addTitle")}</h2>
           </div>
           <button
-            aria-label="Close"
+            aria-label={t("dlg.close")}
             className="icon-button"
             disabled={busyAction === "demo" || (busyAction === "connect" && busyStage === "saving")}
             onClick={closeDialog}
@@ -284,10 +283,10 @@ export function PlaylistDialog({
 
         <form aria-busy={busyAction !== null} className="dialog-form" onSubmit={(event) => void submit(event)}>
           <p className="form-note source-dialog-intro" id="source-dialog-description">
-            Connect a playlist or provider account. Source details and imported content stay on this device.
+            {t("dlg.intro")}
           </p>
           <fieldset className="source-type-switch" disabled={busyAction !== null}>
-            <legend className="sr-only">Source type</legend>
+            <legend className="sr-only">{t("dlg.typeLegend")}</legend>
             {(isTauri() ? ["M3U", "XTREAM", "STALKER"] as const : ["M3U", "XTREAM"] as const).map((item) => (
               <button
                 aria-pressed={type === item}
@@ -300,21 +299,21 @@ export function PlaylistDialog({
                 type="button"
               >
                 <Icon name={item === "M3U" ? "playlist_play" : item === "XTREAM" ? "dns" : "devices"} />
-                {item === "M3U" ? "M3U playlist" : item === "XTREAM" ? "Xtream account" : "Stalker portal"}
+                {item === "M3U" ? t("noSource.m3u") : item === "XTREAM" ? t("dlg.typeXtream") : t("dlg.typeStalker")}
               </button>
             ))}
           </fieldset>
 
           {type === "M3U" && (
             <fieldset className="source-mode-switch" disabled={busyAction !== null}>
-              <legend className="sr-only">M3U source method</legend>
+              <legend className="sr-only">{t("dlg.modeLegend")}</legend>
               <button
                 aria-pressed={sourceMode === "url"}
                 className={sourceMode === "url" ? "source-mode active" : "source-mode"}
                 onClick={() => setSourceMode("url")}
                 type="button"
               >
-                Playlist URL
+                {t("dlg.modeUrl")}
               </button>
               <button
                 aria-pressed={sourceMode === "file"}
@@ -322,19 +321,19 @@ export function PlaylistDialog({
                 onClick={() => setSourceMode("file")}
                 type="button"
               >
-                Choose file
+                {t("dlg.modeFile")}
               </button>
             </fieldset>
           )}
 
           <label className="form-field">
-            <span>Playlist name <em>Optional</em></span>
+            <span>{t("dlg.name")} <em>{t("settings.apiKey.optional")}</em></span>
             <input
               autoComplete="off"
               disabled={busyAction !== null}
               maxLength={80}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Living room"
+              placeholder={t("dlg.namePlaceholder")}
               value={name}
             />
           </label>
@@ -342,7 +341,7 @@ export function PlaylistDialog({
           {sourceMode === "url" || type !== "M3U" ? (
             <>
               <label className="form-field" key="playlist-url">
-                <span>{type === "M3U" ? "Playlist URL" : type === "XTREAM" ? "Provider server URL" : "Portal URL"} <em>Required</em></span>
+                <span>{type === "M3U" ? t("dlg.modeUrl") : type === "XTREAM" ? t("dlg.urlXtream") : t("dlg.urlStalker")} <em>{t("dlg.required")}</em></span>
                 <input
                   autoComplete="url"
                   disabled={busyAction !== null}
@@ -356,18 +355,18 @@ export function PlaylistDialog({
               </label>
               <p className="form-note">
                 {type === "M3U"
-                  ? "M3U playlist downloads are limited to 200 MB."
+                  ? t("dlg.noteM3u")
                   : type === "XTREAM"
-                    ? "Each Xtream API response is limited to 200 MB."
-                    : "Stalker portals identify your account by a MAC address. Use only portals you are subscribed to."}
+                    ? t("dlg.noteXtream")
+                    : t("dlg.noteStalker")}
                 {/^http:\/\//i.test(url.trim()) &&
-                  " This address is unencrypted (HTTP), so anyone on your network can read your login."}
+                  t("dlg.httpWarning")}
               </p>
             </>
           ) : (
             <>
               <label className="form-field" key="playlist-file">
-                <span>M3U file <em>Required</em></span>
+                <span>{t("dlg.fileLabel")} <em>{t("dlg.required")}</em></span>
                 <input
                   accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl,text/plain"
                   onChange={(event) => setFile(event.target.files?.[0] ?? null)}
@@ -376,11 +375,11 @@ export function PlaylistDialog({
                   ref={fileInputRef}
                   type="file"
                 />
-                <small>{file?.name ?? editing?.fileName ?? "No file selected"}</small>
+                <small>{file?.name ?? editing?.fileName ?? t("dlg.noFile")}</small>
               </label>
-              <p className="form-note">M3U files are limited to 200 MB. The file stays on this device.</p>
+              <p className="form-note">{t("dlg.fileNote")}</p>
               <label className="form-field" key="playlist-file-base-url">
-                <span>Base URL for relative streams <em>Optional</em></span>
+                <span>{t("dlg.baseUrl")} <em>{t("settings.apiKey.optional")}</em></span>
                 <input
                   autoComplete="url"
                   disabled={busyAction !== null}
@@ -396,7 +395,7 @@ export function PlaylistDialog({
 
           {type === "STALKER" && (
             <label className="form-field">
-              <span>MAC address <em>Required</em></span>
+              <span>{t("dlg.mac")} <em>{t("dlg.required")}</em></span>
               <input
                 autoCapitalize="characters"
                 autoComplete="off"
@@ -414,7 +413,7 @@ export function PlaylistDialog({
           {type === "XTREAM" && (
             <div className="form-row">
               <label className="form-field">
-                <span>Username <em>Required</em></span>
+                <span>{t("dlg.username")} <em>{t("dlg.required")}</em></span>
                 <input
                   autoComplete="username"
                   disabled={busyAction !== null}
@@ -424,7 +423,7 @@ export function PlaylistDialog({
                 />
               </label>
               <label className="form-field">
-                <span>Password <em>Required</em></span>
+                <span>{t("dlg.password")} <em>{t("dlg.required")}</em></span>
                 <input
                   autoComplete="current-password"
                   disabled={busyAction !== null}
@@ -439,11 +438,11 @@ export function PlaylistDialog({
 
           {(
             <details className="advanced-source">
-              <summary>{type === "STALKER" ? "Optional login & guide settings" : "Optional guide & DRM settings"}</summary>
+              <summary>{type === "STALKER" ? t("dlg.advancedStalker") : t("dlg.advanced")}</summary>
               {type === "STALKER" && (
                 <div className="form-row">
                   <label className="form-field">
-                    <span>Username <em>Optional</em></span>
+                    <span>{t("dlg.username")} <em>{t("settings.apiKey.optional")}</em></span>
                     <input
                       autoComplete="username"
                       disabled={busyAction !== null}
@@ -452,7 +451,7 @@ export function PlaylistDialog({
                     />
                   </label>
                   <label className="form-field">
-                    <span>Password <em>Optional</em></span>
+                    <span>{t("dlg.password")} <em>{t("settings.apiKey.optional")}</em></span>
                     <input
                       autoComplete="current-password"
                       disabled={busyAction !== null}
@@ -464,27 +463,27 @@ export function PlaylistDialog({
                 </div>
               )}
               <label className="form-field">
-                <span>XMLTV guide URL <em>Optional</em></span>
+                <span>{t("dlg.epgUrl")} <em>{t("settings.apiKey.optional")}</em></span>
                 <input
                   autoComplete="url"
                   disabled={busyAction !== null}
                   inputMode="url"
                   onChange={(event) => setEpgUrl(event.target.value)}
-                  placeholder={type === "M3U" ? "https://provider.example/guide.xml" : "Uses the provider's own guide by default"}
+                  placeholder={type === "M3U" ? "https://provider.example/guide.xml" : t("dlg.epgPlaceholder")}
                   type="url"
                   value={epgUrl}
                 />
               </label>
               {isTauri() && (
                 <label className="form-field">
-                  <span>User-Agent <em>Optional</em></span>
+                  <span>{t("dlg.userAgent")} <em>{t("settings.apiKey.optional")}</em></span>
                   <input
                     autoComplete="off"
                     disabled={busyAction !== null}
                     list="user-agent-presets"
                     maxLength={256}
                     onChange={(event) => setUserAgent(event.target.value)}
-                    placeholder="Uses TiviHub's default"
+                    placeholder={t("dlg.userAgentPlaceholder")}
                     value={userAgent}
                   />
                   <datalist id="user-agent-presets">
@@ -496,19 +495,19 @@ export function PlaylistDialog({
               )}
               {type !== "STALKER" && (<>
               <label className="form-field">
-                <span>DRM system <em>Optional</em></span>
+                <span>{t("dlg.drmSystem")} <em>{t("settings.apiKey.optional")}</em></span>
                 <div className="select-control">
                   <CustomSelect
-                    ariaLabel="DRM system"
+                    ariaLabel={t("dlg.drmSystem")}
                     disabled={busyAction !== null}
                     onValueChange={setDrmSystem}
-                    options={DRM_SYSTEM_OPTIONS}
+                    options={drmSystemOptions()}
                     value={drmSystem}
                   />
                 </div>
               </label>
               <label className="form-field">
-                <span>DRM license URL <em>Optional</em></span>
+                <span>{t("dlg.drmLicense")} <em>{t("settings.apiKey.optional")}</em></span>
                 <input
                   autoComplete="url"
                   disabled={busyAction !== null}
@@ -523,8 +522,8 @@ export function PlaylistDialog({
               {drmSystem === "com.apple.fps" && (
                 <label className="form-field">
                   <span>
-                    FairPlay certificate URL
-                    <em>{drmLicenseUrl ? "Required" : "Optional"}</em>
+                    {t("dlg.fairplayCert")}
+                    <em>{drmLicenseUrl ? t("dlg.required") : t("settings.apiKey.optional")}</em>
                   </span>
                   <input
                     autoComplete="url"
@@ -540,8 +539,7 @@ export function PlaylistDialog({
                 </label>
               )}
               <p className="form-note">
-                Use only license details supplied by your provider. DRM support depends on its
-                license flow and webview CORS permissions; TiviHub does not proxy license requests.
+                {t("dlg.drmNote")}
               </p>
               </>)}
             </details>
@@ -549,14 +547,13 @@ export function PlaylistDialog({
 
           <p className="local-data-note">
             <Icon name="lock" />
-            Account details and source URLs are encrypted in this app. Derived stream links stay
-            local and may contain provider tokens.
+            {t("dlg.localNote")}
           </p>
           {import.meta.env.DEV && !editing && onLoadDemo && (
             <div className="demo-playlist-option">
               <div>
-                <strong>Just exploring?</strong>
-                <p>Import a sample M3U with live feeds, movies, and series to explore TiviHub without a provider.</p>
+                <strong>{t("dlg.demoTitle")}</strong>
+                <p>{t("dlg.demoBody")}</p>
               </div>
               <button
                 className="secondary-button"
@@ -565,7 +562,7 @@ export function PlaylistDialog({
                 type="button"
               >
                 {busyAction === "demo" ? <span className="spinner" /> : <Icon name="playlist_play" />}
-                {busyAction === "demo" ? "Importing…" : "Import demo"}
+                {busyAction === "demo" ? t("dlg.demoImporting") : t("dlg.demoImport")}
               </button>
             </div>
           )}
@@ -573,10 +570,10 @@ export function PlaylistDialog({
           {busyAction === "connect" && (
             <p aria-live="polite" className="form-note source-connect-status" role="status">
               {busyStage === "connecting"
-                ? "Connecting to the source…"
+                ? t("dlg.connecting")
                 : busyStage === "parsing"
-                  ? "Reading playlist content…"
-                  : "Saving playlist data locally…"}
+                  ? t("dlg.reading")
+                  : t("dlg.savingLocal")}
             </p>
           )}
           {busyAction === "connect" &&
@@ -585,7 +582,7 @@ export function PlaylistDialog({
             saveProgress.total > 0 && (
               <ProgressIndicator
                 className="source-connect-progress"
-                label="Saving imported content"
+                label={t("dlg.savingProgress")}
                 max={saveProgress.total}
                 value={saveProgress.completed}
               />
@@ -598,19 +595,19 @@ export function PlaylistDialog({
               onClick={closeDialog}
               type="button"
             >
-              {busyAction === "connect" && busyStage === "saving" ? "Saving…" : "Cancel"}
+              {busyAction === "connect" && busyStage === "saving" ? t("dlg.saving") : t("dlg.cancel")}
             </button>
             <button className="primary-button" disabled={busyAction !== null} type="submit">
               {busyAction === "connect" ? <span className="spinner" /> : <Icon name="link" />}
               {busyAction === "connect"
                 ? busyStage === "parsing"
-                  ? "Reading playlist…"
+                  ? t("dlg.readingBtn")
                   : busyStage === "saving"
-                    ? `Saving playlist…${saveProgress && saveProgress.total > 0
-                      ? ` ${Math.floor(saveProgress.completed / saveProgress.total * 100)}%`
-                      : ""}`
-                    : editing ? "Saving…" : "Connecting…"
-                : editing ? "Save changes" : "Connect source"}
+                    ? (saveProgress && saveProgress.total > 0
+                      ? t("dlg.savingBtnPct", { percent: Math.floor(saveProgress.completed / saveProgress.total * 100) })
+                      : t("dlg.savingBtn"))
+                    : editing ? t("dlg.saving") : t("dlg.connectingBtn")
+                : editing ? t("dlg.save") : t("dlg.connect")}
             </button>
           </div>
         </form>

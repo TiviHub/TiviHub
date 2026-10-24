@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { t } from "../lib/i18n";
 import { Icon } from "./common";
 
 function formatClock(seconds: number): string {
@@ -70,7 +71,7 @@ export function PlayerControls({
   const silent = muted || volume === 0;
   return (
     <div className={`player-controls${paused ? " is-paused" : ""}`}>
-      <button aria-label={paused ? "Play" : "Pause"} className="icon-button" onClick={togglePlay} type="button">
+      <button aria-label={paused ? t("player.play") : t("player.pause")} className="icon-button" onClick={togglePlay} type="button">
         <Icon name={paused ? "play_arrow" : "pause"} />
       </button>
       {live || duration === 0 ? (
@@ -82,7 +83,7 @@ export function PlayerControls({
         <>
           <span className="player-controls-time">{formatClock(time)}</span>
           <input
-            aria-label="Seek"
+            aria-label={t("player.seek")}
             className="player-controls-seek"
             max={duration}
             min={0}
@@ -97,7 +98,7 @@ export function PlayerControls({
       )}
       {badge}
       <button
-        aria-label={silent ? "Unmute" : "Mute"}
+        aria-label={silent ? t("player.unmute") : t("player.mute")}
         className="icon-button"
         onClick={() => { if (videoRef.current) videoRef.current.muted = !videoRef.current.muted; }}
         type="button"
@@ -105,7 +106,7 @@ export function PlayerControls({
         <Icon name={silent ? "volume_off" : "volume_up"} />
       </button>
       <input
-        aria-label="Volume"
+        aria-label={t("player.volume")}
         className="player-controls-volume"
         max="1"
         min="0"
@@ -121,7 +122,7 @@ export function PlayerControls({
         value={muted ? 0 : volume}
       />
       {children}
-      <button aria-label={fullscreen ? "Exit full screen" : "Full screen"} className="icon-button player-controls-fullscreen" onClick={toggleFullscreen} type="button">
+      <button aria-label={fullscreen ? t("player.exitFullscreen") : t("player.fullscreen")} className="icon-button player-controls-fullscreen" onClick={toggleFullscreen} type="button">
         <Icon name={fullscreen ? "fullscreen_exit" : "fullscreen"} />
       </button>
       {trailing}

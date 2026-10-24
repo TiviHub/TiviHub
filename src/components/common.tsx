@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/dom";
+import { t } from "../lib/i18n";
 
 type HorizontalDragTrackProps = Omit<
   HTMLAttributes<HTMLDivElement>,
@@ -104,6 +105,7 @@ export type IconName =
   | "cast"
   | "cast_connected"
   | "shield"
+  | "language"
   | "light_mode"
   | "dark_mode"
   | "brightness_auto"
@@ -177,7 +179,7 @@ export function SearchField({ label, placeholder, value, onChange }: {
       <input onChange={(event) => onChange(event.target.value)} placeholder={placeholder} ref={inputRef} value={value} />
       {value && (
         <button
-          aria-label="Clear search"
+          aria-label={t("common.clearSearch")}
           className="search-clear"
           onClick={() => { onChange(""); inputRef.current?.focus(); }}
           type="button"
@@ -326,7 +328,7 @@ export function CustomSelect<Value extends string = string>({
   disabled = false,
   onValueChange,
   options,
-  placeholder = "Choose an option",
+  placeholder,
   title,
   value,
   variant = "default",
@@ -538,12 +540,12 @@ export function CustomSelect<Value extends string = string>({
         data-tooltip={title}
         type="button"
       >
-        <span className="custom-select-value">{selectedOption?.label ?? placeholder}</span>
+        <span className="custom-select-value">{selectedOption?.label ?? placeholder ?? t("common.chooseOption")}</span>
         <Icon name="expand_more" />
       </button>
       {open && menuStyle && createPortal(
         <div
-          aria-label={`${ariaLabel} options`}
+          aria-label={t("common.options", { label: ariaLabel })}
           className="custom-select-menu"
           id={menuId}
           ref={menuRef}

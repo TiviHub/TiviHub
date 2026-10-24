@@ -1,4 +1,5 @@
 import type { BrowseSort } from "../browse/types";
+import { t } from "../lib/i18n";
 import { CustomSelect, Icon } from "./common";
 
 /** The icon-only sort menu next to a panel's search box: Default, A–Z or Z–A. */
@@ -10,7 +11,7 @@ export function BrowseSortButton({ label, value, onChange }: { label: string; va
         ariaLabel={label}
         onValueChange={onChange}
         options={[
-          { label: "Default", value: "default" },
+          { label: t("browse.sortDefault"), value: "default" },
           { label: "A–Z", value: "az" },
           { label: "Z–A", value: "za" },
         ]}

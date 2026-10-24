@@ -5,6 +5,8 @@ import {
   type GlobalSearchMatch,
 } from "../lib/globalSearch";
 import type { LiveChannel, Movie, Series } from "../types";
+import { t, useT } from "../lib/i18n";
+import { sectionLabel } from "../lib/sectionLabel";
 import { Icon, type IconName } from "./common";
 
 interface CommandOption {
@@ -37,20 +39,21 @@ export function GlobalSearchDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
+  const tr = useT();
   const commands: CommandOption[] = useMemo(() => [
-    { command: { kind: "navigate", section: "Home" }, icon: "home", label: "Go to Home", keywords: "home start" },
-    { command: { kind: "navigate", section: "Live TV" }, icon: "live_tv", label: "Go to Live TV", keywords: "channels live" },
-    { command: { kind: "navigate", section: "TV Guide" }, icon: "schedule", label: "Go to TV Guide", keywords: "epg guide programmes listings" },
-    { command: { kind: "navigate", section: "Movies" }, icon: "movie", label: "Go to Movies", keywords: "films cinema" },
-    { command: { kind: "navigate", section: "Series" }, icon: "tv", label: "Go to Series", keywords: "shows tv" },
-    { command: { kind: "navigate", section: "Library" }, icon: "bookmark", label: "Go to Library", keywords: "watchlist favorites" },
-    { command: { kind: "navigate", section: "Downloads" }, icon: "download", label: "Go to Downloads", keywords: "offline saved videos" },
-    { command: { kind: "navigate", section: "Settings" }, icon: "settings", label: "Go to Settings", keywords: "preferences theme" },
-    { command: { kind: "add-source" }, icon: "add", label: "Add a source", keywords: "playlist connect" },
+    { command: { kind: "navigate", section: "Home" }, icon: "home", label: tr("search.goHome"), keywords: "home start" },
+    { command: { kind: "navigate", section: "Live TV" }, icon: "live_tv", label: tr("search.goLive"), keywords: "channels live" },
+    { command: { kind: "navigate", section: "TV Guide" }, icon: "schedule", label: tr("search.goGuide"), keywords: "epg guide programmes listings" },
+    { command: { kind: "navigate", section: "Movies" }, icon: "movie", label: tr("search.goMovies"), keywords: "films cinema" },
+    { command: { kind: "navigate", section: "Series" }, icon: "tv", label: tr("search.goSeries"), keywords: "shows tv" },
+    { command: { kind: "navigate", section: "Library" }, icon: "bookmark", label: tr("search.goLibrary"), keywords: "watchlist favorites" },
+    { command: { kind: "navigate", section: "Downloads" }, icon: "download", label: tr("search.goDownloads"), keywords: "offline saved videos" },
+    { command: { kind: "navigate", section: "Settings" }, icon: "settings", label: tr("search.goSettings"), keywords: "preferences theme" },
+    { command: { kind: "add-source" }, icon: "add", label: tr("search.addSource"), keywords: "playlist connect" },
     ...(canRefresh
-      ? [{ command: { kind: "refresh-source" } as const, icon: "refresh" as const, label: "Refresh current source", keywords: "sync update catalog" }]
+      ? [{ command: { kind: "refresh-source" } as const, icon: "refresh" as const, label: tr("search.refresh"), keywords: "sync update catalog" }]
       : []),
-  ], [canRefresh]);
+  ], [canRefresh, tr]);
   const normalizedQuery = query.trim().toLowerCase();
   const results = useMemo(
     () => searchCatalog(query, channels, movies, series, showAdultContent),
@@ -115,14 +118,14 @@ export function GlobalSearchDialog({
   }
 
   function renderMatch(result: GlobalSearchMatch) {
-    const typeLabel = result.type === "LIVE" ? "Channel" : result.type === "MOVIE" ? "Movie" : "Series";
+    const typeLabel = result.type === "LIVE" ? t("search.kindChannel") : result.type === "MOVIE" ? t("card.kindMovie") : t("card.kindSeries");
     const iconName = result.type === "LIVE" ? "live_tv" : result.type === "MOVIE" ? "movie" : "tv";
-    const actionLabel = result.type === "LIVE" ? "Play" : "View details";
+    const actionLabel = result.type === "LIVE" ? t("player.play") : t("home.viewDetails");
     return (
       <button
         aria-label={result.type === "LIVE"
-          ? `Play ${result.item.name}`
-          : `View ${typeLabel.toLowerCase()} details for ${result.item.name}`}
+          ? t("card.play", { name: result.item.name })
+          : t(result.type === "MOVIE" ? "search.viewMovie" : "search.viewSeries", { name: result.item.name })}
         className="global-search-option"
         data-global-search-option
         key={`${result.type}:${result.item.id}`}
@@ -148,7 +151,7 @@ export function GlobalSearchDialog({
         <div className="global-search-options">
           {items.map(renderMatch)}
         </div>
-        {hasMore && <p className="global-search-more">Showing the first 8 matches. Refine your search for more.</p>}
+        {hasMore && <p className="global-search-more">{t("search.more")}</p>}
       </section>
     );
   }
@@ -156,7 +159,7 @@ export function GlobalSearchDialog({
   return (
     <div className="global-search-overlay">
       <button
-        aria-label="Close search"
+        aria-label={t("search.close")}
         className="global-search-scrim"
         onClick={onClose}
         tabIndex={-1}
@@ -173,22 +176,22 @@ export function GlobalSearchDialog({
       >
         <header className="global-search-header">
           <div>
-            <h2 id="global-search-title">Search TiviHub</h2>
-            <p>Find channels, movies, series, or jump to an action.</p>
+            <h2 id="global-search-title">{t("search.title")}</h2>
+            <p>{t("search.subtitle")}</p>
           </div>
-          <button aria-label="Close search" className="icon-button" onClick={onClose} type="button">
+          <button aria-label={t("search.close")} className="icon-button" onClick={onClose} type="button">
             <Icon name="close" />
           </button>
         </header>
         <label className="global-search-input">
           <Icon name="search" />
-          <span className="sr-only">Search channels, movies, series, and actions</span>
+          <span className="sr-only">{t("search.srLabel")}</span>
           <input
             autoComplete="off"
             autoFocus
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleInputKeyDown}
-            placeholder="What are you looking for?"
+            placeholder={t("search.placeholder")}
             ref={inputRef}
             type="search"
             value={query}
@@ -198,7 +201,7 @@ export function GlobalSearchDialog({
         <div className="global-search-results" ref={optionsRef}>
           {matchingCommands.length > 0 && (
             <section aria-labelledby="global-search-actions" className="global-search-group">
-              <h3 id="global-search-actions">{normalizedQuery ? "Actions" : "Quick actions"}</h3>
+              <h3 id="global-search-actions">{normalizedQuery ? t("search.actions") : t("search.quick")}</h3>
               <div className="global-search-options">
                 {matchingCommands.map((option) => (
                   <button
@@ -212,7 +215,7 @@ export function GlobalSearchDialog({
                     <span className="global-search-option-icon"><Icon name={option.icon} /></span>
                     <span className="global-search-option-copy">
                       <strong>{option.label}</strong>
-                      <small>Quick action</small>
+                      <small>{t("search.quickAction")}</small>
                     </span>
                     <Icon name="arrow_forward" />
                   </button>
@@ -222,22 +225,22 @@ export function GlobalSearchDialog({
           )}
           {normalizedQuery && (
             <>
-              {renderGroup("Live TV", "global-search-channels", results.channels.items, results.channels.hasMore)}
-              {renderGroup("Movies", "global-search-movies", results.movies.items, results.movies.hasMore)}
-              {renderGroup("Series", "global-search-series", results.series.items, results.series.hasMore)}
+              {renderGroup(sectionLabel("Live TV"), "global-search-channels", results.channels.items, results.channels.hasMore)}
+              {renderGroup(sectionLabel("Movies"), "global-search-movies", results.movies.items, results.movies.hasMore)}
+              {renderGroup(sectionLabel("Series"), "global-search-series", results.series.items, results.series.hasMore)}
             </>
           )}
           {normalizedQuery && matchingCommands.length === 0 && !hasResults && (
-            <p className="global-search-empty">No matches. Try another title or action.</p>
+            <p className="global-search-empty">{t("search.noMatches")}</p>
           )}
           {!normalizedQuery && matchingCommands.length === 0 && (
-            <p className="global-search-empty">No actions are available right now.</p>
+            <p className="global-search-empty">{t("search.noActions")}</p>
           )}
         </div>
         <footer className="global-search-footer">
-          <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-          <span><kbd>Enter</kbd> Open</span>
-          <span><kbd>Ctrl/⌘</kbd><kbd>K</kbd> Search</span>
+          <span><kbd>↑</kbd><kbd>↓</kbd> {t("search.navigate")}</span>
+          <span><kbd>Enter</kbd> {t("search.open")}</span>
+          <span><kbd>Ctrl/⌘</kbd><kbd>K</kbd> {t("search.searchKey")}</span>
         </footer>
       </section>
     </div>

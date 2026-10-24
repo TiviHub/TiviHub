@@ -1,3 +1,4 @@
+import { formatNumber } from "../lib/i18n";
 import { Icon, type IconName } from "./common";
 
 export interface NavPanelItem {
@@ -29,7 +30,7 @@ export function NavPanel({ title, items, selectedId, onSelect }: {
             type="button"
           >
             <span className="browse-category-name">{item.icon && <Icon name={item.icon} />}{item.label}</span>
-            {item.count !== undefined && <span className="browse-category-count">{item.count.toLocaleString()}</span>}
+            {item.count !== undefined && <span className="browse-category-count">{formatNumber(item.count)}</span>}
           </button>
         ))}
       </div>

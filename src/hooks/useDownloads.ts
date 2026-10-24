@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../lib/i18n";
 import {
   canDownloadMedia,
   chooseDownloadDirectory,
@@ -46,7 +47,7 @@ export function useDownloads({ notify, openPlayback, sources }: Options) {
     }).catch((cause: unknown) => {
       if (active) {
         console.error("Could not load offline downloads", cause);
-        notify(cause instanceof Error ? cause.message : "Could not load offline downloads.", "error");
+        notify(cause instanceof Error ? cause.message : t("downloads.loadFailed"), "error");
         setDownloadsLoaded(true);
       }
     });
@@ -61,7 +62,7 @@ export function useDownloads({ notify, openPlayback, sources }: Options) {
 
   async function startDownload(media: DownloadableMedia) {
     if (!canDownloadMedia(media)) {
-      notify("Offline downloads support direct, non-DRM movie and episode files only.", "error");
+      notify(t("downloads.unsupported"), "error");
       return;
     }
     const id = downloadIdFor(media);
@@ -90,14 +91,14 @@ export function useDownloads({ notify, openPlayback, sources }: Options) {
         console.error("Offline video was saved, but its folder copy failed", result.folderError);
         notify(result.folderError.message, "error");
       } else {
-        notify(`${media.title} is ready for offline playback.`, "notice");
+        notify(t("downloads.ready", { title: media.title }), "notice");
       }
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") {
         setDownloadTasks((tasks) => tasks.filter((task) => task.id !== id));
         return;
       }
-      const message = cause instanceof Error ? cause.message : "Could not download this video.";
+      const message = cause instanceof Error ? cause.message : t("downloads.failedGeneric");
       console.error("Could not download offline media", cause);
       setDownloadTasks((tasks) => tasks.map((task) => task.id === id
         ? { ...task, status: "failed", error: message }
@@ -120,22 +121,22 @@ export function useDownloads({ notify, openPlayback, sources }: Options) {
     try {
       await removeDownload(id);
       setDownloads((current) => current.filter((download) => download.id !== id));
-      notify(`Removed ${title} from downloads.`, "notice");
+      notify(t("downloads.removedNotice", { title }), "notice");
     } catch (cause) {
       console.error("Could not remove downloaded media", cause);
-      notify(cause instanceof Error ? cause.message : "Could not remove this download.", "error");
+      notify(cause instanceof Error ? cause.message : t("downloads.removeError"), "error");
     }
   }
 
   async function clearDownloads() {
-    if (!window.confirm("Delete all completed downloads from this device?")) return;
+    if (!window.confirm(t("downloads.confirmClear"))) return;
     try {
       await clearCompletedDownloads();
       setDownloads([]);
-      notify("Completed downloads were removed.", "notice");
+      notify(t("downloads.cleared"), "notice");
     } catch (cause) {
       console.error("Could not clear completed downloads", cause);
-      notify(cause instanceof Error ? cause.message : "Could not clear completed downloads.", "error");
+      notify(cause instanceof Error ? cause.message : t("downloads.clearFailed"), "error");
     }
   }
 
@@ -143,11 +144,11 @@ export function useDownloads({ notify, openPlayback, sources }: Options) {
     try {
       const name = await chooseDownloadDirectory();
       setDownloadDirectoryPath(name);
-      notify(`New downloads will also be copied to ${name}.`, "notice");
+      notify(t("downloads.folderAdded", { name }), "notice");
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       console.error("Could not change the download folder", cause);
-      notify(cause instanceof Error ? cause.message : "Could not change the download folder.", "error");
+      notify(cause instanceof Error ? cause.message : t("downloads.folderFailed"), "error");
     }
   }
 
@@ -167,7 +168,7 @@ export function useDownloads({ notify, openPlayback, sources }: Options) {
       });
     } catch (cause) {
       console.error("Could not open offline media", cause);
-      notify(cause instanceof Error ? cause.message : "Could not open this offline video.", "error");
+      notify(cause instanceof Error ? cause.message : t("downloads.openFailed"), "error");
     }
   }
 

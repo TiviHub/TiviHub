@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 import { Skeleton } from "./Skeleton";
 import { useEffect, useState } from "react";
 import { MdblistError } from "../providers/mdblist";
@@ -99,7 +100,7 @@ export function ExternalRatingsPanel({
         if (controller.signal.aborted) return;
         setState({
           phase: "error",
-          message: error instanceof MdblistError ? error.message : "External ratings are unavailable right now.",
+          message: error instanceof MdblistError ? error.message : t("ratings.unavailable"),
         });
       }
     })();
@@ -115,24 +116,24 @@ export function ExternalRatingsPanel({
     })
     : [];
   return (
-    <section aria-label="External ratings" className="external-ratings">
+    <section aria-label={t("settings.section.ratings")} className="external-ratings">
       {!hasPlaylistOverview && state.phase === "ready" && state.overview && (
         <p className="external-ratings-overview">{state.overview}</p>
       )}
       {state.phase === "loading" && (
         <div role="status">
-          <span className="sr-only">Loading external ratings…</span>
+          <span className="sr-only">{t("ratings.loading")}</span>
           <div aria-hidden="true" className="skeleton-ratings">
             {[0, 1, 2].map((index) => <Skeleton className="skeleton-rating" key={index} />)}
           </div>
         </div>
       )}
-      {state.phase === "unmatched" && <p>External ratings unavailable: this title has no year or ID to match safely.</p>}
-      {state.phase === "not-found" && <p>No external ratings were found for this title.</p>}
-      {state.phase === "error" && <p role="status">External ratings unavailable. {state.message}</p>}
+      {state.phase === "unmatched" && <p>{t("ratings.unmatched")}</p>}
+      {state.phase === "not-found" && <p>{t("ratings.noneFound")}</p>}
+      {state.phase === "error" && <p role="status">{t("ratings.error", { message: state.message })}</p>}
       {state.phase === "ready" && (
         displayedRatings.length === 0
-          ? <p>No external ratings were found for this title.</p>
+          ? <p>{t("ratings.noneFound")}</p>
           : (
             <dl className="external-ratings-list">
               {displayedRatings.map((rating) => (
@@ -148,8 +149,8 @@ export function ExternalRatingsPanel({
             </dl>
           )
       )}
-      {state.phase === "ready" && state.refreshing && <p role="status">Refreshing saved ratings…</p>}
-      {state.phase === "ready" && state.refreshFailed && <p role="status">Showing saved ratings; refresh failed.</p>}
+      {state.phase === "ready" && state.refreshing && <p role="status">{t("ratings.refreshing")}</p>}
+      {state.phase === "ready" && state.refreshFailed && <p role="status">{t("ratings.refreshFailed")}</p>}
     </section>
   );
 }

@@ -1,3 +1,5 @@
+import { t, tCount } from "../lib/i18n";
+import { sectionLabel } from "../lib/sectionLabel";
 import { EmptyPanel } from "./EmptyPanel";
 import { RowSkeletons } from "./Skeleton";
 import { ExternalRatingsPanel } from "./ExternalRatings";
@@ -44,20 +46,20 @@ function MoreFromPlaylist<T extends Movie | Series>({
 }) {
   if (items.length === 0) return null;
   return (
-    <section aria-label="More from this playlist" className="detail-more-playlist">
+    <section aria-label={t("detail.more")} className="detail-more-playlist">
       <div className="detail-more-heading">
         <div>
-          <p className="eyebrow">KEEP EXPLORING</p>
-          <h2>More from this playlist</h2>
+          <p className="eyebrow">{t("detail.keepExploring")}</p>
+          <h2>{t("detail.more")}</h2>
         </div>
       </div>
       <div className="detail-more-rail">
         {items.map((item) => (
           <article className="catalog-card detail-more-card" key={item.id}>
             <button
-              aria-label={`View details for ${item.name}`}
+              aria-label={t("card.details", { name: item.name })}
               className="catalog-card-main"
-              data-tooltip={`View details for ${item.name}`}
+              data-tooltip={t("card.details", { name: item.name })}
               onClick={() => onSelect(item)}
               type="button"
             >
@@ -79,16 +81,16 @@ function MoreFromPlaylist<T extends Movie | Series>({
                 <small>
                   {[item.year, item.rating !== undefined ? `★ ${item.rating.toFixed(1)}` : undefined]
                     .filter((value) => value !== undefined)
-                    .join(" · ") || item.category || section}
+                    .join(" · ") || item.category || sectionLabel(section)}
                 </small>
               </span>
             </button>
             {onToggleFavorite && (
               <button
-                aria-label={favoriteIds.has(item.id) ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+                aria-label={favoriteIds.has(item.id) ? t("card.favRemove", { name: item.name }) : t("card.favAdd", { name: item.name })}
                 aria-pressed={favoriteIds.has(item.id)}
                 className={`favorite-button${favoriteIds.has(item.id) ? " selected" : ""}`}
-                data-tooltip={`${favoriteIds.has(item.id) ? "Remove" : "Add"} ${section === "Movies" ? "Movie" : "Series"} ${favoriteIds.has(item.id) ? "from" : "to"} favorites`}
+                data-tooltip={t(favoriteIds.has(item.id) ? "card.favRemoveTooltip" : "card.favAddTooltip", { kind: t(section === "Movies" ? "card.kindMovie" : "card.kindSeries") })}
                 data-tooltip-placement="bottom"
                 onClick={() => onToggleFavorite(item)}
                 type="button"
@@ -98,10 +100,10 @@ function MoreFromPlaylist<T extends Movie | Series>({
             )}
             {onAddToLibrary && (
               <button
-                aria-label={libraryIds.has(item.id) ? `${item.name} is saved in your library` : `Add ${item.name} to your watchlist`}
+                aria-label={libraryIds.has(item.id) ? t("card.inLibrary", { name: item.name }) : t("card.addWatchlist", { name: item.name })}
                 aria-pressed={libraryIds.has(item.id)}
                 className={`catalog-library-button${libraryIds.has(item.id) ? " selected" : ""}`}
-                data-tooltip={libraryIds.has(item.id) ? "Already in your library" : "Add to watchlist"}
+                data-tooltip={libraryIds.has(item.id) ? t("card.inLibraryTooltip") : t("card.addWatchlistTooltip")}
                 data-tooltip-placement="bottom"
                 disabled={libraryIds.has(item.id)}
                 onClick={() => onAddToLibrary(item)}
@@ -136,16 +138,16 @@ function OfflineDownloadAction({
   const downloaded = downloadedIds.has(id);
   const downloading = activeDownloadIds.has(id);
   const supported = canDownloadMedia(media);
-  const label = downloaded ? "Downloaded" : downloading ? "Downloading…" : "Download";
+  const label = downloaded ? t("detail.downloaded") : downloading ? t("detail.downloading") : t("detail.download");
   return (
     <button
-      aria-label={`${label} ${media.title}`}
+      aria-label={t("detail.downloadAria", { label, title: media.title })}
       className={iconOnly ? "detail-icon-button" : compact ? "icon-button episode-download-action" : "secondary-button download-action"}
       disabled={!supported || downloaded || downloading}
       onClick={() => onDownload(media)}
       data-tooltip={!supported
-        ? "Only direct, non-DRM video files can be saved offline."
-        : downloaded ? "Already saved for offline playback" : downloading ? "Download in progress" : "Download for offline playback"}
+        ? t("detail.dlUnsupported")
+        : downloaded ? t("detail.dlSaved") : downloading ? t("detail.dlInProgress") : t("detail.dlAction")}
       data-tooltip-placement={compact ? "left" : undefined}
       type="button"
     >
@@ -199,37 +201,37 @@ export function MovieDetail({
   const relatedMovies = relatedPlaylistItems(movie, playlistMovies);
   return (
     <section className="series-detail-page">
-      <button className="back-button" data-tooltip="Back to Movies overview" onClick={onBack} type="button"><Icon name="arrow_back" /> Movies</button>
+      <button className="back-button" data-tooltip={t("detail.backMovies")} onClick={onBack} type="button"><Icon name="arrow_back" /> {t("nav.movies")}</button>
       <header className="series-detail-header">
         {movie.posterUrl && <img alt="" aria-hidden="true" className="detail-backdrop" src={movie.posterUrl} />}
         <div>
-          <p className="eyebrow">MOVIE DETAILS{movie.year ? ` / ${movie.year}` : ""}</p>
+          <p className="eyebrow">{t("detail.movieEyebrow")}{movie.year ? ` / ${movie.year}` : ""}</p>
           <h1>{movie.name}</h1>
           <div className="detail-meta">
-            <span>{movie.rating !== undefined ? `★ ${movie.rating.toFixed(1)}` : "No rating"}</span>
+            <span>{movie.rating !== undefined ? `★ ${movie.rating.toFixed(1)}` : t("detail.noRating")}</span>
             {movie.category && <span>{movie.category}</span>}
           </div>
           {movie.overview?.trim() && <p>{movie.overview}</p>}
           <ExternalRatingsPanel item={movie} mediaType="MOVIE" service={ratingsService} />
           <div className="movie-detail-actions">
             <button className="primary-button" onClick={onPlay} type="button">
-              <Icon name="play_arrow" /> {continueWatching ? "Continue watching" : "Watch movie"}
+              <Icon name="play_arrow" /> {continueWatching ? t("library.tabContinue") : t("detail.watchMovie")}
             </button>
             <button
-              aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+              aria-label={favorite ? t("library.removeFavoriteTooltip") : t("detail.addFavorite")}
               aria-pressed={favorite}
               className={`detail-icon-button favorite${favorite ? " selected" : ""}`}
-              data-tooltip={favorite ? "Remove from favorites" : "Add to favorites"}
+              data-tooltip={favorite ? t("library.removeFavoriteTooltip") : t("detail.addFavorite")}
               onClick={onFavorite}
               type="button"
             >
               <Icon name={favorite ? "favorite" : "favorite_border"} />
             </button>
             <button
-              aria-label={inLibrary ? "Remove from library" : "Add to watchlist"}
+              aria-label={inLibrary ? t("library.removeTooltip") : t("card.addWatchlistTooltip")}
               aria-pressed={inLibrary}
               className={`detail-icon-button${inLibrary ? " selected" : ""}`}
-              data-tooltip={inLibrary ? "Remove from library" : "Add to watchlist"}
+              data-tooltip={inLibrary ? t("library.removeTooltip") : t("card.addWatchlistTooltip")}
               onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >
@@ -363,19 +365,19 @@ export function SeriesDetail({
   const relatedSeries = relatedPlaylistItems(series, playlistSeries);
   const seasonCount = seasons.length;
   const seriesDetails = loading
-    ? "SERIES DETAILS / LOADING EPISODES"
-    : `SERIES DETAILS / ${seasonCount} ${seasonCount === 1 ? "SEASON" : "SEASONS"} / ${availableEpisodes.length} ${availableEpisodes.length === 1 ? "EPISODE" : "EPISODES"}`;
+    ? t("detail.seriesLoading")
+    : `${t("detail.seriesEyebrow")} / ${tCount("detail.seasonsUp", seasonCount)} / ${tCount("detail.episodesUp", availableEpisodes.length)}`;
 
   return (
     <section className="series-detail-page">
-      <button className="back-button" data-tooltip="Back to Series overview" onClick={onBack} type="button"><Icon name="arrow_back" /> Series</button>
+      <button className="back-button" data-tooltip={t("detail.backSeries")} onClick={onBack} type="button"><Icon name="arrow_back" /> {t("nav.series")}</button>
       <header className="series-detail-header">
         {series.posterUrl && <img alt="" aria-hidden="true" className="detail-backdrop" src={series.posterUrl} />}
         <div>
           <p className="eyebrow">{seriesDetails}</p>
           <h1>{series.name}</h1>
           <div className="detail-meta">
-            <span>{series.rating !== undefined ? `★ ${series.rating.toFixed(1)}` : "No rating"}</span>
+            <span>{series.rating !== undefined ? `★ ${series.rating.toFixed(1)}` : t("detail.noRating")}</span>
             {series.year !== undefined && <span>{series.year}</span>}
             {series.category && <span>{series.category}</span>}
           </div>
@@ -391,23 +393,23 @@ export function SeriesDetail({
               }}
               type="button"
             >
-              <Icon name="play_arrow" /> {continueWatching ? "Continue watching" : "Play first episode"}
+              <Icon name="play_arrow" /> {continueWatching ? t("library.tabContinue") : t("detail.playFirst")}
             </button>
             <button
-              aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+              aria-label={favorite ? t("library.removeFavoriteTooltip") : t("detail.addFavorite")}
               aria-pressed={favorite}
               className={`detail-icon-button favorite${favorite ? " selected" : ""}`}
-              data-tooltip={favorite ? "Remove from favorites" : "Add to favorites"}
+              data-tooltip={favorite ? t("library.removeFavoriteTooltip") : t("detail.addFavorite")}
               onClick={onFavorite}
               type="button"
             >
               <Icon name={favorite ? "favorite" : "favorite_border"} />
             </button>
             <button
-              aria-label={inLibrary ? "Remove from library" : "Add to watchlist"}
+              aria-label={inLibrary ? t("library.removeTooltip") : t("card.addWatchlistTooltip")}
               aria-pressed={inLibrary}
               className={`detail-icon-button${inLibrary ? " selected" : ""}`}
-              data-tooltip={inLibrary ? "Remove from library" : "Add to watchlist"}
+              data-tooltip={inLibrary ? t("library.removeTooltip") : t("card.addWatchlistTooltip")}
               onClick={inLibrary ? onRemoveFromLibrary : onAddToLibrary}
               type="button"
             >
@@ -418,21 +420,21 @@ export function SeriesDetail({
       </header>
       <div className="episode-heading">
         <div>
-          <p className="eyebrow">YOUR NEXT BINGE</p>
-          <h2>Episodes</h2>
+          <p className="eyebrow">{t("detail.nextBinge")}</p>
+          <h2>{t("detail.episodes")}</h2>
         </div>
         {seasons.length > 1 && (
           <div className="category-select">
             <Icon name="filter_list" />
             <CustomSelect
-              ariaLabel="Filter season"
+              ariaLabel={t("detail.filterSeason")}
               onValueChange={(value) => setSeasonSelection({
                 seriesId: series.id,
                 season: value === "all" ? "all" : Number(value),
               })}
               options={[
-                { label: "All seasons", value: "all" },
-                ...seasons.map((value) => ({ label: `Season ${value}`, value: String(value) })),
+                { label: t("detail.allSeasons"), value: "all" },
+                ...seasons.map((value) => ({ label: t("detail.season", { number: value }), value: String(value) })),
               ]}
               value={String(season)}
               variant="embedded"
@@ -442,20 +444,20 @@ export function SeriesDetail({
       </div>
       {loading && (
         <div aria-live="polite" role="status">
-          <span className="sr-only">Loading episodes…</span>
+          <span className="sr-only">{t("detail.loadingEpisodes")}</span>
           <RowSkeletons count={5} />
         </div>
       )}
       {error && <p className="form-error" role="alert">{error}</p>}
       {!loading && !error && availableEpisodes.length === 0 && (
-        <EmptyPanel icon="tv" title="No episodes found">The provider returned no episode details for this series.</EmptyPanel>
+        <EmptyPanel icon="tv" title={t("detail.noEpisodesTitle")}>{t("detail.noEpisodesBody")}</EmptyPanel>
       )}
       <div className="episode-list">
         {visible.map((episode) => (
           <div className="episode-download-row" key={episode.id}>
             <button
               className="episode-row"
-              data-tooltip="Play episode"
+              data-tooltip={t("detail.playEpisode")}
               data-tooltip-placement="bottom"
               onClick={() => onPlay(playableEpisode(series, episode))}
               type="button"

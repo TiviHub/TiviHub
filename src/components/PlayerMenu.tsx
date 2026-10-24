@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "../lib/i18n";
 import { Icon, type IconName } from "./common";
 
 export interface PlayerMenuSection {
@@ -42,9 +43,9 @@ export function PlayerMenu({ sections, actions }: { sections: PlayerMenuSection[
       <button
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Subtitles, audio and quality"
+        aria-label={t("player.menu")}
         className={`icon-button${open ? " selected" : ""}`}
-        data-tooltip={open ? undefined : "Subtitles, audio and quality"}
+        data-tooltip={open ? undefined : t("player.menu")}
         onClick={() => setOpen((value) => !value)}
         type="button"
       >

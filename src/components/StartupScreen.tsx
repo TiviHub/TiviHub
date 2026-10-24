@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { t } from "../lib/i18n";
 import { ProgressIndicator } from "./ProgressIndicator";
 
 export function StartupScreen({
@@ -29,12 +30,12 @@ export function StartupScreen({
             TiviHub
           </span>
         </div>
-        <p className="eyebrow">LOCAL LIBRARY</p>
-        <h2 id="startup-progress-title">Opening your library</h2>
+        <p className="eyebrow">{t("startup.eyebrow")}</p>
+        <h2 id="startup-progress-title">{t("startup.title")}</h2>
         <p id="startup-progress-description">
-          Loading your channels, movies, series, and saved progress on this device. Please wait.
+          {t("startup.description")}
         </p>
-        <ProgressIndicator label="Library loading progress" />
+        <ProgressIndicator label={t("startup.progress")} />
       </section>
     </div>
   );

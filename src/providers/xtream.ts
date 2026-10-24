@@ -8,6 +8,8 @@ import type {
   Series,
 } from "../types";
 import { recordDiagnosticFailure } from "../lib/diagnosticLog";
+import { t } from "../lib/i18n";
+import type { MessageKey } from "../locales";
 import { formatServerTime } from "../lib/serverTime";
 import { readResponseText, validateHttpsUrl } from "./http";
 import { providerFetch } from "./transport";
@@ -31,9 +33,25 @@ export interface XtreamCatalog {
   serverTimeZone?: string;
 }
 
+const OPERATION_KEYS: Record<string, MessageKey> = {
+  "Xtream account check": "op.xtreamCheck",
+  "Live categories": "op.liveCategories",
+  "Live channels": "op.liveChannels",
+  "Series categories": "op.seriesCategories",
+  "Series": "op.series",
+  "Movie categories": "op.movieCategories",
+  "Movies": "op.movies",
+};
+
+// The call sites name an operation in English; the message shows it in the app language.
+function operationName(operation: string): string {
+  const key = OPERATION_KEYS[operation];
+  return key ? t(key) : operation;
+}
+
 export class XtreamAccountExpiredError extends Error {
   constructor() {
-    super("This Xtream playlist has expired.");
+    super(t("err.xtreamExpired"));
     this.name = "XtreamAccountExpiredError";
   }
 }
@@ -52,10 +70,10 @@ function encodePathPart(value: string): string {
 function apiBase(playlist: Playlist): URL {
   const url = new URL(playlist.url);
   if (!["http:", "https:"].includes(url.protocol)) {
-    throw new Error("Xtream server URLs must use HTTP or HTTPS.");
+    throw new Error(t("err.xtreamScheme"));
   }
   if (url.username || url.password) {
-    throw new Error("Put Xtream credentials in their own fields, not in the server URL.");
+    throw new Error(t("err.xtreamCreds"));
   }
   if (!url.pathname.endsWith("/player_api.php")) {
     url.pathname = `${url.pathname.replace(/\/+$/, "")}/player_api.php`;
@@ -70,7 +88,7 @@ function authenticatedUrl(
   parameters: Record<string, string> = {},
 ): string {
   if (!playlist.username.trim() || !playlist.password) {
-    throw new Error("Enter the Xtream username and password.");
+    throw new Error(t("dlg.errXtream"));
   }
   const url = apiBase(playlist);
   url.search = "";
@@ -150,7 +168,7 @@ async function requestJson(
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     recordDiagnosticFailure("xtream-catalog", "network");
     throw new Error(
-      `${operation} could not be reached. The provider may block cross-origin access (CORS), or be offline. The request went directly from this app to the provider.`,
+      t("err.xtreamNetwork", { operation: operationName(operation) }),
       { cause: error },
     );
   }
@@ -158,24 +176,24 @@ async function requestJson(
     recordDiagnosticFailure("xtream-catalog", "http", response.status);
     if (response.status === 401) {
       throw new Error(
-        `${operation} was denied (HTTP 401). Check your Xtream URL, username, and password, then try again.`,
+        t("err.xtream401", { operation: operationName(operation) }),
       );
     }
     if (response.status === 403) {
       throw new Error(
-        `${operation} was denied (HTTP 403). Ask your provider to confirm that your account has access.`,
+        t("err.xtream403", { operation: operationName(operation) }),
       );
     }
     if (response.status === 429 || response.status >= 500) {
       throw new Error(
-        `${operation} is temporarily unavailable (HTTP ${response.status}). Wait a moment and try again.`,
+        t("err.xtreamUnavailable", { operation: operationName(operation), status: response.status }),
       );
     }
-    throw new Error(`${operation} failed with HTTP ${response.status}.`);
+    throw new Error(t("err.xtreamHttp", { operation: operationName(operation), status: response.status }));
   }
   let text: string;
   try {
-    text = await readResponseText(response, maxBytes, operation);
+    text = await readResponseText(response, maxBytes, operationName(operation));
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
     recordDiagnosticFailure("xtream-catalog", "invalid-response");
@@ -185,7 +203,7 @@ async function requestJson(
     return JSON.parse(text) as unknown;
   } catch {
     recordDiagnosticFailure("xtream-catalog", "invalid-response");
-    throw new Error(`${operation} returned invalid JSON.`);
+    throw new Error(t("err.xtreamJson", { operation: operationName(operation) }));
   }
 }
 
@@ -199,7 +217,7 @@ function array(value: unknown, description: string, alternateKey?: string): Xtre
   const direct = Array.isArray(value) ? value : null;
   const nested = object(value)?.[alternateKey ?? "data"];
   const result = direct ?? (Array.isArray(nested) ? nested : null);
-  if (!result) throw new Error(`${description} response did not contain a list.`);
+  if (!result) throw new Error(t("err.xtreamList", { description: operationName(description) }));
   return result.map(object).filter((item): item is XtreamPayload => item !== null);
 }
 
@@ -271,7 +289,7 @@ async function authenticate(
 ): Promise<{ expiresAtMillis?: number; serverTimeZone?: string }> {
   const payload = object(await requestJson(playlist.userAgent, authenticatedUrl(playlist), "Xtream account check", signal));
   const userInfo = object(payload?.user_info);
-  if (!userInfo) throw new Error("Xtream returned an unexpected authentication response.");
+  if (!userInfo) throw new Error(t("err.xtreamAuthUnexpected"));
   const status = stringValue(userInfo.status ?? payload?.status)?.toLowerCase() ?? "";
   const auth = optionalNumber(userInfo.auth);
   const message = stringValue(payload?.message);
@@ -279,7 +297,7 @@ async function authenticate(
     throw new XtreamAccountExpiredError();
   }
   if (auth === 0 || ["disabled", "unauthorized"].includes(status)) {
-    throw new Error(message || `Xtream authentication was rejected (${status || "inactive"}).`);
+    throw new Error(message || t("err.xtreamRejected", { status: status || t("err.xtreamInactive") }));
   }
   return {
     expiresAtMillis: expiryMillis(userInfo.exp_date),
@@ -496,7 +514,7 @@ export async function loadXtreamEpisodes(
   series: Series,
   signal?: AbortSignal,
 ): Promise<Episode[]> {
-  if (!series.providerId) throw new Error("This series does not have a provider ID.");
+  if (!series.providerId) throw new Error(t("err.xtreamNoProviderId"));
   const response = object(await requestJson(
     playlist.userAgent,
     authenticatedUrl(playlist, "get_series_info", { series_id: series.providerId }),
@@ -504,7 +522,7 @@ export async function loadXtreamEpisodes(
     signal,
   ));
   const episodeSeasons = object(response?.episodes);
-  if (!episodeSeasons) throw new Error("Xtream returned an unexpected episode response.");
+  if (!episodeSeasons) throw new Error(t("err.xtreamEpisodes"));
   const episodes: Episode[] = [];
 
   for (const [seasonValue, rawEpisodes] of Object.entries(episodeSeasons)) {
@@ -602,7 +620,7 @@ export async function loadXtreamShortEpg(
   signal?: AbortSignal,
 ): Promise<XtreamShortEpgResult> {
   if (channels.length > XTREAM_SHORT_EPG_CHANNEL_BATCH_SIZE) {
-    throw new Error(`Request guide data for no more than ${XTREAM_SHORT_EPG_CHANNEL_BATCH_SIZE} channels at a time.`);
+    throw new Error(t("err.xtreamEpgBatch", { count: XTREAM_SHORT_EPG_CHANNEL_BATCH_SIZE }));
   }
 
   const withProviderIds = channels.flatMap((channel) =>

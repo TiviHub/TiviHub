@@ -1,3 +1,5 @@
+import { t } from "../lib/i18n";
+
 export async function readResponseText(
   response: Response,
   maxBytes: number | undefined,
@@ -5,10 +7,10 @@ export async function readResponseText(
 ): Promise<string> {
   const declaredSize = Number(response.headers.get("content-length"));
   if (maxBytes !== undefined && Number.isFinite(declaredSize) && declaredSize > maxBytes) {
-    throw new Error(`${label} is larger than the supported ${Math.floor(maxBytes / (1024 * 1024))} MB limit.`);
+    throw new Error(t("http.tooLarge", { label, mb: Math.floor(maxBytes / (1024 * 1024)) }));
   }
 
-  if (!response.body) throw new Error(`${label} response did not contain a readable body.`);
+  if (!response.body) throw new Error(t("http.noBody", { label }));
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -20,7 +22,7 @@ export async function readResponseText(
       total += result.value.byteLength;
       if (maxBytes !== undefined && total > maxBytes) {
         await reader.cancel();
-        throw new Error(`${label} is larger than the supported ${Math.floor(maxBytes / (1024 * 1024))} MB limit.`);
+        throw new Error(t("http.tooLarge", { label, mb: Math.floor(maxBytes / (1024 * 1024)) }));
       }
       chunks.push(result.value);
     }
@@ -41,10 +43,10 @@ export function validateHttpsUrl(value: string, label: string): string {
   try {
     url = new URL(value.trim());
   } catch {
-    throw new Error(`${label} must be a valid HTTPS URL.`);
+    throw new Error(t("http.invalidUrl", { label }));
   }
   if (url.protocol !== "https:" || !url.hostname) {
-    throw new Error(`${label} must use HTTPS.`);
+    throw new Error(t("http.httpsOnly", { label }));
   }
   return url.toString();
 }

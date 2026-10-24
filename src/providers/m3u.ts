@@ -1,6 +1,7 @@
 import type { DrmSystem, Episode, LiveChannel, Movie, Series } from "../types";
 import { catchupFromAttributes } from "../lib/catchup";
 import { recordDiagnosticFailure } from "../lib/diagnosticLog";
+import { t } from "../lib/i18n";
 import { readResponseText, validateHttpsUrl } from "./http";
 import { providerFetch } from "./transport";
 
@@ -54,7 +55,7 @@ function resolveStream(value: string, baseUrl?: string): string | null {
     result = baseUrl ? new URL(value, baseUrl) : new URL(value);
   } catch {
     throw new Error(
-      "This playlist contains a relative stream URL. Add its original playlist URL as the base address.",
+      t("err.m3uRelative"),
     );
   }
   // rtmp://, rtsp:// and udp:// entries cannot play here; the caller skips them instead of failing the import.
@@ -241,11 +242,11 @@ function createM3uCatalogParser(context: PlaylistContext) {
 
   function finish(): M3uCatalog {
     if (!hasHeader) {
-      throw new Error("This file is not a valid extended M3U playlist (missing #EXTM3U).");
+      throw new Error(t("err.m3uNoExtm3u"));
     }
     if (channels.length + movies.length + episodes.length === 0) {
-      if (skipped > 0) throw new Error("Playlist entries must use HTTP or HTTPS stream URLs.");
-      throw new Error("No media entries were found in this playlist.");
+      if (skipped > 0) throw new Error(t("err.m3uProtocol"));
+      throw new Error(t("err.m3uNoMedia"));
     }
     return { channels, movies, series, episodes, skipped };
   }
@@ -274,7 +275,7 @@ function utf8ByteLength(value: string): number {
 
 function enforcePlaylistSize(byteLength: number) {
   if (byteLength > MAX_M3U_BYTES) {
-    throw new Error("Playlist is larger than the supported 200 MB limit.");
+    throw new Error(t("err.m3uTooLarge"));
   }
 }
 
@@ -354,13 +355,13 @@ export async function parseM3uCatalogAsync(
 export function parseM3u(content: string, context: PlaylistContext): LiveChannel[] {
   const catalog = parseM3uCatalog(content, context);
   if (catalog.channels.length === 0) {
-    throw new Error("No channel entries were found in this playlist.");
+    throw new Error(t("err.m3uNoChannels"));
   }
   return catalog.channels;
 }
 
 export async function fetchM3u(url: string, signal?: AbortSignal, userAgent?: string): Promise<string> {
-  const parsed = validateHttpUrl(url, "playlist URL");
+  const parsed = validateHttpUrl(url, t("label.playlistUrl"));
   let response: Response;
   try {
     response = await providerFetch(parsed, { signal, headers: { Accept: "application/x-mpegURL, text/plain, */*" } }, userAgent);
@@ -368,7 +369,7 @@ export async function fetchM3u(url: string, signal?: AbortSignal, userAgent?: st
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     recordDiagnosticFailure("m3u-playlist", "network");
     throw new Error(
-      "The playlist could not be fetched by TiviHub. The provider may block cross-origin access (CORS); try importing the M3U file instead.",
+      t("err.m3uFetch"),
       { cause: error },
     );
   }
@@ -376,18 +377,18 @@ export async function fetchM3u(url: string, signal?: AbortSignal, userAgent?: st
     recordDiagnosticFailure("m3u-playlist", "http", response.status);
     if (response.status === 401 || response.status === 403) {
       throw new Error(
-        `The playlist server denied access (HTTP ${response.status}). Check the playlist URL and your provider account access.`,
+        t("err.m3uDenied", { status: response.status }),
       );
     }
     if (response.status === 429 || response.status >= 500) {
       throw new Error(
-        `The playlist server is temporarily unavailable (HTTP ${response.status}). Wait a moment and try again.`,
+        t("err.m3uUnavailable", { status: response.status }),
       );
     }
-    throw new Error(`Playlist request failed with HTTP ${response.status}.`);
+    throw new Error(t("err.m3uHttp", { status: response.status }));
   }
   try {
-    return await readResponseText(response, MAX_M3U_BYTES, "Playlist");
+    return await readResponseText(response, MAX_M3U_BYTES, t("label.playlist"));
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
     recordDiagnosticFailure("m3u-playlist", "invalid-response");
@@ -400,10 +401,10 @@ export function validateHttpUrl(value: string, label: string): string {
   try {
     url = new URL(value.trim());
   } catch {
-    throw new Error(`Enter a valid ${label}.`);
+    throw new Error(t("err.validUrl", { label }));
   }
   if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
-    throw new Error(`${label} must use HTTP or HTTPS.`);
+    throw new Error(t("err.httpOnly", { label }));
   }
   return url.toString();
 }

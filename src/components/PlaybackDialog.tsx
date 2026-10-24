@@ -7,6 +7,8 @@ import type { PlayableItem } from "../types";
 import type { SubtitleResult } from "../providers/opensubtitles";
 import { subtitleService } from "../services/subtitleService";
 import { playbackErrorMessage } from "../lib/playbackErrors";
+import { t } from "../lib/i18n";
+import type { MessageKey } from "../locales";
 import {
   browserSummary,
   createPlaybackDiagnosticReport,
@@ -25,6 +27,8 @@ import { PlayerMenu } from "./PlayerMenu";
 import { PlayerControls } from "./PlayerControls";
 import { ProgressIndicator } from "./ProgressIndicator";
 import { MAX_SUBTITLE_BYTES, NATIVE_TRACK_EVENTS, asWebVtt, directMediaUrl, mediaDuration, nativeHlsUrl, type CastDeviceInfo, type ShakaPlayer, type ShakaRuntime, type ShakaVariantTrack, type TextTrackOption } from "../lib/playbackMedia";
+
+const LOADING_STATUSES = new Set<MessageKey>(["play.statusPreparing", "play.statusRetrying", "play.statusConnecting", "play.statusBuffering", "play.statusWaiting"]);
 
 export function PlaybackDialog({
   item,
@@ -75,7 +79,7 @@ export function PlaybackDialog({
   const nativeHlsFallbackInProgressRef = useRef(false);
   const playbackFailedRef = useRef(false);
   const hasStartedPlaybackRef = useRef(false);
-  const [status, setStatus] = useState("Preparing playback…");
+  const [status, setStatus] = useState<{ key: MessageKey; vars?: Record<string, string> }>({ key: "play.statusPreparing" });
   const [error, setError] = useState<string | null>(null);
   const [diagnosticCopyMessage, setDiagnosticCopyMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -121,12 +125,12 @@ export function PlaybackDialog({
     recordPlaybackFailure(path, cause);
     setError(message);
     setDiagnosticCopyMessage(null);
-    setStatus("Playback failed");
+    setStatus({ key: "play.statusFailed" });
   }
 
   async function copyDiagnostics() {
     if (!navigator.clipboard?.writeText) {
-      setDiagnosticCopyMessage("Clipboard isn't available here. Try again in the app window.");
+      setDiagnosticCopyMessage(t("play.clipboardUnavailable"));
       return;
     }
     let backendErrors: BackendDiagnosticEvent[] = [];
@@ -134,7 +138,7 @@ export function PlaybackDialog({
       try {
         backendErrors = await invoke<BackendDiagnosticEvent[]>("get_backend_diagnostics");
       } catch {
-        setDiagnosticCopyMessage("Couldn't collect app diagnostics. Nothing was copied; please try again.");
+        setDiagnosticCopyMessage(t("play.diagFailed"));
         return;
       }
     }
@@ -149,9 +153,9 @@ export function PlaybackDialog({
     });
     try {
       await navigator.clipboard.writeText(report);
-      setDiagnosticCopyMessage("Error details copied. You can paste them into your support message.");
+      setDiagnosticCopyMessage(t("play.diagCopied"));
     } catch {
-      setDiagnosticCopyMessage("Couldn't access the clipboard. Please try again.");
+      setDiagnosticCopyMessage(t("play.clipboardFailed"));
     }
   }
 
@@ -258,7 +262,7 @@ export function PlaybackDialog({
         }
         return {
           id,
-          label: track.label || track.language || `Subtitle ${id + 1}`,
+          label: track.label || track.language || t("play.subtitleFallback", { number: id + 1 }),
           language: track.language,
           active: track.mode === "showing",
         };
@@ -277,7 +281,7 @@ export function PlaybackDialog({
       );
       setSaveError(null);
     } catch {
-      setSaveError("Couldn't save playback progress. Your video can keep playing.");
+      setSaveError(t("play.saveFailed"));
     }
   }
 
@@ -315,7 +319,7 @@ export function PlaybackDialog({
     const onPlaying = () => {
       playbackFailedRef.current = false;
       hasStartedPlaybackRef.current = true;
-      setStatus("Playing");
+      setStatus({ key: "play.statusPlaying" });
       window.setTimeout(() => {
         if (!disposed && !video.paused && soundIsMissing(video)) setSoundMissing(true);
       }, 4000);
@@ -325,17 +329,17 @@ export function PlaybackDialog({
       }
     };
     const onWaiting = () => {
-      if (!playbackFailedRef.current) setStatus("Buffering…");
+      if (!playbackFailedRef.current) setStatus({ key: "play.statusBuffering" });
     };
     const onStalled = () => {
-      if (!playbackFailedRef.current) setStatus("Waiting for stream data…");
+      if (!playbackFailedRef.current) setStatus({ key: "play.statusWaiting" });
     };
     const onCanPlay = () => {
-      if (!playbackFailedRef.current) setStatus(video.paused ? "Ready to play" : "Playing");
+      if (!playbackFailedRef.current) setStatus({ key: video.paused ? "play.statusReady" : "play.statusPlaying" });
     };
     const onPause = () => {
       if (hasStartedPlaybackRef.current && !video.ended && !playbackFailedRef.current) {
-        setStatus("Paused");
+        setStatus({ key: "play.statusPaused" });
       }
     };
     const onVideoError = () => {
@@ -355,7 +359,7 @@ export function PlaybackDialog({
       void persistProgress();
     };
     const onEnded = () => {
-      setStatus("Playback finished");
+      setStatus({ key: "play.statusFinished" });
       void persistProgress(true);
     };
     const onTrackListChange = () => syncNativeTracks();
@@ -399,7 +403,7 @@ export function PlaybackDialog({
         if (disposed) return;
         setError(null);
         setDiagnosticCopyMessage(null);
-        setStatus(video.paused ? "Ready to play" : "Playing");
+        setStatus({ key: video.paused ? "play.statusReady" : "play.statusPlaying" });
       } catch (cause) {
         if (!disposed) {
           showPlaybackFailure(
@@ -454,7 +458,7 @@ export function PlaybackDialog({
           video.src = mediaUrl;
           video.load();
           if (video.readyState >= HTMLMediaElement.HAVE_METADATA) seek();
-          setStatus("Ready to play");
+          setStatus({ key: "play.statusReady" });
           void restoreSubtitle(() => disposed);
           return;
         }
@@ -465,7 +469,7 @@ export function PlaybackDialog({
         const shakaRuntime = shakaModule.default as ShakaRuntime;
         shakaRuntime.polyfill.installAll();
         if (!shakaRuntime.Player.isBrowserSupported()) {
-          throw new Error("This app's webview does not support the streaming formats required by this source.");
+          throw new Error(t("play.noStreaming"));
         }
         player = new shakaRuntime.Player();
         playerRef.current = player;
@@ -478,7 +482,7 @@ export function PlaybackDialog({
         if (item.drmLicenseUrl) {
           const licenseUrl = item.drmLicenseUrl;
           const drmSystem = item.drmSystem;
-          if (!drmSystem) throw new Error("This protected stream has no configured DRM system.");
+          if (!drmSystem) throw new Error(t("play.noDrmSystem"));
           const systems = drmSystem === "com.apple.fps"
             ? ["com.apple.fps", "com.apple.fps.1_0"]
             : [drmSystem];
@@ -494,7 +498,7 @@ export function PlaybackDialog({
                 { serverCertificateUri: certificateUrl },
               ]));
           }
-          if (!player.configure({ drm })) throw new Error("This app's webview rejected the DRM configuration.");
+          if (!player.configure({ drm })) throw new Error(t("play.drmRejected"));
         }
         if (proxy) {
           const base = proxy;
@@ -516,7 +520,7 @@ export function PlaybackDialog({
         }
         syncTracks(player);
         syncVariantTracks(player);
-        setStatus(video.paused ? "Ready to play" : "Playing");
+        setStatus({ key: video.paused ? "play.statusReady" : "play.statusPlaying" });
         void restoreSubtitle(() => disposed);
       } catch (cause) {
         if (disposed || nativeHlsFallbackAttemptedRef.current) return;
@@ -562,7 +566,7 @@ export function PlaybackDialog({
     try {
       if (value === "auto") {
         if (!player.configure({ abr: { enabled: true } })) {
-          throw new Error("The streaming player rejected automatic quality selection.");
+          throw new Error(t("play.qualityAutoRejected"));
         }
       } else {
         const height = Number(value);
@@ -570,15 +574,15 @@ export function PlaybackDialog({
           track.height === height && (!selectedAudioLanguage || track.language === selectedAudioLanguage),
         );
         const track = choices[0] ?? variantTracks.find((candidate) => candidate.height === height);
-        if (!track) throw new Error("That video quality is no longer available.");
+        if (!track) throw new Error(t("play.qualityGone"));
         if (!player.configure({ abr: { enabled: false } })) {
-          throw new Error("The streaming player rejected manual quality selection.");
+          throw new Error(t("play.qualityRejected"));
         }
         player.selectVariantTrack(track, true, 0);
       }
       setQualityChoice(value);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not change video quality.");
+      setError(cause instanceof Error ? cause.message : t("play.qualityFailed"));
     }
   }
 
@@ -590,11 +594,11 @@ export function PlaybackDialog({
       const selectedTrack = variantTracks.find((track) =>
         track.language === language && track.height === activeTrack?.height,
       ) ?? variantTracks.find((track) => track.language === language);
-      if (!selectedTrack) throw new Error("That audio track is no longer available.");
+      if (!selectedTrack) throw new Error(t("play.audioGone"));
       player.selectVariantTrack(selectedTrack, true, 0);
       setSelectedAudioLanguage(language);
     } catch (cause) {
-      setError(cause instanceof Error ? `Could not change audio track: ${cause.message}` : "Could not change audio track.");
+      setError(cause instanceof Error ? t("play.audioFailed", { message: cause.message }) : t("play.audioFailedPlain"));
     }
   }
 
@@ -621,7 +625,7 @@ export function PlaybackDialog({
     try {
       setSubtitleResults(await subtitleService.search(subtitleApiKey, subtitleQuery));
     } catch (cause) {
-      setSubtitleError(cause instanceof Error ? cause.message : "Couldn't search for subtitles. Please try again.");
+      setSubtitleError(cause instanceof Error ? cause.message : t("play.subSearchFailed"));
     } finally {
       setSubtitleBusy(false);
     }
@@ -646,7 +650,7 @@ export function PlaybackDialog({
       return;
     }
     const video = videoRef.current;
-    if (!video) throw new Error("The video element is not available.");
+    if (!video) throw new Error(t("play.noVideo"));
     const track = document.createElement("track");
     track.dataset.tivihubSubtitle = "true";
     track.kind = "subtitles";
@@ -687,11 +691,11 @@ export function PlaybackDialog({
     setSubtitleError(null);
     try {
       const subtitle = await subtitleService.cachedFile(fileId);
-      if (!subtitle) throw new Error("Subtitle is no longer cached.");
+      if (!subtitle) throw new Error(t("play.subGone"));
       await attachSubtitle(subtitle.name, subtitle.contents, fileId);
       setSubtitleOpen(false);
     } catch {
-      setSubtitleError("Couldn't add this saved subtitle. Search for it again.");
+      setSubtitleError(t("play.subSavedFailed"));
     }
   }
 
@@ -706,13 +710,13 @@ export function PlaybackDialog({
     if (!file) return;
     setSubtitleError(null);
     if (file.size > MAX_SUBTITLE_BYTES) {
-      setSubtitleError("Subtitle files are limited to 5 MB.");
+      setSubtitleError(t("play.subLimit"));
       return;
     }
     try {
       await attachSubtitle(file.name, await file.text());
     } catch {
-      setSubtitleError("Couldn't add this subtitle file. Check the file and try again.");
+      setSubtitleError(t("play.subFileFailed"));
     }
   }
 
@@ -725,7 +729,7 @@ export function PlaybackDialog({
       await subtitleService.rememberChoice(item.id, result.fileId);
       setSubtitleOpen(false);
     } catch {
-      setSubtitleError("Couldn't download this subtitle. Please try again.");
+      setSubtitleError(t("play.subDownloadFailed"));
     } finally {
       setSubtitleBusy(false);
     }
@@ -735,7 +739,7 @@ export function PlaybackDialog({
     setCastOpen(true);
     setCastError(null);
     if (item.drmLicenseUrl) {
-      setCastError("Casting DRM-protected streams is not supported yet.");
+      setCastError(t("play.castDrm"));
       return;
     }
 
@@ -744,7 +748,7 @@ export function PlaybackDialog({
     try {
       setCastDevices(await invoke<CastDeviceInfo[]>("discover_cast_devices"));
     } catch {
-      setCastError("Couldn't search for casting devices. Check that they're on the same network and try again.");
+      setCastError(t("play.castSearchFailed"));
     } finally {
       setCastBusy(false);
     }
@@ -782,20 +786,20 @@ export function PlaybackDialog({
         video.load();
       }
       setCastingDevice(device);
-      setStatus(`Casting to ${device.name}`);
+      setStatus({ key: "play.statusCasting", vars: { name: device.name } });
       if (localStopFailed) {
-        setCastError("Casting started, but playback on this device may still be active.");
+        setCastError(t("play.castOngoing"));
       }
     } catch {
       if (!castStarted && wasPlaying && video) {
         try {
           await video.play();
         } catch {
-          setCastError("Casting didn't start, and playback couldn't resume on this device.");
+          setCastError(t("play.castNoResume"));
           return;
         }
       }
-      setCastError("Couldn't start casting. Check that the device and stream are available, then try again.");
+      setCastError(t("play.castStartFailed"));
     } finally {
       setCastBusy(false);
     }
@@ -808,10 +812,10 @@ export function PlaybackDialog({
     try {
       await invoke("stop_cast", { address: castingDevice.address });
       setCastingDevice(null);
-      setStatus("Connecting to your source…");
+      setStatus({ key: "play.statusConnecting" });
       return true;
     } catch {
-      setCastError("Couldn't stop casting on that device. Please try again.");
+      setCastError(t("play.castStopFailed"));
       setCastOpen(true);
       return false;
     } finally {
@@ -837,7 +841,7 @@ export function PlaybackDialog({
     hasStartedPlaybackRef.current = false;
     setError(null);
     setDiagnosticCopyMessage(null);
-    setStatus("Retrying playback…");
+    setStatus({ key: "play.statusRetrying" });
     try {
       if (player) {
         player.retryStreaming();
@@ -875,7 +879,7 @@ export function PlaybackDialog({
             </h2>
             <p aria-live="polite" className="playback-status" role="status">
               {/* shortcut: keyed on the initial status text, switch to a status enum if more phases need a skeleton */}
-              {status.startsWith("Preparing") ? <><span className="sr-only">{status}</span><Skeleton className="skeleton-line playback-status-skeleton" /></> : status}
+              {status.key === "play.statusPreparing" ? <><span className="sr-only">{t(status.key)}</span><Skeleton className="skeleton-line playback-status-skeleton" /></> : t(status.key, status.vars)}
             </p>
           </div>
           <div className="playback-header-actions">
@@ -887,15 +891,15 @@ export function PlaybackDialog({
                 type="button"
               >
                 <Icon name="cast_connected" />
-                Stop casting
+                {t("play.stopCasting")}
               </button>
             )}
             {mini && onExpand && (
-              <button aria-label="Return to live channel" className="icon-button" onClick={onExpand} type="button">
+              <button aria-label={t("play.returnLive")} className="icon-button" onClick={onExpand} type="button">
                 <Icon name="fullscreen" />
               </button>
             )}
-            <button aria-label="Close player" className="icon-button" onClick={() => void close()} type="button">
+            <button aria-label={t("play.closePlayer")} className="icon-button" onClick={() => void close()} type="button">
               <Icon name="close" />
             </button>
           </div>
@@ -913,15 +917,15 @@ export function PlaybackDialog({
           ref={videoRef}
           style={castingDevice ? { visibility: "hidden" } : undefined}
         />
-        {!error && !castingDevice && /^(Preparing|Retrying|Connecting|Buffering|Waiting)/.test(status) && (
-          <ProgressIndicator className="player-loading" label={item.replay ? "Preparing the recording" : "Loading the stream"} />
+        {!error && !castingDevice && LOADING_STATUSES.has(status.key) && (
+          <ProgressIndicator className="player-loading" label={item.replay ? t("play.preparingRecording") : t("play.loadingStream")} />
         )}
         <PlayerControls trailing={isTauri() && !item.offline ? (
             <button
               aria-expanded={castOpen}
-              aria-label={castingDevice ? `Casting to ${castingDevice.name}` : "Cast"}
+              aria-label={castingDevice ? t("play.castingTo", { name: castingDevice.name }) : t("play.cast")}
               className={`icon-button${castingDevice ? " selected" : ""}`}
-              data-tooltip={castingDevice ? `Casting to ${castingDevice.name}` : "Cast"}
+              data-tooltip={castingDevice ? t("play.castingTo", { name: castingDevice.name }) : t("play.cast")}
               onClick={() => {
                 if (castOpen) setCastOpen(false);
                 else void openCastPanel();
@@ -930,23 +934,23 @@ export function PlaybackDialog({
             >
               <Icon name={castingDevice ? "cast_connected" : "cast"} />
             </button>
-          ) : undefined} badge={item.live ? <span className="playback-badge">{item.radio ? "Radio" : "Live"}</span> : undefined} fullscreenRef={dialogRef} live={item.live} videoRef={videoRef}>
+          ) : undefined} badge={item.live ? <span className="playback-badge">{item.radio ? t("play.radio") : t("play.liveBadge")}</span> : undefined} fullscreenRef={dialogRef} live={item.live} videoRef={videoRef}>
             <PlayerMenu
               actions={item.live ? [] : [
-                { label: "Import subtitle file…", icon: "library_add", onClick: () => importInputRef.current?.click() },
-                { label: "Search OpenSubtitles…", icon: "search", onClick: () => setSubtitleOpen((open) => !open) },
+                { label: t("play.importSubtitle"), icon: "library_add", onClick: () => importInputRef.current?.click() },
+                { label: t("play.searchOpenSubtitles"), icon: "search", onClick: () => setSubtitleOpen((open) => !open) },
               ]}
               sections={[
                 ...(item.live ? [] : [{
-                  title: "Subtitles",
+                  title: t("settings.section.subtitles"),
                   options: [
-                    { label: "Subtitles off", value: "", active: !tracks.some((track) => track.active) },
+                    { label: t("play.subtitlesOff"), value: "", active: !tracks.some((track) => track.active) },
                     ...tracks.map((track) => ({ label: track.label, value: String(track.id), active: track.active })),
                   ],
                   onSelect: selectSubtitleTrack,
                 }]),
                 ...(audioLanguages.length > 1 ? [{
-                  title: "Audio",
+                  title: t("play.audio"),
                   options: audioLanguages.map((track) => ({ label: track.label, value: track.language, active: track.language === selectedAudioLanguage })),
                   onSelect: selectAudioLanguage,
                 }] : []),
@@ -964,7 +968,7 @@ export function PlaybackDialog({
               <div className="player-track-select">
                 <Icon name="speed" />
                 <CustomSelect
-                  ariaLabel="Playback speed"
+                  ariaLabel={t("play.speed")}
                   onValueChange={(value) => {
                     const speed = Number(value);
                     const video = videoRef.current;
@@ -973,11 +977,11 @@ export function PlaybackDialog({
                       video.playbackRate = speed;
                       setPlaybackSpeed(speed);
                     } catch (cause) {
-                      setError(cause instanceof Error ? `Could not change playback speed: ${cause.message}` : "Could not change playback speed.");
+                      setError(cause instanceof Error ? t("play.speedFailed", { message: cause.message }) : t("play.speedFailedPlain"));
                     }
                   }}
                   options={[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => ({
-                    label: speed === 1 ? "Normal speed" : `${speed}×`,
+                    label: speed === 1 ? t("play.speedNormal") : `${speed}×`,
                     value: String(speed),
                   }))}
                   value={String(playbackSpeed)}
@@ -987,9 +991,9 @@ export function PlaybackDialog({
             )}
             {onOpenExternal && !item.offline && !item.drmLicenseUrl && (
               <button
-                aria-label="Open in VLC or mpv"
+                aria-label={t("play.openExternal")}
                 className="icon-button"
-                data-tooltip="Open in VLC or mpv"
+                data-tooltip={t("play.openExternal")}
                 onClick={() => onOpenExternal(item)}
                 type="button"
               >
@@ -1001,7 +1005,7 @@ export function PlaybackDialog({
           <div className="player-casting-status" role="status">
             <Icon name="cast_connected" />
             <div>
-              <strong>Playing on your TV</strong>
+              <strong>{t("play.playingOnTv")}</strong>
               <span>{castingDevice.name}</span>
               {castError && <span className="player-casting-warning">{castError}</span>}
             </div>
@@ -1009,8 +1013,8 @@ export function PlaybackDialog({
         )}
         {soundMissing && !error && (
           <p className="player-error" role="status">
-            This file has no sound in the built-in player: its audio (usually AC-3 or E-AC-3) cannot be decoded here.
-            {onOpenExternal && " Use the Open in VLC or mpv button in the player controls to watch it with sound."}
+            {t("play.noSound")}
+            {onOpenExternal && t("play.noSoundHint")}
           </p>
         )}
         {error && <p className="player-error" role="alert">{error}</p>}
@@ -1018,15 +1022,15 @@ export function PlaybackDialog({
           <div className="playback-error-actions">
             <button className="secondary-button" onClick={() => void retryPlayback()} type="button">
               <Icon name="refresh" />
-              Retry playback
+              {t("play.retry")}
             </button>
             <button className="secondary-button" onClick={() => void close()} type="button">
               <Icon name="arrow_back" />
-              Return to browsing
+              {t("play.back")}
             </button>
             <button className="text-button" onClick={() => void copyDiagnostics()} type="button">
               <Icon name="content_copy" />
-              Copy error details
+              {t("cast.copyDetails")}
             </button>
             {diagnosticCopyMessage && (
               <p aria-live="polite" className="playback-error-copy-status">{diagnosticCopyMessage}</p>
@@ -1037,10 +1041,10 @@ export function PlaybackDialog({
 
         {castOpen && (
           <div className="player-overlay" onClick={(event) => { if (event.target === event.currentTarget) setCastOpen(false); }}>
-            <section aria-label="Cast to a device" className="player-overlay-card" role="dialog">
+            <section aria-label={t("cast.aria")} className="player-overlay-card" role="dialog">
               <header className="player-overlay-header">
-                <h3>Cast to a device</h3>
-                <button aria-label="Close casting" className="icon-button" onClick={() => setCastOpen(false)} type="button">
+                <h3>{t("cast.aria")}</h3>
+                <button aria-label={t("play.closeCasting")} className="icon-button" onClick={() => setCastOpen(false)} type="button">
                   <Icon name="close" />
                 </button>
               </header>
@@ -1061,10 +1065,10 @@ export function PlaybackDialog({
 
         {!item.live && subtitleOpen && (
           <div className="player-overlay" onClick={(event) => { if (event.target === event.currentTarget) setSubtitleOpen(false); }}>
-            <section aria-label="Subtitles" className="player-overlay-card" role="dialog">
+            <section aria-label={t("settings.section.subtitles")} className="player-overlay-card" role="dialog">
               <header className="player-overlay-header">
-                <h3>Subtitles</h3>
-                <button aria-label="Close subtitle search" className="icon-button" onClick={() => setSubtitleOpen(false)} type="button">
+                <h3>{t("settings.section.subtitles")}</h3>
+                <button aria-label={t("play.closeSubtitles")} className="icon-button" onClick={() => setSubtitleOpen(false)} type="button">
                   <Icon name="close" />
                 </button>
               </header>

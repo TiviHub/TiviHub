@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../lib/i18n";
 import { isTauri } from "@tauri-apps/api/core";
 import type { Window as TauriWindow } from "@tauri-apps/api/window";
 
@@ -47,20 +48,20 @@ export function DesktopWindowControls() {
   if (!desktopWindow) return null;
 
   return (
-    <div aria-label="Window controls" className="window-controls">
+    <div aria-label={t("window.group")} className="window-controls">
       <button
-        aria-label="Minimize window"
+        aria-label={t("window.minimize")}
         className="window-control window-control-minimize"
-        data-tooltip="Minimize window"
+        data-tooltip={t("window.minimize")}
         onClick={() => {
           void desktopWindow.minimize().catch((cause: unknown) => logWindowError("minimize", cause));
         }}
         type="button"
       />
       <button
-        aria-label={maximized ? "Restore window" : "Maximize window"}
+        aria-label={maximized ? t("window.restore") : t("window.maximize")}
         className="window-control window-control-maximize"
-        data-tooltip={maximized ? "Restore window" : "Maximize window"}
+        data-tooltip={maximized ? t("window.restore") : t("window.maximize")}
         onClick={() => {
           void desktopWindow.toggleMaximize()
             .then(() => desktopWindow.isMaximized())
@@ -70,9 +71,9 @@ export function DesktopWindowControls() {
         type="button"
       />
       <button
-        aria-label="Close window"
+        aria-label={t("window.close")}
         className="window-control window-control-close"
-        data-tooltip="Close window"
+        data-tooltip={t("window.close")}
         onClick={() => {
           void desktopWindow.close().catch((cause: unknown) => logWindowError("close", cause));
         }}
