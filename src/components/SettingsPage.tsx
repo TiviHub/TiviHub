@@ -3,12 +3,14 @@ import { decryptBackup, encryptBackup } from "../services/backup";
 import { formatCatalogChangeSummary } from "../services/catalogRefresh";
 import { createSnapshot, restoreSnapshot } from "../storage/database";
 import { clearSubtitleCache, countSavedSubtitles } from "../services/subtitleService";
+import type { ParentalPin } from "../hooks/useParentalPin";
 import { formatDateTime, LOCALES, setLocale, t, tCount, useLocale, type Locale } from "../lib/i18n";
 import type { MessageKey } from "../locales";
 import type { Playlist, UserDataSnapshot } from "../types";
 import { Icon } from "./common";
 import { BrowseShell } from "./BrowseShell";
 import { EmptyPanel } from "./EmptyPanel";
+import { ParentalPinControls } from "./ParentalPinControls";
 import { NavPanel, type NavPanelItem } from "./NavPanel";
 
 type ThemePreference = "system" | "light" | "dark";
@@ -33,6 +35,7 @@ export function SettingsPage({
   onChooseTheme,
   showAdultContent,
   onSetShowAdultContent,
+  parentalPin,
   sources,
   activeSourceId,
   downloadDirectoryPath,
@@ -63,6 +66,7 @@ export function SettingsPage({
   onChooseTheme: (theme: ThemePreference) => void;
   showAdultContent: boolean;
   onSetShowAdultContent: (show: boolean) => void;
+  parentalPin: ParentalPin;
   sources: Playlist[];
   activeSourceId: string | null;
   downloadDirectoryPath: string | null;
@@ -230,7 +234,7 @@ export function SettingsPage({
     try {
       await restoreSnapshot(pendingSnapshot);
       onChooseTheme(pendingSnapshot.theme);
-      onSetShowAdultContent(pendingSnapshot.showAdultContent ?? false);
+      onSetShowAdultContent(parentalPin.pinSet ? false : pendingSnapshot.showAdultContent ?? false);
       setKeyDraft(pendingSnapshot.openSubtitlesApiKey);
       await onDataRestored();
       setPendingSnapshot(null);
@@ -323,17 +327,7 @@ export function SettingsPage({
                 <div className="settings-heading-icon"><Icon name="shield" /></div>
                 <div><h2 id="settings-content-heading">{t("settings.section.adult")}</h2><p>{t("settings.adult.intro")}</p></div>
               </div>
-              <label className="adult-content-toggle">
-                <span>
-                  <strong>{t("settings.adult.toggle")}</strong>
-                  <small>{t("settings.adult.hint")}</small>
-                </span>
-                <input
-                  checked={showAdultContent}
-                  onChange={(event) => onSetShowAdultContent(event.target.checked)}
-                  type="checkbox"
-                />
-              </label>
+              <ParentalPinControls onSetShowAdultContent={onSetShowAdultContent} pin={parentalPin} showAdultContent={showAdultContent} />
             </div>
           </section>
 

@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../package.json";
 import { t, useLocale } from "./lib/i18n";
 import { useAppPreferences } from "./hooks/useAppPreferences";
+import { useParentalPin } from "./hooks/useParentalPin";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useRefreshOverlay } from "./hooks/useRefreshOverlay";
 import { useDownloads } from "./hooks/useDownloads";
@@ -105,6 +106,7 @@ function App() {
   const { error, notice, notificationKey, notify, clearNotifications } = useNotifications();
   useLocale(); // the whole tree renders again when the language changes
   const { theme, showAdultContent, chooseTheme, chooseShowAdultContent } = useAppPreferences(notify);
+  const parentalPin = useParentalPin(notify);
   const {
     favorites, library, setFavorites, setLibrary, toggleFavorite, addToWatchlist, saveProgress,
     changeLibraryStatus, deleteLibraryItem, removeFromLibrary, removeFavorite,
@@ -611,6 +613,7 @@ function App() {
                 onActivate={(id) => void activateSource(id)}
                 onChooseTheme={chooseTheme}
                 onSetShowAdultContent={chooseShowAdultContent}
+                parentalPin={parentalPin}
                 onDataRestored={onDataRestored}
                 onDelete={(source) => void removeSource(source)}
                 onEdit={(source) => {
