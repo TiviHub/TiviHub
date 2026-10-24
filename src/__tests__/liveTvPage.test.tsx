@@ -27,6 +27,8 @@ function renderLive(channels: LiveChannel[], favorites: Favorite[] = []) {
     onLoadGuideForChannels={vi.fn()}
     onPlay={onPlay}
     onReplay={vi.fn()}
+    onToggleReminder={vi.fn()}
+    reminderIds={new Set<string>()}
     onToggleFavorite={onToggleFavorite}
     showAdultContent
     source={source}

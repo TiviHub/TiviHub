@@ -23,6 +23,7 @@ const STORES: &[(&str, &str)] = &[
     ("episodes", "id"),
     ("favorites", "id"),
     ("library", "id"),
+    ("reminders", "id"),
     ("epg", "id"),
     ("ratings", "key"),
     ("popularCatalog", "key"),
@@ -41,6 +42,7 @@ const PLAYLIST_SCOPED_STORES: &[&str] = &[
     "episodes",
     "favorites",
     "library",
+    "reminders",
     "liveCategoryCache",
 ];
 const KEY_SERVICE: &str = "TiviHub";
@@ -173,6 +175,15 @@ fn migrate(conn: &Connection) -> Result<(), String> {
             "CREATE TABLE IF NOT EXISTS \"liveCategoryCache\" (key TEXT PRIMARY KEY, playlist_id TEXT,                series_id TEXT, channel_id TEXT, source TEXT, json TEXT NOT NULL);
              CREATE INDEX IF NOT EXISTS livecategorycache_playlist ON \"liveCategoryCache\"(playlist_id);
              PRAGMA user_version = 3;",
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    if version < 4 {
+        // TV guide reminders (user data; removed with their playlist).
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS \"reminders\" (key TEXT PRIMARY KEY, playlist_id TEXT, series_id TEXT, channel_id TEXT, source TEXT, json TEXT NOT NULL);
+             CREATE INDEX IF NOT EXISTS reminders_playlist ON \"reminders\"(playlist_id);
+             PRAGMA user_version = 4;",
         )
         .map_err(|e| e.to_string())?;
     }
@@ -968,6 +979,29 @@ mod tests {
             json!({"key": "p:1", "playlistId": "p", "channels": [], "savedAt": 1}),
         );
         assert_eq!(s.delete_playlist("p").unwrap(), 2);
+    }
+
+    #[test]
+    fn upgrades_a_version_3_database_with_reminders_and_removes_them_with_their_playlist() {
+        let s = store();
+        put(&s, "playlists", json!({"id": "p"}));
+        s.conn()
+            .execute_batch("DROP TABLE \"reminders\"; PRAGMA user_version = 3;")
+            .unwrap();
+        migrate(&s.conn()).unwrap();
+        assert_eq!(rows(s.get_all("playlists").unwrap()).len(), 1);
+        put(
+            &s,
+            "reminders",
+            json!({"id": "p:c:1", "playlistId": "p", "startMillis": 1}),
+        );
+        put(
+            &s,
+            "reminders",
+            json!({"id": "q:c:1", "playlistId": "q", "startMillis": 1}),
+        );
+        assert_eq!(s.delete_playlist("p").unwrap(), 2);
+        assert_eq!(rows(s.get_all("reminders").unwrap()).len(), 1);
     }
 
     #[test]

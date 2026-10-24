@@ -440,6 +440,26 @@ describe(name, () => {
     await expect(db.getPlaylists()).resolves.not.toContainEqual(expect.objectContaining({ id: source.id }));
   }, 30_000);
 
+  it("keeps reminders per source and removes them with the source", async () => {
+    const mine = playlist("storage-test-reminders");
+    const other = playlist("storage-test-reminders-other");
+    await db.savePlaylist(mine);
+    await db.savePlaylist(other);
+    const reminder = (source: Playlist, startMillis: number) => ({
+      id: `${source.id}:c1:${startMillis}`, playlistId: source.id, channelId: "c1", channelName: "One", title: "News", startMillis,
+    });
+    await db.saveReminder(reminder(mine, 1));
+    await db.saveReminder(reminder(mine, 2));
+    await db.saveReminder(reminder(other, 1));
+    await db.deleteReminders([reminder(mine, 1).id]);
+    const ids = (await db.getReminders()).map((entry) => entry.id).sort();
+    expect(ids).toEqual([reminder(mine, 2).id, reminder(other, 1).id].sort());
+
+    await db.deletePlaylist(mine.id);
+    expect((await db.getReminders()).map((entry) => entry.id)).toEqual([reminder(other, 1).id]);
+    await db.deletePlaylist(other.id);
+  });
+
   it("restores snapshots with credentials encrypted again in local storage", async () => {
     const source = playlist("storage-test-restore");
     await db.savePlaylist(source);

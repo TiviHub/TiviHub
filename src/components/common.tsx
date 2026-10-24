@@ -132,6 +132,8 @@ export type IconName =
   | "open_in_new"
   | "radio"
   | "restart_alt"
+  | "notifications"
+  | "notifications_active"
   | "chevron_left"
   | "chevron_right"
   | "delete"

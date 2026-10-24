@@ -14,6 +14,7 @@ import { shell } from "./shell";
 import { misc } from "./misc";
 import { parental } from "./parental";
 import { playback } from "./playback";
+import { reminders } from "./reminders";
 import { sources } from "./sources";
 import { tr } from "./tr";
 
@@ -23,7 +24,7 @@ export type { Locale } from "./area";
 const settings = { en, nl, es, fr, de, pt, tr };
 
 function merge(locale: Locale) {
-  return { ...settings[locale], ...shell[locale], ...browse[locale], ...library[locale], ...detail[locale], ...sources[locale], ...errors[locale], ...home[locale], ...playback[locale], ...misc[locale], ...parental[locale] };
+  return { ...settings[locale], ...shell[locale], ...browse[locale], ...library[locale], ...detail[locale], ...sources[locale], ...errors[locale], ...home[locale], ...playback[locale], ...misc[locale], ...parental[locale], ...reminders[locale] };
 }
 
 export type Messages = ReturnType<typeof merge>;

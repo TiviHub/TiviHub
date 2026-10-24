@@ -83,6 +83,8 @@ export function LiveTvPage({
   onLoadGuideForChannels,
   onPlay,
   onReplay,
+  onToggleReminder,
+  reminderIds,
   onToggleFavorite,
   livePlayer,
   livePlaybackItemId,
@@ -97,6 +99,8 @@ export function LiveTvPage({
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (item: PlayableItem) => void;
   onReplay: (channel: LiveChannel, program: EpgProgram) => void;
+  onToggleReminder: (channel: LiveChannel, program: EpgProgram) => void;
+  reminderIds: ReadonlySet<string>;
   onToggleFavorite: (item: LiveChannel, contentType: "LIVE") => void;
   livePlayer?: ReactNode;
   livePlaybackItemId?: string;
@@ -287,6 +291,8 @@ export function LiveTvPage({
               onLoadGuideForChannels={onLoadGuideForChannels}
               onPlay={play}
               onReplay={onReplay}
+              onToggleReminder={onToggleReminder}
+              reminderIds={reminderIds}
               single
             />
           )}

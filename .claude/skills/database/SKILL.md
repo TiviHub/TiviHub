@@ -14,7 +14,7 @@ Two backends behind one interface (`StorageBackend` in `src/storage/backend.ts`)
 
 ## Shape
 
-Each store is one table: `key TEXT PRIMARY KEY, playlist_id, series_id, channel_id, source, json TEXT NOT NULL`. The record is the `json` column; the other columns exist only for indexes. The store list and key field live in `STORES` in `storage.rs` and must match the IndexedDB stores and `StoreValues` in `backend.ts`. Schema version is `PRAGMA user_version` (currently 3) in `migrate()`.
+Each store is one table: `key TEXT PRIMARY KEY, playlist_id, series_id, channel_id, source, json TEXT NOT NULL`. The record is the `json` column; the other columns exist only for indexes. The store list and key field live in `STORES` in `storage.rs` and must match the IndexedDB stores and `StoreValues` in `backend.ts`. Schema version is `PRAGMA user_version` (currently 4) in `migrate()`.
 
 ## Adding a stored thing
 

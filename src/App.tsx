@@ -5,6 +5,7 @@ import webPackage from "../package.json";
 import { t, useLocale } from "./lib/i18n";
 import { useAppPreferences } from "./hooks/useAppPreferences";
 import { useParentalPin } from "./hooks/useParentalPin";
+import { useReminders } from "./hooks/useReminders";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useRefreshOverlay } from "./hooks/useRefreshOverlay";
 import { useDownloads } from "./hooks/useDownloads";
@@ -107,6 +108,7 @@ function App() {
   useLocale(); // the whole tree renders again when the language changes
   const { theme, showAdultContent, chooseTheme, chooseShowAdultContent } = useAppPreferences(notify);
   const parentalPin = useParentalPin(notify);
+  const { reminderIds, toggleReminder } = useReminders(notify);
   const {
     favorites, library, setFavorites, setLibrary, toggleFavorite, addToWatchlist, saveProgress,
     changeLibraryStatus, deleteLibraryItem, removeFromLibrary, removeFavorite,
@@ -518,6 +520,8 @@ function App() {
                   onLoadGuideForChannels={catalogProps.onLoadGuideForChannels}
                   onPlay={catalogProps.onPlay}
                   onReplay={openReplay}
+                  onToggleReminder={toggleReminder}
+                  reminderIds={reminderIds}
                   onToggleFavorite={catalogProps.onToggleFavorite}
                   showAdultContent={showAdultContent}
                   source={activeSource}
@@ -579,6 +583,8 @@ function App() {
                 onLoadGuideForChannels={(guideChannels) => void loadGuideForChannels(guideChannels)}
                 onPlay={(channel) => openPlayback(playableChannel(channel))}
                 onReplay={openReplay}
+                onToggleReminder={toggleReminder}
+                reminderIds={reminderIds}
               />
             ) : section === "Downloads" ? (
               <DownloadsPage
