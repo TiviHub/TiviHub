@@ -962,7 +962,11 @@ mod tests {
             .unwrap();
         migrate(&s.conn()).unwrap();
         assert_eq!(rows(s.get_all("playlists").unwrap()).len(), 1);
-        put(&s, "liveCategoryCache", json!({"key": "p:1", "playlistId": "p", "channels": [], "savedAt": 1}));
+        put(
+            &s,
+            "liveCategoryCache",
+            json!({"key": "p:1", "playlistId": "p", "channels": [], "savedAt": 1}),
+        );
         assert_eq!(s.delete_playlist("p").unwrap(), 2);
     }
 
