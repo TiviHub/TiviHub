@@ -44,6 +44,7 @@ A web view cannot set `User-Agent`, `Cookie` or `Authorization`. When a source n
 - Controls go into `PlayerControls` / `PlayerMenu` (see the `ui` skill), never next to the `<video>`.
 - **Cast** (`chromecast.rs`, `CastPanel`): devices come from discovery on the local network; the device fetches the stream address itself, so a stream that needs the proxy's headers cannot be cast.
 - **Open in VLC/mpv** (`external_player.rs`): for streams the web view cannot decode (AC-3). Only those two programs, the address as its own argument, http(s) only.
+- **Multiview** (`MultiViewDialog`, `MultiViewTile`): up to 4 live channels, each tile its own `<video>` and Shaka player (or the native element), no DRM and no portal links (`multiViewSupport` in `lib/multiView.ts`). Opening it closes the main player. The proxy filters come from `routePlayerThroughProxy` (`services/playerProxy.ts`), shared with `PlaybackDialog`: change them there.
 - A playback bug starts with a failing test on the pure helper (`src/lib/playback*`). The dialog itself is hard to test, so move logic out of it rather than into it.
 
 ## Verify

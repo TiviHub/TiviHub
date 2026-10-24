@@ -133,6 +133,7 @@ export type IconName =
   | "radio"
   | "restart_alt"
   | "notifications"
+  | "grid_view"
   | "notifications_active"
   | "chevron_left"
   | "chevron_right"

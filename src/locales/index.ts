@@ -12,6 +12,7 @@ import { nl } from "./nl";
 import { pt } from "./pt";
 import { shell } from "./shell";
 import { misc } from "./misc";
+import { multiview } from "./multiview";
 import { parental } from "./parental";
 import { playback } from "./playback";
 import { reminders } from "./reminders";
@@ -24,7 +25,7 @@ export type { Locale } from "./area";
 const settings = { en, nl, es, fr, de, pt, tr };
 
 function merge(locale: Locale) {
-  return { ...settings[locale], ...shell[locale], ...browse[locale], ...library[locale], ...detail[locale], ...sources[locale], ...errors[locale], ...home[locale], ...playback[locale], ...misc[locale], ...parental[locale], ...reminders[locale] };
+  return { ...settings[locale], ...shell[locale], ...browse[locale], ...library[locale], ...detail[locale], ...sources[locale], ...errors[locale], ...home[locale], ...playback[locale], ...misc[locale], ...parental[locale], ...reminders[locale], ...multiview[locale] };
 }
 
 export type Messages = ReturnType<typeof merge>;

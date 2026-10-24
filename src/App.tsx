@@ -5,6 +5,7 @@ import webPackage from "../package.json";
 import { t, useLocale } from "./lib/i18n";
 import { useAppPreferences } from "./hooks/useAppPreferences";
 import { useParentalPin } from "./hooks/useParentalPin";
+import { MultiViewDialog } from "./components/MultiViewDialog";
 import { useReminders } from "./hooks/useReminders";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useRefreshOverlay } from "./hooks/useRefreshOverlay";
@@ -108,6 +109,7 @@ function App() {
   useLocale(); // the whole tree renders again when the language changes
   const { theme, showAdultContent, chooseTheme, chooseShowAdultContent } = useAppPreferences(notify);
   const parentalPin = useParentalPin(notify);
+  const [multiView, setMultiView] = useState<{ start?: LiveChannel; channels: LiveChannel[] } | null>(null);
   const { reminderIds, toggleReminder } = useReminders(notify);
   const {
     favorites, library, setFavorites, setLibrary, toggleFavorite, addToWatchlist, saveProgress,
@@ -185,11 +187,12 @@ function App() {
   const activeSourceExpired = Boolean(activeSource && (
     isPlaylistExpired(activeSource, expiryCheckTime) || expiredSourceIds.has(activeSource.id)
   ));
-  const blockingDialogOpen = sourceDialogOpen ||
+  const blockingDialogOpen = sourceDialogOpen || multiView !== null ||
     Boolean(playableItem && !(inlineLivePlayback && playableItem.live));
   const canOpenGlobalSearch = ready &&
     !refreshing &&
     !sourceDialogOpen &&
+    multiView === null &&
     (!playableItem || (inlineLivePlayback && playableItem.live));
 
   const {
@@ -514,6 +517,7 @@ function App() {
                 className={`live-tv-persistent${section === "Live TV" ? "" : " is-mini"}`}
               >
                 <LiveTvPage
+                  onOpenMultiView={(start, channels) => { closePlayback(); setMultiView({ start, channels }); }}
                   epg={visibleEpg}
                   favorites={visibleFavorites}
                   guideLoading={guideLoadCount > 0}
@@ -810,6 +814,14 @@ function App() {
                       onProgress={saveProgress}
           resumePositionMillis={resumePosition}
           subtitleApiKey={subtitleApiKey}
+        />
+      )}
+      {multiView && activeSource && (
+        <MultiViewDialog
+          channels={multiView.channels}
+          onClose={() => setMultiView(null)}
+          source={activeSource}
+          start={multiView.start}
         />
       )}
       {refreshing && (
