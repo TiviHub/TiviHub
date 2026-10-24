@@ -40,7 +40,10 @@ TiviHub is a player and organizer, not a content service. It does not provide pl
 - **Fix what will not play:** (Desktop app) Hand a stream to VLC or mpv when the built-in player cannot play it, and set a custom User-Agent per playlist for providers that need one.
 - **Pick up where you left off:** Save favorites and playback progress on your device.
 - **Cast to Google Cast devices:** Send compatible, unprotected streams directly from the provider to a Chromecast on your local network.
-- **Make it yours:** Choose a light, dark, or system theme.
+- **Watch several channels:** Open up to four live channels side by side in multiview (plain streams only; no DRM or portal channels).
+- **Never miss a programme:** Set a reminder on a TV guide programme and get a message, or a system notification, a minute before it starts.
+- **Make it yours:** Choose a light, dark, or system theme, and use TiviHub in English, Dutch, Spanish, French, German, Portuguese or Turkish.
+- **Keep adult content behind a PIN:** Hide adult titles, and ask for a PIN before they are shown (a child lock, not strong security).
 - **Back up your data:** Export and restore an encrypted backup when moving to another device.
 
 Playback supports compatible HLS and DASH streams. Whether a particular stream works depends on your provider, authorization, network, CORS policy, and the platform's media runtime and codecs (WebView2 on Windows).
