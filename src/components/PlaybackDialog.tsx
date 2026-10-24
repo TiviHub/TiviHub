@@ -460,7 +460,6 @@ export function PlaybackDialog({
         }
         selectedPlaybackPath = "Shaka Player";
         playbackPathRef.current = selectedPlaybackPath;
-        selectedPlaybackPath = "Shaka Player";
         const shakaModule = await import("shaka-player");
         if (disposed) return;
         const shakaRuntime = shakaModule.default as ShakaRuntime;
