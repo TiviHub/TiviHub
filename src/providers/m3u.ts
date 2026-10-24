@@ -103,7 +103,12 @@ function isRadio(attributes: Record<string, string>, group: string): boolean {
   return /\bradio\b/i.test(group);
 }
 
-function itemKind(group: string): "live" | "movie" | "series" {
+// An Xtream-style list says what an entry is in its address (/movie/user/pass/1.mp4, /series/..., /live/...): that is
+// reliable where group names are not ("|NL| NETFLIX" holds movies and series, "|EN| ANIME" is nearly all series).
+function itemKind(group: string, streamUrl: string): "live" | "movie" | "series" {
+  const byPath = /\/(live|movie|series)\/[^/]+\/[^/]+\/[^/]+$/.exec(new URL(streamUrl).pathname)?.[1];
+  if (byPath === "movie" || byPath === "series") return byPath;
+  if (byPath === "live") return "live";
   if (/\b(series|tv shows|tv-show|tvshows|shows)\b/i.test(group)) return "series";
   if (/\b(movie|movies|film|films|vod)\b/i.test(group)) return "movie";
   return "live";
@@ -167,7 +172,7 @@ function createM3uCatalogParser(context: PlaylistContext) {
       metadata.attributes.poster ||
       metadata.attributes.cover ||
       undefined;
-    const kind = itemKind(group);
+    const kind = itemKind(group, streamUrl);
     if (kind === "movie") {
       const year = Number(/\((\d{4})\)/.exec(name)?.[1] ?? metadata.attributes.year);
       const rating = Number(metadata.attributes.rating);

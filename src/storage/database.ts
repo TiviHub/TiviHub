@@ -5,6 +5,7 @@ import type {
   Favorite,
   LibraryItem,
   LiveChannel,
+  LiveCategoryCacheEntry,
   MdblistPopularCacheEntry,
   MdblistRateLimitState,
   Movie,
@@ -142,6 +143,15 @@ export async function saveCatalog(catalog: {
     ...rest,
     sourceUpdate: sourceUpdate ? await toStoredPlaylist(b, sourceUpdate) : undefined,
   });
+}
+
+/** Titles read from a provider while browsing (Xtream): kept so favorites, library and search can find them again. */
+export async function saveBrowsedMovies(movies: Movie[]): Promise<void> {
+  await (await backend()).tx(movies.map((record): StorageOp => ({ op: "put", store: "movies", record })));
+}
+
+export async function saveBrowsedSeries(series: Series[]): Promise<void> {
+  await (await backend()).tx(series.map((record): StorageOp => ({ op: "put", store: "series", record })));
 }
 
 export async function getCatalogSnapshot(playlistId: string): Promise<{
@@ -288,6 +298,14 @@ export async function getMdblistPopularCacheEntry(key: string): Promise<MdblistP
 
 export async function saveMdblistPopularCacheEntry(entry: MdblistPopularCacheEntry): Promise<void> {
   await (await backend()).tx([{ op: "put", store: "popularCatalog", record: entry }]);
+}
+
+export async function getLiveCategoryCache(key: string): Promise<LiveCategoryCacheEntry | undefined> {
+  return (await backend()).get("liveCategoryCache", key);
+}
+
+export async function saveLiveCategoryCache(entry: LiveCategoryCacheEntry): Promise<void> {
+  await (await backend()).tx([{ op: "put", store: "liveCategoryCache", record: entry }]);
 }
 
 export async function getMdblistRateLimitState(key: string): Promise<MdblistRateLimitState | undefined> {

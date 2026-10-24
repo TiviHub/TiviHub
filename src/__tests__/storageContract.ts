@@ -105,6 +105,20 @@ describe(name, () => {
     ]);
   });
 
+  it("stores titles read while browsing, whole and per source", async () => {
+    const source = playlist("storage-test-browsed");
+    await db.savePlaylist(source);
+    const url = `https://provider.example/movie/${encodeURIComponent(source.username)}/${encodeURIComponent(source.password)}/1.mp4`;
+    const movie = { id: `${source.id}:movie:1`, playlistId: source.id, name: "Seen", streamUrl: url };
+    const show = { id: `${source.id}:series:1`, playlistId: source.id, name: "Seen show", seasons: 2 };
+    await db.saveBrowsedMovies([movie]);
+    await db.saveBrowsedSeries([show]);
+    await db.saveBrowsedMovies([{ ...movie, name: "Seen again" }]);
+
+    expect(await db.getMovies(source.id)).toEqual([{ ...movie, name: "Seen again" }]);
+    expect(await db.getSeries(source.id)).toEqual([show]);
+  });
+
   it("keeps episode replacement scoped to the matching source and series", async () => {
     const one = playlist("storage-test-episode-one");
     const two = playlist("storage-test-episode-two");
@@ -327,6 +341,16 @@ describe(name, () => {
     expect(programs).toContainEqual(unchanged);
     expect(programs).toContainEqual(otherSource);
     expect(programs).not.toContainEqual(original);
+  });
+
+  it("keeps the live category cache per source and removes it with the source", async () => {
+    const source = playlist("storage-test-live-cache");
+    await db.savePlaylist(source);
+    const key = `${source.id}:1`;
+    await db.saveLiveCategoryCache({ key, playlistId: source.id, channels: [], savedAt: 1 });
+    await expect(db.getLiveCategoryCache(key)).resolves.toMatchObject({ key, playlistId: source.id });
+    await db.deletePlaylist(source.id);
+    await expect(db.getLiveCategoryCache(key)).resolves.toBeUndefined();
   });
 
   it("deletes source-owned catalog and favorite data", async () => {

@@ -482,3 +482,24 @@ describe("Xtream URL construction", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("M3U classification by stream path", () => {
+  it("sorts Xtream-style lists into live, movies and series even when the group names say nothing", () => {
+    const content = [
+      "#EXTM3U",
+      '#EXTINF:-1 group-title="|NL| NETFLIX",NL - Show (2020) S01 E02',
+      "http://host.example/series/user/pass/101.mkv",
+      '#EXTINF:-1 group-title="|NL| NETFLIX",NL - A Film (2021)',
+      "http://host.example/movie/user/pass/202.mp4",
+      '#EXTINF:-1 group-title="|NL| NPO",NPO 1',
+      "http://host.example/live/user/pass/303.ts",
+      '#EXTINF:-1 group-title="Sports",Plain channel',
+      "http://host.example/user/pass/404",
+    ].join("\n");
+    const catalog = parseM3uCatalog(content, { id: "x", name: "X" });
+    expect(catalog.series.map((show) => show.name)).toEqual(["NL - Show (2020)"]);
+    expect(catalog.episodes).toHaveLength(1);
+    expect(catalog.movies.map((movie) => movie.name)).toEqual(["NL - A Film (2021)"]);
+    expect(catalog.channels.map((channel) => channel.name)).toEqual(["NPO 1", "Plain channel"]);
+  });
+});

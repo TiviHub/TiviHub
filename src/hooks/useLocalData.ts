@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   getChannels,
   getEpgPrograms,
@@ -19,6 +19,12 @@ interface Options {
   setLibrary: Dispatch<SetStateAction<LibraryItem[]>>;
 }
 
+const mergeById = <T extends { id: string }>(current: T[], added: T[]): T[] => {
+  const byId = new Map(current.map((item) => [item.id, item]));
+  for (const item of added) byId.set(item.id, item);
+  return [...byId.values()];
+};
+
 export function useLocalData({ notify, setFavorites, setLibrary }: Options) {
   const [sources, setSources] = useState<Playlist[]>([]);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
@@ -29,6 +35,10 @@ export function useLocalData({ notify, setFavorites, setLibrary }: Options) {
   const [subtitleApiKey, setSubtitleApiKey] = useState("");
   const [mdblistApiKey, setMdblistApiKey] = useState("");
   const [ready, setReady] = useState(false);
+
+  /** Titles read from a provider while browsing join the ones in memory (they are already stored). */
+  const addMovies = useCallback((added: Movie[]) => setMovies((current) => mergeById(current, added)), []);
+  const addSeries = useCallback((added: Series[]) => setSeries((current) => mergeById(current, added)), []);
 
   async function reloadLocalData(preferredSourceId?: string) {
     const savedSources = await getPlaylists();
@@ -89,6 +99,8 @@ export function useLocalData({ notify, setFavorites, setLibrary }: Options) {
     channels,
     movies,
     series,
+    addMovies,
+    addSeries,
     epg,
     setEpg,
     subtitleApiKey,

@@ -261,6 +261,20 @@ export interface MdblistPopularCacheEntry {
   expiresAt: number;
 }
 
+/** The last answer for one Xtream live category, shown at once on the next visit while a fresh one loads. */
+export interface LiveCategoryCacheEntry {
+  key: string;
+  playlistId: string;
+  channels: LiveChannel[];
+  /** Movie categories reuse this store: the movies of one category go here instead of `channels`. */
+  movies?: Movie[];
+  /** Same for series. */
+  series?: Series[];
+  /** Set on the entry that holds a source's category list instead of one category's channels. */
+  categories?: { id: string; name: string; count?: number }[];
+  savedAt: number;
+}
+
 export interface MdblistRateLimitState {
   key: string;
   limit?: number;

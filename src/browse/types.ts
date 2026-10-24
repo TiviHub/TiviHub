@@ -17,9 +17,17 @@ export interface BrowsePage<T> {
 /** Items per batch the screens ask for; sources with their own page size (Stalker: 14) fill batches up to this. */
 export const BROWSE_PAGE_SIZE = 60;
 
+/** How the items of a category are ordered: as the source gives them, or by name. */
+export type BrowseSort = "default" | "az" | "za";
+
 /** What a browsing screen needs from a source, whatever the section or provider. */
 export interface Browser<T> {
   categories(signal?: AbortSignal): Promise<BrowseCategory[]>;
   /** `categoryId` null is "All". `cursor` is the previous batch's `nextCursor`. `query` filters by name. */
-  page(categoryId: string | null, cursor?: string, query?: string, signal?: AbortSignal): Promise<BrowsePage<T>>;
+  page(categoryId: string | null, cursor?: string, query?: string, signal?: AbortSignal, sort?: BrowseSort): Promise<BrowsePage<T>>;
+  /**
+   * Sources that show a stored answer first and refresh it behind: called when the fresh answer differs, with the
+   * category's key ("" is All) or undefined for the category list. Returns the unsubscribe.
+   */
+  subscribe?(listener: (categoryId: string | undefined) => void): () => void;
 }

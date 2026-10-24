@@ -343,6 +343,118 @@ export async function loadXtreamLiveChannels(
   });
 }
 
+function movieFrom(playlist: Playlist, item: XtreamPayload, categories: Map<string, string>): Movie | null {
+  const providerId = stringValue(item.stream_id);
+  const name = stringValue(item.name);
+  if (!providerId || !name) return null;
+  const categoryId = stringValue(item.category_id);
+  const extension = stringValue(item.container_extension) || "mp4";
+  return {
+    id: `${playlist.id}:movie:${providerId}`,
+    playlistId: playlist.id,
+    providerId,
+    name,
+    streamUrl: xtreamStreamUrl(playlist, "movie", providerId, extension),
+    posterUrl: stringValue(item.stream_icon),
+    overview: stringValue(item.plot),
+    year: catalogYear(item.releasedate, item.releaseDate, item.release_date, item.year, name),
+    rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
+    imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
+    tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
+    categoryId,
+    category: categoryId ? categories.get(categoryId) || "Uncategorized" : undefined,
+    addedAtMillis: epochMillis(item.added),
+    ...drmFor(playlist),
+  };
+}
+
+function seriesFrom(playlist: Playlist, item: XtreamPayload, categories: Map<string, string>): Series | null {
+  const providerId = stringValue(item.series_id);
+  const name = stringValue(item.name);
+  if (!providerId || !name) return null;
+  const categoryId = stringValue(item.category_id);
+  return {
+    id: `${playlist.id}:series:${providerId}`,
+    playlistId: playlist.id,
+    providerId,
+    name,
+    posterUrl: stringValue(item.cover),
+    overview: stringValue(item.plot),
+    seasons: Array.isArray(item.seasons) ? item.seasons.length : 0,
+    categoryId,
+    category: categoryId ? categories.get(categoryId) || "Uncategorized" : undefined,
+    year: catalogYear(item.year, item.releasedate, item.releaseDate, item.release_date, name),
+    rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
+    imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
+    tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
+    addedAtMillis: epochMillis(item.added) ?? epochMillis(item.last_modified),
+  };
+}
+
+/** The series categories only: one small request, so Series can open without downloading the catalog. */
+export async function loadXtreamSeriesCategories(playlist: Playlist, signal?: AbortSignal): Promise<BrowseCategory[]> {
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series_categories"), "Series categories", signal);
+  return [...categoryNames(raw, "Series categories")].map(([id, name]) => ({ id, name }));
+}
+
+/** The series of one category; an empty `categoryId` asks for every series in one answer. */
+export async function loadXtreamSeries(
+  playlist: Playlist,
+  categoryId: string,
+  categories: BrowseCategory[],
+  signal?: AbortSignal,
+): Promise<Series[]> {
+  const names = new Map(categories.map((category) => [category.id, category.name]));
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series", categoryId ? { category_id: categoryId } : {}), "Series", signal);
+  return array(raw, "Series", "series").flatMap((item) => {
+    const show = seriesFrom(playlist, item, names);
+    return show ? [show] : [];
+  });
+}
+
+/** The movie categories only: one small request, so Movies can open without downloading the catalog. */
+export async function loadXtreamMovieCategories(playlist: Playlist, signal?: AbortSignal): Promise<BrowseCategory[]> {
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_vod_categories"), "Movie categories", signal);
+  return [...categoryNames(raw, "Movie categories")].map(([id, name]) => ({ id, name }));
+}
+
+/** The movies of one category; an empty `categoryId` asks for every movie in one answer. */
+export async function loadXtreamMovies(
+  playlist: Playlist,
+  categoryId: string,
+  categories: BrowseCategory[],
+  signal?: AbortSignal,
+): Promise<Movie[]> {
+  const names = new Map(categories.map((category) => [category.id, category.name]));
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_vod_streams", categoryId ? { category_id: categoryId } : {}), "Movies", signal);
+  return array(raw, "Movie", "movies").flatMap((item) => {
+    const movie = movieFrom(playlist, item, names);
+    return movie ? [movie] : [];
+  });
+}
+
+/**
+ * What the app imports for an Xtream source: the login details (expiry, time zone) and the live channels.
+ * Movies and series are not downloaded here; they are read one category at a time while browsing.
+ */
+export async function loadXtreamLiveCatalog(
+  playlist: Playlist,
+  signal?: AbortSignal,
+): Promise<{ channels: LiveChannel[]; expiresAtMillis?: number; serverTimeZone?: string }> {
+  const { expiresAtMillis, serverTimeZone } = await authenticate(playlist, signal);
+  const [categoriesRaw, liveRaw] = await Promise.all([
+    requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal),
+    requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_streams"), "Live channels", signal),
+  ]);
+  const categories = categoryNames(categoriesRaw, "Live categories");
+  const channels = array(liveRaw, "Live channel", "channels").flatMap((item) => {
+    const channel = liveChannelFrom(playlist, item, categories);
+    return channel ? [channel] : [];
+  });
+  return { channels, expiresAtMillis, serverTimeZone };
+}
+
+/** The whole catalog in one go. The app no longer imports this way; tests and the perf scripts use it as a reference. */
 export async function loadXtreamCatalog(
   playlist: Playlist,
   signal?: AbortSignal,
@@ -361,59 +473,19 @@ export async function loadXtreamCatalog(
   const liveCategories = categoryNames(liveCategoriesRaw, "Live categories");
   const movieCategories = categoryNames(movieCategoriesRaw, "Movie categories");
   const seriesCategories = categoryNames(seriesCategoriesRaw, "Series categories");
-  const drm = drmFor(playlist);
-
   const channels = array(liveRaw, "Live channel", "channels").flatMap((item) => {
     const channel = liveChannelFrom(playlist, item, liveCategories);
     return channel ? [channel] : [];
   });
 
   const movies = array(moviesRaw, "Movie", "movies").flatMap((item) => {
-    const providerId = stringValue(item.stream_id);
-    const name = stringValue(item.name);
-    if (!providerId || !name) return [];
-    const categoryId = stringValue(item.category_id);
-    const extension = stringValue(item.container_extension) || "mp4";
-    return [{
-      id: `${playlist.id}:movie:${providerId}`,
-      playlistId: playlist.id,
-      providerId,
-      name,
-      streamUrl: xtreamStreamUrl(playlist, "movie", providerId, extension),
-      posterUrl: stringValue(item.stream_icon),
-      overview: stringValue(item.plot),
-      year: catalogYear(item.releasedate, item.releaseDate, item.release_date, item.year, name),
-      rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
-      imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
-      tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
-      categoryId,
-      category: categoryId ? movieCategories.get(categoryId) || "Uncategorized" : undefined,
-      addedAtMillis: epochMillis(item.added),
-      ...drm,
-    }];
+    const movie = movieFrom(playlist, item, movieCategories);
+    return movie ? [movie] : [];
   });
 
   const series = array(seriesRaw, "Series", "series").flatMap((item) => {
-    const providerId = stringValue(item.series_id);
-    const name = stringValue(item.name);
-    if (!providerId || !name) return [];
-    const categoryId = stringValue(item.category_id);
-    return [{
-      id: `${playlist.id}:series:${providerId}`,
-      playlistId: playlist.id,
-      providerId,
-      name,
-      posterUrl: stringValue(item.cover),
-      overview: stringValue(item.plot),
-      seasons: Array.isArray(item.seasons) ? item.seasons.length : 0,
-      categoryId,
-      category: categoryId ? seriesCategories.get(categoryId) || "Uncategorized" : undefined,
-      year: catalogYear(item.year, item.releasedate, item.releaseDate, item.release_date, name),
-      rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
-      imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
-      tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
-      addedAtMillis: epochMillis(item.added) ?? epochMillis(item.last_modified),
-    }];
+    const show = seriesFrom(playlist, item, seriesCategories);
+    return show ? [show] : [];
   });
 
   return { channels, movies, series, expiresAtMillis, serverTimeZone };

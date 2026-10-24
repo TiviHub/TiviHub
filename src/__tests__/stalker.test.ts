@@ -6,15 +6,16 @@ import {
   loadStalkerCatalog,
   loadStalkerEpg,
   loadStalkerEpisodes,
+  loadStalkerTitleCategories,
+  loadStalkerTitles,
   normalizeMac,
   resolveStalkerLink,
   retryPolicy,
   startStalkerKeepAlive,
   stalkerApiUrl,
   stalkerLink,
-  STALKER_LIBRARY_LIMIT,
 } from "../providers/stalker";
-import { rankLocalCatalogByPopularity } from "../lib/catalogPopularity";
+import { stalkerMovieBrowser, stalkerSeriesBrowser } from "../browse/stalker";
 import { createTitleIdentity } from "../lib/ratings";
 import type { Playlist } from "../types";
 
@@ -146,7 +147,7 @@ describe("Stalker addresses", () => {
 });
 
 describe("Stalker catalog", () => {
-  it("logs in once with the MAC cookie, token and set-top-box User-Agent, then lists channels and movies", async () => {
+  it("logs in once with the MAC cookie, token and set-top-box User-Agent, then lists channels only", async () => {
     portal();
     const catalog = await loadStalkerCatalog(source());
 
@@ -167,13 +168,25 @@ describe("Stalker catalog", () => {
     expect(catalog.channels[1].radio).toBe(true);
     expect(catalog.channels[0].radio).toBeUndefined();
 
-    expect(catalog.movies.map((movie) => movie.name)).toEqual(["First", "Third"]);
-    expect(catalog.movies[0]).toMatchObject({
-      year: 2019, rating: 7.5, category: "Action", posterUrl: "http://portal.example/img/101.jpg", overview: "A film",
-    });
+    // Movies and series are read per category while browsing, never when a source is added.
+    expect(catalog.movies).toEqual([]);
+    expect(catalog.series).toEqual([]);
+    expect(calls.some((call) => call.params.get("action") === "get_ordered_list")).toBe(false);
   });
 
-  it("gives movies what ratings and the Top 5 lists match on: a year, ids and the added date", async () => {
+  it("lists the movies of a category with their details", async () => {
+    portal();
+    const categories = await loadStalkerTitleCategories(source(), "vod");
+    expect(categories).toEqual([{ id: "5", name: "Action" }]);
+    const { movies, series } = await loadStalkerTitles(source(), "vod", "5", { categories });
+    expect(movies.map((movie) => movie.name)).toEqual(["First", "Third"]);
+    expect(movies[0]).toMatchObject({
+      year: 2019, rating: 7.5, category: "Action", posterUrl: "http://portal.example/img/101.jpg", overview: "A film",
+    });
+    expect(series.map((show) => show.name)).toEqual(["A show"]);
+  });
+
+  it("gives movies what ratings match on: a year, ids and the added date", async () => {
     portal({
       "vod:get_ordered_list": () => ({
         total_items: 4,
@@ -186,7 +199,7 @@ describe("Stalker catalog", () => {
         ],
       }),
     });
-    const { movies } = await loadStalkerCatalog(source());
+    const { movies } = await loadStalkerTitles(source(), "vod", null);
 
     expect(movies.map((movie) => movie.name)).toEqual(["Old Film (2015)", "Plain Film", "No year anywhere"]);
     expect(movies[0]).toMatchObject({ year: 2015, imdbId: "tt0123456", tmdbId: "42" });
@@ -195,13 +208,9 @@ describe("Stalker catalog", () => {
     expect(movies[2].year).toBeUndefined();
     expect(movies[2].addedAtMillis).toBeUndefined();
 
-    // The two features that were empty for Stalker movies now find them.
+    // Ratings find them by id, or by name and year.
     expect(createTitleIdentity(movies[0], "MOVIE")?.key).toBe("movie:imdb:v2:tt0123456");
     expect(createTitleIdentity(movies[1], "MOVIE")?.key).toBe("movie:title:v3:plain film:2020");
-    expect(rankLocalCatalogByPopularity(movies, [
-      { title: "Plain Film", year: 2020 },
-      { title: "Other", year: 2015, imdbId: "tt0123456" },
-    ]).map((movie) => movie.name)).toEqual(["Plain Film", "Old Film (2015)"]);
   });
 
   it("keeps the live channels when the portal has no video library", async () => {
@@ -279,56 +288,39 @@ describe("Stalker catalog", () => {
   });
 });
 
-describe("Stalker library size", () => {
-  it("reads the newest titles from the portal's all category instead of walking every category", async () => {
+describe("Stalker browsing", () => {
+  const listCalls = () => calls.filter((call) => call.params.get("action") === "get_ordered_list" && !call.params.get("movie_id"));
+
+  it("reads a batch of portal pages at once, newest first, and says where the next batch starts", async () => {
+    portal({
+      "vod:get_ordered_list": (params) => ({
+        total_items: 14 * 12,
+        max_page_items: 14,
+        data: [{ id: `m${params.get("p")}`, name: `Movie ${params.get("p")}`, cmd: "/m" }],
+      }),
+    });
+    const first = await loadStalkerTitles(source(), "vod", "5");
+    expect(listCalls().map((call) => call.params.get("p"))).toEqual(["1", "2", "3", "4", "5"]);
+    expect(listCalls()[0].params.get("category")).toBe("5");
+    expect(listCalls()[0].params.get("sortby")).toBe("added");
+    expect(first.movies).toHaveLength(5);
+    expect(first.nextPage).toBe(6);
+
+    const last = await loadStalkerTitles(source(), "vod", "5", { page: 11 });
+    expect(last.nextPage).toBeUndefined();
+  });
+
+  it("asks the portal to search and to sort by name", async () => {
     portal();
-    await loadStalkerCatalog(source());
-    const lists = calls.filter((call) => call.params.get("action") === "get_ordered_list" && !call.params.get("movie_id"));
-    expect(lists.length).toBeGreaterThan(0);
-    expect(new Set(lists.map((call) => call.params.get("category")))).toEqual(new Set(["*"]));
-    expect(lists[0].params.get("sortby")).toBe("added");
+    await loadStalkerTitles(source(), "vod", null, { query: " matrix ", sortByName: true });
+    expect(listCalls()[0].params.get("category")).toBe("*");
+    expect(listCalls()[0].params.get("search")).toBe("matrix");
+    expect(listCalls()[0].params.get("sortby")).toBe("name");
   });
 
-  it("stops at the import limit on a huge portal", async () => {
-    let requested = 0;
-    portal({
-      "vod:get_ordered_list": (params) => {
-        requested += 1;
-        const page = Number(params.get("p"));
-        return { total_items: 200_000, max_page_items: 14, data: [{ id: `m${page}`, name: `Movie ${page}`, cmd: `/m/${page}` }] };
-      },
-      "series:get_categories": () => [],
-      "series:get_ordered_list": () => ({ total_items: 0, max_page_items: 14, data: [] }),
-    });
-    const { movies } = await loadStalkerCatalog(source());
-    expect(requested).toBe(Math.ceil(STALKER_LIBRARY_LIMIT / 14));
-    expect(movies).toHaveLength(Math.ceil(STALKER_LIBRARY_LIMIT / 14));
-  });
-
-  it("falls back to the first page of each category when the all category is empty", async () => {
-    portal({
-      "vod:get_categories": () => [{ id: "5", title: "Action" }, { id: "6", title: "Drama" }],
-      "vod:get_ordered_list": (params) => params.get("category") === "*"
-        ? { total_items: 0, max_page_items: 14, data: [] }
-        : { total_items: 40, max_page_items: 14, data: [{ id: `c${params.get("category")}`, name: `Film ${params.get("category")}`, cmd: "/m", category_id: params.get("category") }] },
-    });
-    const { movies } = await loadStalkerCatalog(source());
-    expect(movies.map((movie) => [movie.name, movie.category])).toEqual([["Film 5", "Action"], ["Film 6", "Drama"]]);
-  });
-
-  it("keeps the series when the movie library fails, and the movies when the series library fails", async () => {
-    portal({
-      "vod:get_ordered_list": () => { throw new Error("vod down"); },
-      "series:get_categories": () => [{ id: "7", title: "Drama" }],
-      "series:get_ordered_list": () => ({ total_items: 1, max_page_items: 14, data: [{ id: "1", name: "Still here" }] }),
-    });
-    const withoutMovies = await loadStalkerCatalog(source());
-    expect(withoutMovies.movies).toEqual([]);
-    expect(withoutMovies.series.map((item) => item.name)).toEqual(["Still here"]);
-
-    portal({ "series:get_ordered_list": () => { throw new Error("series down"); } });
-    const withoutSeries = await loadStalkerCatalog(source());
-    expect(withoutSeries.movies.length).toBeGreaterThan(0);
+  it("has no categories, rather than an error, when the portal has no such library", async () => {
+    portal({ "series:get_categories": () => { throw new Error("no series"); } });
+    expect(await loadStalkerTitleCategories(source(), "series")).toEqual([]);
   });
 });
 
@@ -356,8 +348,8 @@ describe("Stalker request behaviour", () => {
       }),
     });
     slowMillis = 3;
-    const { movies } = await loadStalkerCatalog(source());
-    expect(movies.length).toBe(30);
+    const { movies } = await loadStalkerTitles(source(), "vod", null);
+    expect(movies.length).toBe(5);
     expect(maxInFlight).toBeLessThanOrEqual(4);
     expect(maxInFlight).toBeGreaterThan(1);
   });
@@ -424,7 +416,7 @@ describe("Stalker lazy series in the video library", () => {
       "series:get_ordered_list": () => ({ total_items: 0, max_page_items: 10, data: [] }),
     });
     const playlist = source();
-    const { series } = await loadStalkerCatalog(playlist);
+    const { series } = await loadStalkerTitles(playlist, "vod", null);
     expect(series).toHaveLength(1);
     expect(series[0]).toMatchObject({ providerId: "vod:90", stalkerEpisodes: [] });
 
@@ -508,7 +500,7 @@ describe("Stalker series", () => {
   it("lists the series of the portal's series library with a year taken from the name", async () => {
     seriesPortal();
     const playlist = source();
-    const { series } = await loadStalkerCatalog(playlist);
+    const { series } = await loadStalkerTitles(playlist, "series", null, { categories: [{ id: "7", name: "Drama" }] });
 
     expect(series.map((item) => item.name)).toEqual(["Big Show (2018)"]);
     expect(series[0]).toMatchObject({
@@ -524,7 +516,7 @@ describe("Stalker series", () => {
   it("opens seasons and episodes one level at a time and keeps each episode's stream request", async () => {
     seriesPortal();
     const playlist = source();
-    const [show] = (await loadStalkerCatalog(playlist)).series;
+    const [show] = (await loadStalkerTitles(playlist, "series", null)).series;
     const episodes = await loadStalkerEpisodes(playlist, show);
 
     expect(episodes.map((episode) => `S${episode.season}E${episode.number} ${episode.name}`)).toEqual([
@@ -549,7 +541,7 @@ describe("Stalker series", () => {
       "vod:create_link": (params) => ({ cmd: `ffmpeg http://stream.example/${params.get("series")}` }),
     });
     const playlist = source();
-    const catalog = await loadStalkerCatalog(playlist);
+    const catalog = await loadStalkerTitles(playlist, "vod", null);
 
     expect(catalog.movies.map((movie) => movie.name)).toEqual(["A Film"]);
     expect(catalog.series[0]).toMatchObject({ providerId: "vod:90", stalkerCmd: "/media/90.mpg", stalkerEpisodes: [1, 2, 3] });
@@ -567,7 +559,7 @@ describe("Stalker series", () => {
         : { total_items: 1, max_page_items: 10, data: [{ id: "1", name: "Empty" }] },
     });
     const playlist = source();
-    const [show] = (await loadStalkerCatalog(playlist)).series;
+    const [show] = (await loadStalkerTitles(playlist, "series", null)).series;
     await expect(loadStalkerEpisodes(playlist, show)).rejects.toThrow(/no episodes/);
   });
 });
@@ -599,5 +591,45 @@ describe("Stalker guide and stream links", () => {
     portal({ "vod:create_link": () => ({ cmd: "" }) });
     await expect(resolveStalkerLink(source(), stalkerLink("/media/1.mpg", "vod"))).rejects.toThrow(/did not give a stream address/);
     expect(calls.at(-1)!.params.get("type")).toBe("vod");
+  });
+});
+
+describe("Stalker browsers", () => {
+  it("pages movies by the portal's own page number and hands each batch to the cache", async () => {
+    portal({
+      "vod:get_ordered_list": (params) => ({
+        total_items: 14 * 12,
+        max_page_items: 14,
+        data: [{ id: `m${params.get("p")}`, name: `Movie ${params.get("p")}`, cmd: "/m" }],
+      }),
+    });
+    const put = vi.fn(async () => undefined);
+    const browser = stalkerMovieBrowser(source(), { put, get: async () => undefined, getCategories: async () => undefined, putCategories: async () => undefined });
+    const first = await browser.page("5");
+    expect(first.items).toHaveLength(5);
+    expect(first.nextCursor).toBe("6");
+    expect(put).toHaveBeenCalledTimes(1);
+    expect((await browser.page("5", first.nextCursor)).items.map((movie) => movie.name)[0]).toBe("Movie 6");
+  });
+
+  it("fills in every category's count in the background and announces it", async () => {
+    portal({
+      "vod:get_categories": () => [{ id: "5", title: "Action" }, { id: "6", title: "Drama" }],
+      "vod:get_ordered_list": (params) => ({ total_items: Number(params.get("category")) * 100, max_page_items: 14, data: [] }),
+    });
+    const browser = stalkerMovieBrowser(source());
+    const announced = new Promise<void>((resolve) => browser.subscribe!(() => resolve()));
+    expect((await browser.categories()).map((category) => category.count)).toEqual([undefined, undefined]);
+    await announced;
+    expect((await browser.categories()).map((category) => [category.name, category.count])).toEqual([["Action", 500], ["Drama", 600]]);
+  });
+
+  it("lists series kept in the video library when the portal has no series library", async () => {
+    portal({
+      "series:get_categories": () => [],
+      "vod:get_ordered_list": () => ({ total_items: 1, max_page_items: 14, data: [{ id: "90", name: "Old Show", cmd: "/m/90", series: [1, 2] }] }),
+    });
+    const page = await stalkerSeriesBrowser(source()).page(null);
+    expect(page.items.map((show) => show.name)).toEqual(["Old Show"]);
   });
 });

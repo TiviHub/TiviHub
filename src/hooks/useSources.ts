@@ -9,6 +9,7 @@ import {
 import {
   formatCatalogChangeSummary,
   isSuspiciousCatalogDrop,
+  keepBrowsedTitles,
   summarizeCatalogChanges,
   validateCatalogForSource,
   type CatalogCandidate,
@@ -20,7 +21,7 @@ import { fetchM3u, parseM3uCatalog, parseM3uCatalogAsync } from "../providers/m3
 import { loadStalkerCatalog, loadStalkerEpg } from "../providers/stalker";
 import { fetchXmltv } from "../providers/xmltv";
 import {
-  loadXtreamCatalog,
+  loadXtreamLiveCatalog,
   loadXtreamShortEpg,
   XtreamAccountExpiredError,
   XTREAM_SHORT_EPG_CHANNEL_BATCH_SIZE,
@@ -238,10 +239,11 @@ export function useSources(deps: SourceDeps) {
       catalog = await loadStalkerCatalog(playlist, draft.signal);
     } else {
       try {
-        const result = await loadXtreamCatalog(playlist, draft.signal);
+        const result = await loadXtreamLiveCatalog(playlist, draft.signal);
         playlist.expiresAtMillis = result.expiresAtMillis;
         playlist.serverTimeZone = result.serverTimeZone;
-        catalog = result;
+        // Movies and series are read per category while browsing; what is stored of them is kept below.
+        catalog = { channels: result.channels, movies: [], series: [] };
       } catch (cause) {
         if (cause instanceof XtreamAccountExpiredError) {
           setExpiredSourceIds((current) => new Set(current).add(playlist.id));
@@ -259,6 +261,7 @@ export function useSources(deps: SourceDeps) {
       ? { channels: [], movies: [], series: [], episodes: [] }
       : await getCatalogSnapshot(playlist.id);
     if (playlist.type === "M3U") keepM3uIds(catalog, previousCatalog);
+    if (playlist.type === "XTREAM" || playlist.type === "STALKER") keepBrowsedTitles(catalog, previousCatalog);
     const changeSummary = summarizeCatalogChanges(previousCatalog, catalog);
     if (!isNewSource && isSuspiciousCatalogDrop(previousCatalog, catalog) &&
       !window.confirm(
@@ -307,12 +310,14 @@ export function useSources(deps: SourceDeps) {
       series: catalog.series.length,
       episodes: importedEpisodes?.length ?? null,
     });
-    const catalogSummary = [
-      `${catalog.channels.length.toLocaleString()} live channels`,
-      `${catalog.movies.length.toLocaleString()} movies`,
-      `${catalog.series.length.toLocaleString()} series`,
-      skippedLabel(skippedStreams),
-    ].filter(Boolean).join(", ");
+    const catalogSummary = playlist.type === "XTREAM" || playlist.type === "STALKER"
+      ? `${catalog.channels.length.toLocaleString()} live channels. Movies and series load as you open their categories`
+      : [
+        `${catalog.channels.length.toLocaleString()} live channels`,
+        `${catalog.movies.length.toLocaleString()} movies`,
+        `${catalog.series.length.toLocaleString()} series`,
+        skippedLabel(skippedStreams),
+      ].filter(Boolean).join(", ");
     if (shouldActivate) {
       if (isNewSource) setSection("Live TV");
       try {
@@ -436,10 +441,10 @@ export function useSources(deps: SourceDeps) {
       } else if (source.type === "STALKER") {
         catalog = await loadStalkerCatalog(source);
       } else {
-        const result = await loadXtreamCatalog(source);
+        const result = await loadXtreamLiveCatalog(source);
         expiresAtMillis = result.expiresAtMillis;
         serverTimeZone = result.serverTimeZone;
-        catalog = result;
+        catalog = { channels: result.channels, movies: [], series: [] };
       }
 
       validateCatalogForSource(source.id, catalog);
@@ -464,6 +469,7 @@ export function useSources(deps: SourceDeps) {
 
       const previousCatalog = await getCatalogSnapshot(source.id);
       if (source.type === "M3U") keepM3uIds(catalog, previousCatalog);
+      if (source.type === "XTREAM" || source.type === "STALKER") keepBrowsedTitles(catalog, previousCatalog);
       const changeSummary = summarizeCatalogChanges(previousCatalog, catalog);
       const suspicious = isSuspiciousCatalogDrop(previousCatalog, catalog);
       if (suspicious) {

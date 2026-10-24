@@ -53,6 +53,12 @@ export function formatCatalogChangeSummary(summary: CatalogChangeSummary): strin
   return `${added.toLocaleString()} added, ${removed.toLocaleString()} removed.`;
 }
 
+/** Xtream imports only live channels: the movies and series read while browsing stay as they are. Changes `next` in place. */
+export function keepBrowsedTitles(next: CatalogCandidate, previous: CatalogSnapshot): void {
+  next.movies = previous.movies;
+  next.series = previous.series;
+}
+
 export function validateCatalogForSource(sourceId: string, catalog: CatalogCandidate): void {
   const collections: Array<[string, Array<{ id: string; playlistId: string }>]> = [
     ["channels", catalog.channels],

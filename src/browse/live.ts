@@ -1,7 +1,7 @@
 import { loadXtreamLiveCategories, loadXtreamLiveChannels } from "../providers/xtream";
 import { loadStalkerChannels } from "../providers/stalker";
 import type { LiveChannel, Playlist } from "../types";
-import { memoryBrowser, remember, rememberByKey, slicePage } from "./lists";
+import { cachedBrowser, memoryBrowser, type ListCache } from "./lists";
 import type { Browser } from "./types";
 
 /** Not a real group name: picks every channel marked as a radio station. */
@@ -26,18 +26,18 @@ function fromChannels(load: (signal?: AbortSignal) => Promise<LiveChannel[]>): L
   return { categories: browser.categories, page: browser.page };
 }
 
-function xtreamBrowser(playlist: Playlist): LiveBrowser {
-  const categories = remember((signal) => loadXtreamLiveCategories(playlist, signal));
-  const list = rememberByKey(async (key, signal) =>
-    loadXtreamLiveChannels(playlist, key || null, await categories(signal), signal));
-  return {
-    categories,
-    page: async (categoryId, cursor, query, signal) => slicePage(await list(categoryId ?? "", signal), cursor, query),
-  };
+/** Where the last answer for an Xtream category is kept between sessions. */
+export type LiveChannelCache = ListCache<LiveChannel>;
+
+function xtreamBrowser(playlist: Playlist, cache?: LiveChannelCache): LiveBrowser {
+  return cachedBrowser({
+    categories: (signal) => loadXtreamLiveCategories(playlist, signal),
+    list: (key, categories, signal) => loadXtreamLiveChannels(playlist, key || null, categories, signal),
+  }, cache);
 }
 
-export function createLiveBrowser(playlist: Playlist, storedChannels: () => Promise<LiveChannel[]>): LiveBrowser {
-  if (playlist.type === "XTREAM") return xtreamBrowser(playlist);
+export function createLiveBrowser(playlist: Playlist, storedChannels: () => Promise<LiveChannel[]>, cache?: LiveChannelCache): LiveBrowser {
+  if (playlist.type === "XTREAM") return xtreamBrowser(playlist, cache);
   if (playlist.type === "STALKER") return fromChannels((signal) => loadStalkerChannels(playlist, signal));
   return fromChannels(storedChannels);
 }
