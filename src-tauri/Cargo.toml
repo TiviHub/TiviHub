@@ -1,6 +1,6 @@
 [package]
 name = "tivihub"
-version = "0.1.0"
+version = "2.0.0"
 description = "TiviHub desktop media library"
 authors = ["TiviHub"]
 edition = "2021"
