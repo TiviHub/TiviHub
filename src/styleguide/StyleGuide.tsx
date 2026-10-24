@@ -6,6 +6,7 @@ import { NavPanel } from "../components/NavPanel";
 import { Toast } from "../components/Toast";
 import { PlayerControls } from "../components/PlayerControls";
 import { PlayerMenu } from "../components/PlayerMenu";
+import { RemindersMenu } from "../components/RemindersMenu";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CustomSelect, Icon, SearchField, TooltipLayer, type IconName } from "../components/common";
 import { ProgressIndicator } from "../components/ProgressIndicator";
@@ -13,6 +14,8 @@ import { CardSkeletons, CategorySkeletons, ChannelSkeletons, RowSkeletons, Skele
 
 // Dev-only page (npm run dev, then /styleguide.html). It uses the app's real classes and components,
 // so a mismatch here is a mismatch in the app. Add new shared UI here when you add it to the app.
+
+const sampleReminder = { id: "s", playlistId: "p", channelId: "c", channelName: "NPO 1", title: "Late Night Talk", startMillis: Date.now() + 3_600_000 };
 
 const TOKENS = [
   "--bg", "--sidebar", "--surface", "--surface-raised", "--surface-hover", "--panel", "--row", "--row-selected",
@@ -564,6 +567,23 @@ export function StyleGuide() {
             <Toast kind="notice" onDismiss={() => undefined}>Source connected. 17,253 live channels. Movies and series load as you open their categories.</Toast>
             <Toast kind="error" onDismiss={() => undefined}>Could not reach the provider.</Toast>
             <button className="topbar-expiry-warning" style={{ justifySelf: "start" }} type="button"><Icon name="error_outline" /><span>Playlist expired</span></button>
+          </div>
+        </Block>
+        <Block title="RemindersMenu (topbar bell)" note="A 42px topbar icon button; the icon is filled once a reminder is set and a 9px purple dot shows while a reminder has fired since the bell was last opened. The panel opens downward under it: Set (with a remove X per row) and Recent (kept after a restart, 20 at most, with Clear recent), rows of title and channel with time (a row whose channel is in the active source is a button that opens it on Live TV, with a live_tv icon), an EmptyPanel when both are empty.">
+          <div className="sg-stack" style={{ minHeight: 360 }}>
+            <div style={{ justifySelf: "end", position: "relative" }}>
+              <RemindersMenu
+                canOpen={() => true}
+                defaultOpen
+                onOpen={() => undefined}
+                onClearRecent={() => undefined}
+                onMarkSeen={() => undefined}
+                onRemove={() => undefined}
+                recent={[{ ...sampleReminder, id: "r", title: "Evening News", firedAt: 1, seen: true }]}
+                reminders={[sampleReminder]}
+                unseen={0}
+              />
+            </div>
           </div>
         </Block>
         <Block title="EmptyPanel" note="Every empty or failed panel: icon, title, one sentence, at most one button. Errors keep the same shape, tinted, with Try again. The page-sized version (Add your first source, Make Home yours) is HomeEmptyState; it has the same parts, set larger.">

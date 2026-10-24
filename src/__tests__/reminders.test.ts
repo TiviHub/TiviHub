@@ -20,6 +20,16 @@ describe("reminders", () => {
     expect(split.upcoming).toEqual([upcoming]);
   });
 
+  it("keeps fired reminders as history, newest first, and never fires them again", () => {
+    const older = { ...reminder(now - 500), firedAt: now - 400, seen: true };
+    const newer = { ...reminder(now - 100), firedAt: now - 50, missed: true };
+    const split = splitReminders([older, newer, reminder(now + REMINDER_LEAD_MILLIS + 1)], now);
+    expect(split.history).toEqual([newer, older]);
+    expect(split.due).toEqual([]);
+    expect(split.missed).toEqual([]);
+    expect(split.upcoming).toHaveLength(1);
+  });
+
   it("waits until the soonest upcoming reminder is due", () => {
     expect(nextReminderDelay([], now)).toBeNull();
     expect(nextReminderDelay([reminder(now + 600_000), reminder(now + 300_000)], now)).toBe(300_000 - REMINDER_LEAD_MILLIS);

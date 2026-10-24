@@ -33,6 +33,7 @@ Each store is one table: `key TEXT PRIMARY KEY, playlist_id, series_id, channel_
 - **Index what you query.** A new "get all by X" needs an index on X in the migration. Never filter a whole catalog in JS when SQLite can do it.
 - **Secrets** are encrypted (`storage_encrypt` / `storage_decrypt`, key in the OS keychain) and stored in `secrets`. A keychain failure shows an error and stops; it must never create a new key (that locks users out of saved logins).
 - **Caches** (`ratings`, `liveCategoryCache`, `subtitleSearch`, ...) have a TTL constant next to their service and tolerate being wiped. Never put the only copy of user data in a cache store. `liveCategoryCache` also holds the Xtream category lists and per-category answers of Movies and Series (keys `<playlistId>:series:...`); `popularCatalog` is an unused leftover of the removed Top 5 row (only a getter/setter in `database.ts` and one test still touch it): do not write to it, and drop it, with that code, only in a new migration step.
+- **Reminders** are kept after they fire: the record stays in `reminders` with `firedAt`, `missed` and `seen` (extra JSON fields, so no migration) and is the bell's history, pruned to 20 in `useReminders`. Anything that reads `reminders` must skip records with `firedAt` unless it wants history (`splitReminders` does).
 - **Never** destroy data to fix a schema problem. Migrate it, or ask.
 - No new storage mechanism (second DB, files, `localStorage` for data).
 

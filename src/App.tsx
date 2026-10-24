@@ -39,7 +39,7 @@ import {
   saveEpisodes,
   saveOpenSubtitlesApiKey,
 } from "./storage/database";
-import type { ContentType, Episode, Favorite, LiveChannel, Movie, PlayableItem, Playlist, Series } from "./types";
+import type { ContentType, Episode, Favorite, LiveChannel, Movie, PlayableItem, Playlist, Reminder, Series } from "./types";
 import { createRatingsService } from "./services/ratingsService";
 import { configureMdblistRateLimiter } from "./lib/mdblistRateLimit";
 import { playableChannel } from "./components/ContentPages";
@@ -51,6 +51,7 @@ import { useSeriesBrowse } from "./hooks/useSeriesBrowse";
 import { LibraryPage } from "./components/LibraryPage";
 import { Icon, TooltipLayer } from "./components/common";
 import { MobileNav, Sidebar, Topbar } from "./components/AppShell";
+import { RemindersMenu } from "./components/RemindersMenu";
 import { DownloadsPage } from "./components/DownloadsPage";
 import { LiveGuide } from "./components/LiveGuide";
 import { NoSourceEmptyState } from "./components/NoSourceEmptyState";
@@ -110,7 +111,8 @@ function App() {
   const { theme, showAdultContent, chooseTheme, chooseShowAdultContent } = useAppPreferences(notify);
   const parentalPin = useParentalPin(notify);
   const [multiView, setMultiView] = useState<{ start?: LiveChannel; channels: LiveChannel[] } | null>(null);
-  const { reminderIds, toggleReminder } = useReminders(notify);
+  const reminderState = useReminders(notify);
+  const { reminderIds, toggleReminder } = reminderState;
   const {
     favorites, library, setFavorites, setLibrary, toggleFavorite, addToWatchlist, saveProgress,
     changeLibraryStatus, deleteLibraryItem, removeFromLibrary, removeFavorite,
@@ -321,6 +323,11 @@ function App() {
     }
   }
 
+  // Channels are loaded for the active source only, so a reminder of another source cannot be opened.
+  function reminderChannel(reminder: Reminder) {
+    return channels.find((item) => item.id === reminder.channelId && item.playlistId === reminder.playlistId);
+  }
+
   function navigateToSection(next: Section) {
     setSection(next);
   }
@@ -496,6 +503,23 @@ function App() {
           onOpenExpiredPlaylist={openExpiredPlaylist}
           onOpenGlobalSearch={openGlobalSearch}
           onRefresh={() => void refreshCurrentSource()}
+          remindersMenu={(
+            <RemindersMenu
+              canOpen={(reminder) => Boolean(reminderChannel(reminder))}
+              onOpen={(reminder) => {
+                const channel = reminderChannel(reminder);
+                if (!channel) return;
+                navigateToSection("Live TV");
+                openPlayback(playableChannel(channel));
+              }}
+              onClearRecent={reminderState.clearRecent}
+              onMarkSeen={reminderState.markSeen}
+              onRemove={(id) => void reminderState.removeReminder(id)}
+              recent={reminderState.recent}
+              reminders={reminderState.reminders}
+              unseen={reminderState.unseen}
+            />
+          )}
           section={section}
         />
         {activeSourceExpired && (

@@ -57,7 +57,7 @@ Never add one-off bordered or purple-outline icon button variants. Icon-only but
 - Search fields: use `SearchField` (`common.tsx`), never your own `<label className="search-field">`. It holds the magnifier, the input and an X (`.search-clear`, 24px, appears once there is text, empties the box and keeps focus in it). The topbar search and the global search dialog (a native `type="search"` input with its own clear X) follow the same measurements: 42px tall, 0.8rem, 19px muted icon, 11px side padding, 8px gap, placeholder `--faint`. The inner `<input>` stays transparent.
 - Dropdown (`CustomSelect`): standalone triggers 38px tall, 0.78rem, min-width 68px, 10px padding. Embedded variant lives inside a 42px search-style box. Do not size individual dropdowns.
 - Forms: `.form-field`. TV Guide toolbar controls (icon buttons, date buttons, filter and zoom boxes) are the standard 42px too.
-- Topbar actions are 42px, the same height as the topbar search.
+- Topbar actions are 42px, the same height as the topbar search. The reminders bell (`RemindersMenu`, style guide Feedback) is one of them: a 9px `--primary` dot means unseen fired reminders, its panel opens downward and reuses `.custom-select-menu` and `EmptyPanel`.
 
 ## Two-panel pages
 

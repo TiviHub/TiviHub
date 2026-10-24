@@ -176,6 +176,12 @@ export interface Reminder {
   channelName: string;
   title: string;
   startMillis: number;
+  /** Set when the reminder went off; it then stays as history instead of being deleted. */
+  firedAt?: number;
+  /** The programme had already started when TiviHub opened. */
+  missed?: boolean;
+  /** The person has opened the bell since it fired. */
+  seen?: boolean;
 }
 
 export interface PlaylistDocument {

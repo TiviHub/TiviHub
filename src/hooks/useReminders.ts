@@ -7,6 +7,7 @@ import type { EpgProgram, LiveChannel, Reminder } from "../types";
 
 type Notify = (message: string, kind: "error" | "notice") => void;
 type Failure = "reminder.loadFailed" | "reminder.saveFailed";
+const MAX_RECENT = 20;
 
 function fail(notify: Notify, key: Failure, cause: unknown) {
   console.error(`Reminders: ${key}`, cause);
@@ -15,9 +16,11 @@ function fail(notify: Notify, key: Failure, cause: unknown) {
 
 export function useReminders(notify: Notify) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [recent, setRecent] = useState<Reminder[]>([]);
   const refresh = useRef<() => void>(() => undefined);
 
-  const announce = useEffectEvent((due: Reminder[], missedCount: number) => {
+  const announce = useEffectEvent((due: Reminder[], missed: Reminder[]) => {
+    const missedCount = missed.length;
     if (due.length > 0) {
       const message = due.length === 1
         ? t("reminder.soon", { title: due[0].title, channel: due[0].channelName })
@@ -45,16 +48,26 @@ export function useReminders(notify: Notify) {
         return;
       }
       if (cancelled) return;
-      const { due, missed, upcoming } = splitReminders(stored, Date.now());
+      const now = Date.now();
+      const { due, missed, upcoming, history } = splitReminders(stored, now);
+      let kept = history;
       if (due.length + missed.length > 0) {
+        const fired = [
+          ...due.map((reminder) => ({ ...reminder, firedAt: now, missed: false, seen: false })),
+          ...missed.map((reminder) => ({ ...reminder, firedAt: now, missed: true, seen: false })),
+        ];
+        kept = [...fired, ...history];
         try {
-          await deleteReminders([...due, ...missed].map((reminder) => reminder.id));
+          for (const reminder of fired) await saveReminder(reminder);
         } catch (cause) {
           report("reminder.saveFailed", cause);
         }
         if (cancelled) return;
-        announce(due, missed.length);
+        announce(due, missed);
       }
+      const stale = kept.slice(MAX_RECENT);
+      if (stale.length > 0) await deleteReminders(stale.map((reminder) => reminder.id)).catch(() => undefined);
+      setRecent(kept.slice(0, MAX_RECENT));
       setReminders(upcoming);
       const delay = nextReminderDelay(upcoming, Date.now());
       if (delay !== null) timer = setTimeout(() => void tick(), delay);
@@ -92,5 +105,36 @@ export function useReminders(notify: Notify) {
     }
   }
 
-  return { reminderIds, toggleReminder };
+  async function removeReminder(id: string) {
+    try {
+      await deleteReminders([id]);
+      refresh.current();
+    } catch (cause) {
+      fail(notify, "reminder.saveFailed", cause);
+    }
+  }
+
+  async function markSeen() {
+    try {
+      for (const reminder of recent) if (!reminder.seen) await saveReminder({ ...reminder, seen: true });
+      refresh.current();
+    } catch (cause) {
+      fail(notify, "reminder.saveFailed", cause);
+    }
+  }
+
+  async function clearRecent() {
+    try {
+      await deleteReminders(recent.map((reminder) => reminder.id));
+      refresh.current();
+    } catch (cause) {
+      fail(notify, "reminder.saveFailed", cause);
+    }
+  }
+
+  return {
+    reminderIds, reminders, recent, unseen: recent.filter((reminder) => !reminder.seen).length, toggleReminder, removeReminder,
+    markSeen,
+    clearRecent,
+  };
 }
