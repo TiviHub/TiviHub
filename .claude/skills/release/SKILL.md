@@ -31,7 +31,7 @@ One plain sentence: what this release is about.
 ### Platform and privacy
 ```
 
-Rules: no commit hashes, no internal file names, no marketing words. Say what changed for the user. Mention data migrations and anything that cannot be undone. Mention limits honestly (for example, the Stalker import cap).
+Rules: no commit hashes, no internal file names, no marketing words. Say what changed for the user. Mention data migrations and anything that cannot be undone. Mention limits honestly (for example, that Stalker category counts fill in over a minute or two on a large portal).
 
 ## Commits and PRs
 

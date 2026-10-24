@@ -14,6 +14,8 @@ Behave as in the `karpathy-guidelines` skill: state assumptions, smallest change
 - Function components and hooks only. State in hooks (`src/hooks/`), components render.
 - Effects: every `useEffect` that starts work (timer, listener, request) returns a cleanup. Prefer event handlers over effects. The `react-hooks` warnings in `eslint.config.js` are debt: do not add new ones.
 - Errors: surface them. Never return an empty or success-shaped value for a failure (`CONTRIBUTING.md`). User-facing errors go through the toast hook (`useNotifications`); background failures go to `diagnosticLog`.
+- Reuse before writing: a page with a left list and content beside it uses `BrowseShell` + `NavPanel`; saved titles use `LibraryCard`; category tiles come from `useCategoryEntries`; every search box is `SearchField` (with its clear X). Do not copy their markup into a page.
+- Never show a number you guessed (a count of 0 for "not loaded"). Show nothing until it is known.
 - Async: handle the "stale response" case (user switched playlist while a request ran). Check the active id before writing results.
 - Naming: components `PascalCase.tsx`, everything else `camelCase.ts`, one main export per file. Match the file next to yours.
 - Comments: only the why. Mark a known shortcut as `shortcut: <limit>, <when to fix>`.

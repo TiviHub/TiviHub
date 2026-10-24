@@ -18,6 +18,7 @@ Tauri 2 desktop app (Rust in `src-tauri/`) with a React 19 + Vite + TypeScript U
 ## Always
 
 - UI: reuse shared components, use theme tokens, no new font sizes or literal radii. `npm run styleguide` is the source of truth; read the `ui` skill first.
+- Pages with a list on the left (Live TV, Movies, Series, TV Guide, Library, Downloads, Settings) are built from `BrowseShell` + `NavPanel` / `BrowseCategoryList`; empty and failed panels use `EmptyPanel`; category counts come only from `useCategoryEntries` and are shown only when known; every search box is `SearchField`.
 - Layers: components never call `fetch`, `invoke` or storage directly.
 - Schema change = a new `user_version` migration step plus a test. Never edit an old step.
 - A bug fix starts with a failing test. Never skip or weaken a test to get green.

@@ -31,9 +31,9 @@ TiviHub is a player and organizer, not a content service. It does not provide pl
 
 ## What you can do
 
-- **Connect your sources:** Import an M3U file or URL, or configure an Xtream-compatible source.
+- **Connect your sources:** Import an M3U file or URL, configure an Xtream-compatible source, or (desktop app) add a Stalker portal with its address and MAC address.
 - **Keep catalogs ready:** Remote catalogs are cached on your device and refresh automatically every 24 hours; you can refresh them manually at any time.
-- **Keep your library organized:** Browse live TV, programme guide data, movies, series, and episodes in one place.
+- **Keep your library organized:** Browse live TV, programme guide data, movies, series, and episodes by category in one place. Movies and series load a category at a time, so large providers open fast.
 - **Pick up where you left off:** Save favorites and playback progress on your device.
 - **Cast to Google Cast devices:** Send compatible, unprotected streams directly from the provider to a Chromecast on your local network.
 - **Make it yours:** Choose a light, dark, or system theme.

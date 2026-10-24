@@ -28,10 +28,11 @@ Each store is one table: `key TEXT PRIMARY KEY, playlist_id, series_id, channel_
 ## Rules
 
 - **Large writes are batched** via `storage_tx` (a list of `Op`s, one transaction). A catalog import writes to `catalog_staging` (`storage_stage`) and swaps with `storage_finish_catalog`; the visible catalog is never half-written. Do not loop single `put`s for thousands of rows.
+- **Xtream movies and series are not bulk-imported.** The `movies` and `series` stores hold what was read while browsing (written per category answer); never assume they hold the whole catalog, and never replace them from an Xtream refresh.
 - **Playlist-scoped data** (`PLAYLIST_SCOPED_STORES`) is removed with `storage_delete_playlist`. A new per-playlist store goes in that list and gets a `playlist_id` index.
 - **Index what you query.** A new "get all by X" needs an index on X in the migration. Never filter a whole catalog in JS when SQLite can do it.
 - **Secrets** are encrypted (`storage_encrypt` / `storage_decrypt`, key in the OS keychain) and stored in `secrets`. A keychain failure shows an error and stops; it must never create a new key (that locks users out of saved logins).
-- **Caches** (`ratings`, `popularCatalog`, `subtitleSearch`, ...) have a TTL constant next to their service and tolerate being wiped. Never put the only copy of user data in a cache store.
+- **Caches** (`ratings`, `liveCategoryCache`, `subtitleSearch`, ...) have a TTL constant next to their service and tolerate being wiped. Never put the only copy of user data in a cache store. `liveCategoryCache` also holds the Xtream category lists and per-category answers of Movies and Series (keys `<playlistId>:series:...`); `popularCatalog` is an unused leftover of the removed Top 5 row: do not write to it, and drop it only in a new migration step.
 - **Never** destroy data to fix a schema problem. Migrate it, or ask.
 - No new storage mechanism (second DB, files, `localStorage` for data).
 

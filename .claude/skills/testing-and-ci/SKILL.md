@@ -32,7 +32,7 @@ description: How to test, lint, measure performance and what CI runs. Use when a
 
 ## Lint
 
-ESLint (`eslint.config.js`) is the gate, and `npm run lint` fails above 26 warnings (`--max-warnings`): lower that number whenever you fix one, never raise it. Rules the old code still breaks are warnings; raise one to `error` when its count hits zero. Do not add Prettier or Stylelint (would rewrite every line for no user benefit). `cargo fmt` formats Rust.
+ESLint (`eslint.config.js`) is the gate, and `npm run lint` fails above 20 warnings (`--max-warnings`): lower that number whenever you fix one, never raise it. Rules the old code still breaks are warnings; raise one to `error` when its count hits zero. Do not add Prettier or Stylelint (would rewrite every line for no user benefit). `cargo fmt` formats Rust.
 
 ## CI (`.github/workflows/`)
 
