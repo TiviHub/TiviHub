@@ -32,7 +32,7 @@ const faqItems: { question: string; answer: string; category: Exclude<FaqCategor
   },
   {
     question: "Which sources and media formats can I use?",
-    answer: "TiviHub supports M3U files and URLs, plus Xtream-compatible sources. Playback includes supported HLS and DASH streams. Whether a particular stream works depends on your provider, authorization, network, and the platform's media runtime and codecs (WebView2 on Windows).",
+    answer: "TiviHub supports M3U files and URLs and Xtream-compatible sources. The desktop app also supports Stalker (Ministra) portals: you add the portal address and the MAC address your provider gave you. Playback includes supported HLS and DASH streams, and when a stream can’t play in the built-in player you can open it in VLC or mpv. Whether a particular stream works depends on your provider, authorization, network, and the platform's media runtime and codecs (WebView2 on Windows).",
     category: "Getting started",
   },
   {
@@ -66,7 +66,7 @@ const features: { title: string; text: string[]; shot: string; alt: string }[] =
   {
     title: "Your sources, your choice",
     text: [
-      "Connect M3U files and URLs or Xtream-compatible sources that you provide and are authorized to use.",
+      "Connect M3U files and URLs, Xtream-compatible sources, or a Stalker portal with its MAC address, as long as you provide them and are authorized to use them.",
       "TiviHub does not include channels, playlists or media.",
     ],
     shot: "app-sources",
@@ -75,8 +75,9 @@ const features: { title: string; text: string[]; shot: string; alt: string }[] =
   {
     title: "Live TV with a guide",
     text: [
-      "Browse channels and see what is on now and next, with guide data from your own provider.",
-      "Supported HLS and DASH streams play in the app.",
+      "Pick a category, scroll the channels and watch beside the list, with what is on now and next from your own provider’s guide data.",
+      "Radio stations play as audio. Where your provider keeps recordings, replay a finished programme or start the current one over.",
+      "Supported HLS and DASH streams play in the app, or open them in VLC or mpv.",
     ],
     shot: "app-guide",
     alt: "TiviHub TV guide with channels, programme blocks and a now marker",
@@ -84,6 +85,7 @@ const features: { title: string; text: string[]; shot: string; alt: string }[] =
   {
     title: "Movies and series, remembered",
     text: [
+      "Open a category and its titles load as you scroll, so even a library of hundreds of thousands stays quick.",
       "Favorites and playback progress live beside your films and series, so you pick up where you stopped.",
     ],
     shot: "app-home",
@@ -183,7 +185,7 @@ export default function LandingPage() {
       <section aria-labelledby="manifesto-title" className="manifesto">
         <h2 data-reveal id="manifesto-title">No account. No cloud.</h2>
         <p data-reveal style={{ "--d": "80ms" } as CSSProperties}>
-          No middleman. Your sources stay yours. TiviHub is player software only: it doesn’t proxy or host your streams, and it doesn’t include channels or media.
+          No middleman. Your sources stay yours. TiviHub is player software only: it has no server that hosts or relays your streams, and it doesn’t include channels or media.
         </p>
       </section>
 

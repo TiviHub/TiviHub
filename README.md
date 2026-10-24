@@ -51,7 +51,7 @@ The latest release includes the Windows 10/11 x64 installer, Linux x64 AppImage 
 
 The installed player runs with its interface and assets bundled. It has no TiviHub account, application server, analytics, cloud sync, or automatic installer. The app checks the public GitHub Releases API for updates; it does not send playlists or library data in that request, and updates are downloaded and installed manually.
 
-When you check for updates, GitHub receives a request from your network address. When you connect a remote source, refresh content, play media, search for subtitles, or open a movie or series with an MDBList key configured, TiviHub connects directly to the provider or subtitle service you configured. Those services receive the request and your network address; TiviHub does not proxy or relay it. Installer downloads are served by GitHub, not by the TiviHub website host.
+When you check for updates, GitHub receives a request from your network address. When you connect a remote source, refresh content, play media, search for subtitles, or open a movie or series with an MDBList key configured, TiviHub connects directly to the provider or subtitle service you configured. Those services receive the request and your network address; No TiviHub server proxies or relays it; in the desktop app the request is made by the app on your device. Installer downloads are served by GitHub, not by the TiviHub website host.
 
 When you cast, TiviHub sends the stream URL over your local network to the selected Chromecast, which then requests the stream directly from your provider. URLs may contain provider credentials. Only cast to devices you trust and that are on your local network.
 
