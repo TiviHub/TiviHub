@@ -10,7 +10,7 @@ import type { Playlist, UserDataSnapshot } from "../types";
 import { Icon } from "./common";
 import { BrowseShell } from "./BrowseShell";
 import { EmptyPanel } from "./EmptyPanel";
-import { ParentalPinControls } from "./ParentalPinControls";
+import { AdultContentToggle, PinSettings } from "./ParentalPinControls";
 import { NavPanel, type NavPanelItem } from "./NavPanel";
 
 type ThemePreference = "system" | "light" | "dark";
@@ -297,6 +297,8 @@ export function SettingsPage({
                   </button>
                 ))}
               </fieldset>
+            </div>
+            <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="language" /></div>
                 <div><h2 id="settings-language-heading">{t("settings.language.heading")}</h2><p>{t("settings.language.intro")}</p></div>
@@ -312,6 +314,7 @@ export function SettingsPage({
                     onClick={() => chooseLanguage(choice.value)}
                     type="button"
                   >
+                    <span className="theme-option-icon language-code" aria-hidden="true">{choice.value.toUpperCase()}</span>
                     <span>{choice.name}</span>
                     {locale === choice.value && <Icon name="check" />}
                   </button>
@@ -327,7 +330,14 @@ export function SettingsPage({
                 <div className="settings-heading-icon"><Icon name="shield" /></div>
                 <div><h2 id="settings-content-heading">{t("settings.section.adult")}</h2><p>{t("settings.adult.intro")}</p></div>
               </div>
-              <ParentalPinControls onSetShowAdultContent={onSetShowAdultContent} pin={parentalPin} showAdultContent={showAdultContent} />
+              <AdultContentToggle onSetShowAdultContent={onSetShowAdultContent} pin={parentalPin} showAdultContent={showAdultContent} />
+            </div>
+            <div className="settings-card">
+              <div className="settings-card-heading">
+                <div className="settings-heading-icon"><Icon name="lock" /></div>
+                <div><h2 id="settings-pin-heading">{t("pin.heading")}</h2><p>{t("pin.intro")}</p></div>
+              </div>
+              <PinSettings onSetShowAdultContent={onSetShowAdultContent} pin={parentalPin} />
             </div>
           </section>
 

@@ -2,12 +2,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ParentalPinControls } from "../components/ParentalPinControls";
+import { AdultContentToggle, PinSettings } from "../components/ParentalPinControls";
 import { useParentalPin } from "../hooks/useParentalPin";
 
 function Harness({ onShow }: { onShow: (show: boolean) => void }) {
   const pin = useParentalPin(vi.fn());
-  return <ParentalPinControls onSetShowAdultContent={onShow} pin={pin} showAdultContent={false} />;
+  return (
+    <>
+      <AdultContentToggle onSetShowAdultContent={onShow} pin={pin} showAdultContent={false} />
+      <PinSettings onSetShowAdultContent={onShow} pin={pin} />
+    </>
+  );
 }
 
 describe("parental PIN controls", () => {

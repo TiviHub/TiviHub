@@ -7947,3 +7947,15 @@ button.icon-button.is-favorite {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Heading row with a button at its right end: that button lines up with the sort button in the row below. */
+.live-channel-sidebar-heading > .icon-button {
+  margin-right: -7px;
+}
+
+.theme-option-icon.language-code {
+  min-width: 20px;
+  color: var(--secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}

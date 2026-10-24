@@ -9,37 +9,45 @@ function describe(result: PinCheck): string | null {
   return result === "wrong" ? t("pin.wrong") : t("pin.locked", { seconds: result.lockedSeconds });
 }
 
-/** The "show adult content" switch, and the PIN that guards it. */
-export function ParentalPinControls({ pin, showAdultContent, onSetShowAdultContent }: {
+function PinField({ label, value, onChange, autoFocus = false }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoFocus?: boolean;
+}) {
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      <input
+        autoComplete="off" autoFocus={autoFocus} inputMode="numeric" maxLength={8}
+        onChange={(event) => onChange(event.target.value)} type="password" value={value}
+      />
+    </label>
+  );
+}
+
+/** The "show adult content" switch. With a PIN set, turning it on asks for the PIN first. */
+export function AdultContentToggle({ pin, showAdultContent, onSetShowAdultContent }: {
   pin: ParentalPin;
   showAdultContent: boolean;
   onSetShowAdultContent: (show: boolean) => void;
 }) {
   const [unlocking, setUnlocking] = useState(false);
   const [unlockPin, setUnlockPin] = useState("");
-  const [currentPin, setCurrentPin] = useState("");
-  const [newPin, setNewPin] = useState("");
-  const [repeatPin, setRepeatPin] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
-  function reset(message: string | null = null) {
+  function stopUnlocking() {
     setUnlocking(false);
     setUnlockPin("");
-    setCurrentPin("");
-    setNewPin("");
-    setRepeatPin("");
     setError(null);
-    setNotice(message);
   }
 
   function toggle(checked: boolean) {
-    setNotice(null);
     if (checked && pin.pinSet) {
       setUnlocking(true);
       return;
     }
-    reset();
+    stopUnlocking();
     onSetShowAdultContent(checked);
   }
 
@@ -50,8 +58,50 @@ export function ParentalPinControls({ pin, showAdultContent, onSetShowAdultConte
       setError(message);
       return;
     }
-    reset();
+    stopUnlocking();
     onSetShowAdultContent(true);
+  }
+
+  return (
+    <>
+      <label className="adult-content-toggle">
+        <span>
+          <strong>{t("settings.adult.toggle")}</strong>
+          <small>{t("settings.adult.hint")}</small>
+        </span>
+        <input checked={showAdultContent || unlocking} onChange={(event) => toggle(event.target.checked)} type="checkbox" />
+      </label>
+      {unlocking && (
+        <form className="settings-form" onSubmit={(event) => void unlock(event)}>
+          <PinField autoFocus label={t("pin.enter")} onChange={(value) => { setUnlockPin(value); setError(null); }} value={unlockPin} />
+          <div className="settings-actions">
+            <button className="secondary-button" type="submit"><Icon name="lock" /> {t("pin.unlock")}</button>
+            <button className="text-button" onClick={stopUnlocking} type="button">{t("dlg.cancel")}</button>
+          </div>
+        </form>
+      )}
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </>
+  );
+}
+
+/** Setting, changing and removing the PIN. */
+export function PinSettings({ pin, onSetShowAdultContent }: {
+  pin: ParentalPin;
+  onSetShowAdultContent: (show: boolean) => void;
+}) {
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [repeatPin, setRepeatPin] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function reset(message: string | null = null) {
+    setCurrentPin("");
+    setNewPin("");
+    setRepeatPin("");
+    setError(null);
+    setNotice(message);
   }
 
   function validNewPin(): boolean {
@@ -86,70 +136,27 @@ export function ParentalPinControls({ pin, showAdultContent, onSetShowAdultConte
     else reset(t("pin.removed"));
   }
 
+  const edit = (setter: (value: string) => void) => (value: string) => { setter(value); setError(null); };
+
   return (
-    <>
-      <label className="adult-content-toggle">
-        <span>
-          <strong>{t("settings.adult.toggle")}</strong>
-          <small>{t("settings.adult.hint")}</small>
-        </span>
-        <input checked={showAdultContent || unlocking} onChange={(event) => toggle(event.target.checked)} type="checkbox" />
-      </label>
-
-      {unlocking && (
-        <form className="settings-form" onSubmit={(event) => void unlock(event)}>
-          <label className="form-field">
-            <span>{t("pin.enter")}</span>
-            <input
-              autoComplete="off" autoFocus inputMode="numeric" maxLength={8}
-              onChange={(event) => { setUnlockPin(event.target.value); setError(null); }}
-              type="password" value={unlockPin}
-            />
-          </label>
-          <div className="settings-actions">
-            <button className="secondary-button" type="submit"><Icon name="lock" /> {t("pin.unlock")}</button>
-            <button className="text-button" onClick={() => reset()} type="button">{t("dlg.cancel")}</button>
-          </div>
-        </form>
-      )}
-
-      {!pin.pinSet ? (
-        <form className="settings-form" onSubmit={(event) => void createPin(event)}>
-          <h3>{t("pin.heading")}</h3>
-          <p className="form-note">{t("pin.intro")}</p>
-          <label className="form-field">
-            <span>{t("pin.newLabel")}</span>
-            <input autoComplete="off" inputMode="numeric" maxLength={8} onChange={(event) => { setNewPin(event.target.value); setError(null); }} type="password" value={newPin} />
-          </label>
-          <label className="form-field">
-            <span>{t("pin.repeat")}</span>
-            <input autoComplete="off" inputMode="numeric" maxLength={8} onChange={(event) => { setRepeatPin(event.target.value); setError(null); }} type="password" value={repeatPin} />
-          </label>
-          <button className="secondary-button" type="submit"><Icon name="lock" /> {t("pin.save")}</button>
-        </form>
-      ) : (
-        <form className="settings-form" onSubmit={(event) => event.preventDefault()}>
-          <h3>{t("pin.heading")}</h3>
-          <label className="form-field">
-            <span>{t("pin.current")}</span>
-            <input autoComplete="off" inputMode="numeric" maxLength={8} onChange={(event) => { setCurrentPin(event.target.value); setError(null); }} type="password" value={currentPin} />
-          </label>
-          <label className="form-field">
-            <span>{t("pin.newLabelOptional")}</span>
-            <input autoComplete="off" inputMode="numeric" maxLength={8} onChange={(event) => { setNewPin(event.target.value); setError(null); }} type="password" value={newPin} />
-          </label>
-          <label className="form-field">
-            <span>{t("pin.repeat")}</span>
-            <input autoComplete="off" inputMode="numeric" maxLength={8} onChange={(event) => { setRepeatPin(event.target.value); setError(null); }} type="password" value={repeatPin} />
-          </label>
-          <div className="settings-actions">
+    <form className="settings-form" onSubmit={(event) => void createPin(event)}>
+      {pin.pinSet && <PinField label={t("pin.current")} onChange={edit(setCurrentPin)} value={currentPin} />}
+      <div className="form-row">
+        <PinField label={pin.pinSet ? t("pin.newLabelOptional") : t("pin.newLabel")} onChange={edit(setNewPin)} value={newPin} />
+        <PinField label={t("pin.repeat")} onChange={edit(setRepeatPin)} value={repeatPin} />
+      </div>
+      <div className="settings-actions">
+        {pin.pinSet ? (
+          <>
             <button className="secondary-button" onClick={() => void changePin()} type="button">{t("pin.change")}</button>
             <button className="secondary-button danger-button" onClick={() => void removePin()} type="button">{t("pin.remove")}</button>
-          </div>
-        </form>
-      )}
+          </>
+        ) : (
+          <button className="secondary-button" type="submit"><Icon name="lock" /> {t("pin.save")}</button>
+        )}
+      </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {notice && <p className="settings-message" role="status">{notice}</p>}
-    </>
+    </form>
   );
 }
