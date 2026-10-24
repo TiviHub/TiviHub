@@ -48,5 +48,6 @@ describe("keepM3uIds at scale", () => {
     console.log(`keepM3uIds on 200k channels: ${elapsed.toFixed(0)} ms`);
     expect(new Set(after.channels.map((channel) => channel.id)).size).toBe(200_000);
     expect(elapsed).toBeLessThan(3000);
-  });
+    // Building the two 200k-entry playlists dominates; a slow shared runner needs more than the 5 s default for that setup, not for keepM3uIds.
+  }, 30_000);
 });
