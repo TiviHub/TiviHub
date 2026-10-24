@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { SearchSection } from "../lib/globalSearch";
 import { t } from "../lib/i18n";
 import { sectionLabel } from "../lib/sectionLabel";
@@ -99,8 +100,10 @@ export function Topbar({
   onOpenExpiredPlaylist,
   onOpenGlobalSearch,
   onRefresh,
+  remindersMenu,
   section,
 }: {
+  remindersMenu: ReactNode;
   activeSourceExpired: boolean;
   activeSourceName?: string;
   canAdd: boolean;
@@ -133,6 +136,7 @@ export function Topbar({
       </button>
       <div aria-hidden="true" className="titlebar-drag-region" data-tauri-drag-region />
       <div className="topbar-desktop-actions topbar-desktop-only">
+        {remindersMenu}
         <button
           aria-label={t("topbar.addPlaylist")}
           className="icon-button topbar-action-button"
@@ -166,6 +170,7 @@ export function Topbar({
             <Icon name="error_outline" />
           </button>
         )}
+        {remindersMenu}
         <button
           aria-keyshortcuts="Control+K Meta+K"
           aria-label={t("topbar.searchLibrary")}

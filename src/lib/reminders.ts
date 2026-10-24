@@ -15,15 +15,19 @@ export interface ReminderSplit {
   /** The programme started before the person could be told (the app was closed). */
   missed: Reminder[];
   upcoming: Reminder[];
+  /** Reminders that already fired and stay listed in the bell, newest first. */
+  history: Reminder[];
 }
 
 export function splitReminders(reminders: readonly Reminder[], now: number): ReminderSplit {
-  const split: ReminderSplit = { due: [], missed: [], upcoming: [] };
+  const split: ReminderSplit = { due: [], missed: [], upcoming: [], history: [] };
   for (const reminder of reminders) {
-    if (reminder.startMillis <= now) split.missed.push(reminder);
+    if (reminder.firedAt !== undefined) split.history.push(reminder);
+    else if (reminder.startMillis <= now) split.missed.push(reminder);
     else if (reminder.startMillis - REMINDER_LEAD_MILLIS <= now) split.due.push(reminder);
     else split.upcoming.push(reminder);
   }
+  split.history.sort((a, b) => (b.firedAt ?? 0) - (a.firedAt ?? 0));
   return split;
 }
 

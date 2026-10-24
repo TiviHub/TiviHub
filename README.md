@@ -41,7 +41,7 @@ TiviHub is a player and organizer, not a content service. It does not provide pl
 - **Pick up where you left off:** Save favorites and playback progress on your device.
 - **Cast to Google Cast devices:** Send compatible, unprotected streams directly from the provider to a Chromecast on your local network.
 - **Watch several channels:** Open up to four live channels side by side in multiview (plain streams only; no DRM or portal channels).
-- **Never miss a programme:** Set a reminder on a TV guide programme and get a message, or a system notification, a minute before it starts.
+- **Never miss a programme:** Set a reminder on a TV guide programme and get a message, or a system notification, a minute before it starts. The bell in the top bar lists what is set and what just went off, with a dot for anything new.
 - **Make it yours:** Choose a light, dark, or system theme, and use TiviHub in English, Dutch, Spanish, French, German, Portuguese or Turkish.
 - **Keep adult content behind a PIN:** Hide adult titles, and ask for a PIN before they are shown (a child lock, not strong security).
 - **Back up your data:** Export and restore an encrypted backup when moving to another device.
