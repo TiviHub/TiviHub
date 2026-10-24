@@ -70,7 +70,7 @@ const features: { title: string; text: string[]; shot: string; alt: string }[] =
       "TiviHub does not include channels, playlists or media.",
     ],
     shot: "app-sources",
-    alt: "TiviHub settings listing three sources: a local M3U file, an Xtream login and an M3U URL",
+    alt: "TiviHub settings listing four sources: a local M3U file, an Xtream login, an M3U URL and a Stalker portal",
   },
   {
     title: "Live TV with a guide",
@@ -178,7 +178,7 @@ export default function LandingPage() {
               <span>no cloud</span>
             </p>
           </div>
-          <div className="hero-ui" data-reveal style={{ "--d": "100ms" } as CSSProperties}><img alt="TiviHub showing a movie library with sample posters and titles" className="hero-shot" height="1200" src="/landing/app-hero.png" width="1920" /></div>
+          <div className="hero-ui" data-reveal style={{ "--d": "100ms" } as CSSProperties}><img alt="TiviHub showing a movie library with a category list and sample posters" className="hero-shot" height="1200" src="/landing/app-hero.png" width="1920" /></div>
         </div>
       </section>
 
