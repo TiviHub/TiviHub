@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { playbackErrorMessage } from "../playbackErrors";
+import { playbackErrorMessage } from "../lib/playbackErrors";
 
 describe("playback error messages", () => {
   it("identifies Shaka network timeouts instead of calling them media rejections", () => {

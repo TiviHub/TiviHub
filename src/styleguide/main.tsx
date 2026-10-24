@@ -4,8 +4,8 @@ import "@fontsource/material-icons";
 import "@fontsource/roboto/latin-400.css";
 import "@fontsource/roboto/latin-500.css";
 import "@fontsource/roboto/latin-700.css";
-import "../styles.css";
-import "../theme-app.css";
+import "../styles/styles.css";
+import "../styles/theme-app.css";
 import "./styleguide.css";
 import { StyleGuide } from "./StyleGuide";
 

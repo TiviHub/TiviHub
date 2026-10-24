@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchCatalog } from "../globalSearch";
+import { searchCatalog } from "../lib/globalSearch";
 import type { LiveChannel, Movie, Series } from "../types";
 
 function channel(id: string, name: string, group = "News"): LiveChannel {

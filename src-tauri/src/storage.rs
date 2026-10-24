@@ -26,6 +26,7 @@ const STORES: &[(&str, &str)] = &[
     ("epg", "id"),
     ("ratings", "key"),
     ("popularCatalog", "key"),
+    ("liveCategoryCache", "key"),
     ("mdblistRateLimits", "key"),
     ("subtitleSearch", "key"),
     ("subtitleFiles", "fileId"),
@@ -40,6 +41,7 @@ const PLAYLIST_SCOPED_STORES: &[&str] = &[
     "episodes",
     "favorites",
     "library",
+    "liveCategoryCache",
 ];
 const KEY_SERVICE: &str = "TiviHub";
 const KEY_NAME: &str = "local-encryption-key";
@@ -164,6 +166,15 @@ fn migrate(conn: &Connection) -> Result<(), String> {
         }
         conn.execute_batch("PRAGMA user_version = 2;")
             .map_err(|e| e.to_string())?;
+    }
+    if version < 3 {
+        // Last answer per Xtream live category (a cache; removed with its playlist).
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS \"liveCategoryCache\" (key TEXT PRIMARY KEY, playlist_id TEXT,                series_id TEXT, channel_id TEXT, source TEXT, json TEXT NOT NULL);
+             CREATE INDEX IF NOT EXISTS livecategorycache_playlist ON \"liveCategoryCache\"(playlist_id);
+             PRAGMA user_version = 3;",
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -458,6 +469,27 @@ fn decode_key(encoded: &str) -> Result<[u8; 32], String> {
         .ok_or_else(|| "The stored TiviHub encryption key is invalid.".to_string())
 }
 
+pub const DATABASE_FILE: &str = "tivihub.sqlite3";
+
+#[derive(Debug, PartialEq)]
+enum KeychainAction {
+    Use(String),
+    Create,
+    UseFile,
+    Fail,
+}
+
+/// A keychain error must never mint a new key while encrypted data exists: the old key would be
+/// shadowed by the new file and every saved login would become unreadable.
+fn keychain_action(read: Result<String, keyring::Error>, has_data: bool) -> KeychainAction {
+    match read {
+        Ok(stored) => KeychainAction::Use(stored),
+        Err(keyring::Error::NoEntry) => KeychainAction::Create,
+        Err(_) if has_data => KeychainAction::Fail,
+        Err(_) => KeychainAction::UseFile,
+    }
+}
+
 /// The OS keychain holds the key. Where there is none (for example Linux without a secret
 /// service) a key file next to the database is used instead, and a diagnostic is recorded.
 pub fn load_or_create_key(
@@ -469,15 +501,22 @@ pub fn load_or_create_key(
         return decode_key(&existing);
     }
     if let Ok(entry) = keyring::Entry::new(KEY_SERVICE, KEY_NAME) {
-        match entry.get_password() {
-            Ok(stored) => return decode_key(&stored),
-            Err(keyring::Error::NoEntry) => {
+        let has_data = dir.join(DATABASE_FILE).exists();
+        match keychain_action(entry.get_password(), has_data) {
+            KeychainAction::Use(stored) => return decode_key(&stored),
+            KeychainAction::Create => {
                 let key = random_key();
                 if entry.set_password(&B64.encode(key)).is_ok() {
                     return Ok(key);
                 }
             }
-            Err(_) => {}
+            KeychainAction::UseFile => {}
+            KeychainAction::Fail => {
+                return Err(
+                    "The system keychain could not be read. Restart TiviHub to try again."
+                        .to_string(),
+                );
+            }
         }
     }
     diagnostics.record("storage", "KEY_FILE_FALLBACK");
@@ -770,6 +809,24 @@ mod tests {
     }
 
     #[test]
+    fn a_keychain_error_never_replaces_the_key_of_existing_data() {
+        let failure = || keyring::Error::NoStorageAccess("locked".into());
+        assert_eq!(keychain_action(Err(failure()), true), KeychainAction::Fail);
+        assert_eq!(
+            keychain_action(Err(failure()), false),
+            KeychainAction::UseFile
+        );
+        assert_eq!(
+            keychain_action(Err(keyring::Error::NoEntry), false),
+            KeychainAction::Create
+        );
+        assert_eq!(
+            keychain_action(Ok("k".into()), true),
+            KeychainAction::Use("k".into())
+        );
+    }
+
+    #[test]
     fn numeric_keys_are_stored_as_text() {
         let s = store();
         put(&s, "subtitleFiles", json!({"fileId": 42, "data": "x"}));
@@ -894,6 +951,23 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("deleted"));
         assert_eq!(rows(s.get_all("channels").unwrap()).len(), 0);
+    }
+
+    #[test]
+    fn upgrades_a_version_2_database_with_the_live_category_cache_and_keeps_its_data() {
+        let s = store();
+        put(&s, "playlists", json!({"id": "p"}));
+        s.conn()
+            .execute_batch("DROP TABLE \"liveCategoryCache\"; PRAGMA user_version = 2;")
+            .unwrap();
+        migrate(&s.conn()).unwrap();
+        assert_eq!(rows(s.get_all("playlists").unwrap()).len(), 1);
+        put(
+            &s,
+            "liveCategoryCache",
+            json!({"key": "p:1", "playlistId": "p", "channels": [], "savedAt": 1}),
+        );
+        assert_eq!(s.delete_playlist("p").unwrap(), 2);
     }
 
     #[test]

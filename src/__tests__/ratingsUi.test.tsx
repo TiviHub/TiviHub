@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../App";
-import { MovieDetail, SeriesDetail } from "../components/ContentPages";
+import { MovieDetail, SeriesDetail } from "../components/DetailPages";
 import { MdblistError } from "../providers/mdblist";
-import type { RatingsResult, RatingsService } from "../ratingsService";
+import type { RatingsResult, RatingsService } from "../services/ratingsService";
 import { saveCatalog, savePlaylist } from "../storage/database";
 import type { Movie, Playlist, Series } from "../types";
 
@@ -133,6 +133,35 @@ describe("detail page external ratings", () => {
       .toBe("Add to watchlist");
     await userEvent.click(screen.getByRole("button", { name: "View details for The Wire" }));
     expect(onOpenSeries).toHaveBeenCalledWith(related);
+  });
+
+  it("starts Play first episode at the first real season, not at season 0 extras", async () => {
+    const onPlay = vi.fn();
+    render(<SeriesDetail
+      continueWatching={false}
+      episodes={[
+        { id: "extra", playlistId: "p1", seriesId: series.id, season: 0, number: 1, name: "Behind the scenes", streamUrl: "https://p.example/0.mp4" },
+        { id: "episode-1", playlistId: "p1", seriesId: series.id, season: 1, number: 1, name: "Pilot", streamUrl: "https://p.example/1.mp4" },
+      ]}
+      error={null}
+      favorite={false}
+      inLibrary={false}
+      loading={false}
+      onAddToLibrary={vi.fn()}
+      onBack={vi.fn()}
+      onContinueWatching={vi.fn()}
+      onFavorite={vi.fn()}
+      onDownload={vi.fn()}
+      onPlay={onPlay}
+      onRemoveFromLibrary={vi.fn()}
+      series={series}
+      showAdultContent={false}
+      ratingsService={service(async () => ({ status: "not-found" }))}
+    />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Play first episode/ }));
+
+    expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("Pilot") }));
   });
 
   it("defaults the episode list to season 1 while retaining the all-seasons option", async () => {

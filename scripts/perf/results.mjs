@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { gitCommit, machine } from "./system.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-export const RESULTS_DIR = join(root, "docs", "plans", "baseline-results");
+export const RESULTS_DIR = join(root, "scripts", "perf", "results");
 
 export function stats(values) {
   const sorted = [...values].sort((a, b) => a - b);

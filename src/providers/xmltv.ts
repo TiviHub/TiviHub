@@ -1,20 +1,22 @@
 import type { EpgProgram } from "../types";
-import { recordDiagnosticFailure } from "../diagnosticLog";
+import { recordDiagnosticFailure } from "../lib/diagnosticLog";
 import { validateHttpUrl } from "./m3u";
 import { readResponseText } from "./http";
+import { providerFetch } from "./transport";
 
 const MAX_XML_BYTES = 50 * 1024 * 1024;
 
-export async function fetchXmltv(url: string, source: string): Promise<EpgProgram[]> {
+export async function fetchXmltv(url: string, source: string, userAgent?: string): Promise<EpgProgram[]> {
   const safeUrl = validateHttpUrl(url, "EPG URL");
   let response: Response;
   try {
-    response = await fetch(safeUrl, { headers: { Accept: "application/xml, text/xml, */*" } });
+    response = await providerFetch(safeUrl, { headers: { Accept: "application/xml, text/xml, */*" } }, userAgent);
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
     recordDiagnosticFailure("xmltv-guide", "network");
     throw new Error(
       "The EPG could not be fetched by TiviHub. The provider may block cross-origin access (CORS).",
+      { cause },
     );
   }
   if (!response.ok) {

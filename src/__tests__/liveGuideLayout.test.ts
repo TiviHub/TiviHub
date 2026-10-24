@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EpgProgram } from "../types";
-import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../liveGuideLayout";
+import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../lib/liveGuideLayout";
 
 describe("live guide timeline layout", () => {
   const day = new Date(2026, 9, 18);

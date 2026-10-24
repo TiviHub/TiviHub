@@ -16,6 +16,7 @@ import type {
   Favorite,
   LibraryItem,
   LiveChannel,
+  LiveCategoryCacheEntry,
   MdblistPopularCacheEntry,
   MdblistRateLimitState,
   Movie,
@@ -33,7 +34,7 @@ interface EncryptedPayload {
 }
 
 export const IDB_DATABASE_NAME = "tivihub-web";
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 const CATALOG_WRITE_BATCH_SIZE = 1000;
 const DELETE_BATCH_SIZE = 10_000;
 const CREDENTIAL_KEY_ID = "local-encryption-key";
@@ -80,6 +81,7 @@ interface TiviHubDatabase extends DBSchema {
   };
   ratings: { key: string; value: RatingsCacheEntry };
   popularCatalog: { key: string; value: MdblistPopularCacheEntry };
+  liveCategoryCache: { key: string; value: LiveCategoryCacheEntry; indexes: { byPlaylist: string } };
   mdblistRateLimits: { key: string; value: MdblistRateLimitState };
   subtitleSearch: { key: string; value: OpenSubtitleSearchCacheEntry };
   subtitleFiles: { key: number; value: OpenSubtitleFileCacheEntry };
@@ -128,6 +130,9 @@ function getDb(): Promise<IDBPDatabase<TiviHubDatabase>> {
     }
     if (oldVersion < 7) {
       database.createObjectStore("subtitleChoices", { keyPath: "itemId" });
+    }
+    if (oldVersion < 8) {
+      database.createObjectStore("liveCategoryCache", { keyPath: "key" }).createIndex("byPlaylist", "playlistId");
     }
   },
 });;
@@ -181,7 +186,7 @@ async function decrypt(sealed: Sealed): Promise<string> {
     return decoder.decode(cleartext);
   } catch (error) {
     console.error("Could not decrypt local TiviHub data", error);
-    throw new Error("Local encrypted data could not be opened in this TiviHub installation.");
+    throw new Error("Local encrypted data could not be opened in this TiviHub installation.", { cause: error });
   }
 }
 
@@ -293,11 +298,12 @@ async function deletePlaylist(
     "favorites",
     "library",
     "epg",
+    "liveCategoryCache",
   ] as const;
   const transaction = database.transaction(names, "readwrite");
   try {
     const playlistRange = IDBKeyRange.only(id);
-    const stores = ["channels", "movies", "series", "episodes", "favorites", "library"] as const;
+    const stores = ["channels", "movies", "series", "episodes", "favorites", "library", "liveCategoryCache"] as const;
     const counts = await Promise.all([
       transaction.objectStore("playlists").count(id),
       transaction.objectStore("documents").count(id),

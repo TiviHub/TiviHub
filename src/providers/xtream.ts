@@ -1,4 +1,4 @@
-import { normalizeImdbId, normalizeTmdbId } from "../ratings";
+import { normalizeImdbId, normalizeTmdbId } from "../lib/ratings";
 import type {
   Episode,
   EpgProgram,
@@ -7,8 +7,11 @@ import type {
   Playlist,
   Series,
 } from "../types";
-import { recordDiagnosticFailure } from "../diagnosticLog";
+import { recordDiagnosticFailure } from "../lib/diagnosticLog";
+import { formatServerTime } from "../lib/serverTime";
 import { readResponseText, validateHttpsUrl } from "./http";
+import { providerFetch } from "./transport";
+import type { BrowseCategory } from "../browse/types";
 
 interface XtreamPayload {
   [key: string]: unknown;
@@ -25,6 +28,7 @@ export interface XtreamCatalog {
   movies: Movie[];
   series: Series[];
   expiresAtMillis?: number;
+  serverTimeZone?: string;
 }
 
 export class XtreamAccountExpiredError extends Error {
@@ -53,7 +57,7 @@ function apiBase(playlist: Playlist): URL {
   if (url.username || url.password) {
     throw new Error("Put Xtream credentials in their own fields, not in the server URL.");
   }
-  if (!url.pathname.endsWith("/player_api.php") && url.pathname !== "/player_api.php") {
+  if (!url.pathname.endsWith("/player_api.php")) {
     url.pathname = `${url.pathname.replace(/\/+$/, "")}/player_api.php`;
   }
   url.hash = "";
@@ -95,6 +99,26 @@ export function xtreamStreamUrl(
   return base.toString();
 }
 
+/** Address of a recorded programme; the start is written in the server's own time zone. */
+export function xtreamTimeshiftUrl(
+  playlist: Playlist,
+  providerId: string,
+  startMillis: number,
+  endMillis: number,
+): string {
+  const base = apiBase(playlist);
+  const apiPath = base.pathname.endsWith("/player_api.php")
+    ? base.pathname.slice(0, -"/player_api.php".length)
+    : "";
+  const minutes = Math.max(1, Math.ceil((endMillis - startMillis) / 60_000));
+  const start = formatServerTime(startMillis, playlist.serverTimeZone);
+  base.pathname = `${apiPath}/timeshift/${encodePathPart(playlist.username)}/${encodePathPart(playlist.password)}/${minutes}/${start}/${encodePathPart(providerId)}.m3u8`;
+  base.username = "";
+  base.password = "";
+  base.search = "";
+  return base.toString();
+}
+
 export function xtreamXmltvUrl(playlist: Playlist): string {
   const base = apiBase(playlist);
   const apiPath = base.pathname.endsWith("/player_api.php")
@@ -110,6 +134,7 @@ export function xtreamXmltvUrl(playlist: Playlist): string {
 }
 
 async function requestJson(
+  userAgent: string | undefined,
   url: string,
   operation: string,
   signal?: AbortSignal,
@@ -117,15 +142,16 @@ async function requestJson(
 ): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await providerFetch(url, {
       signal,
       headers: { Accept: "application/json, text/plain, */*" },
-    });
+    }, userAgent);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     recordDiagnosticFailure("xtream-catalog", "network");
     throw new Error(
       `${operation} could not be reached. The provider may block cross-origin access (CORS), or be offline. The request went directly from this app to the provider.`,
+      { cause: error },
     );
   }
   if (!response.ok) {
@@ -183,7 +209,7 @@ function stringValue(value: unknown): string | undefined {
   return undefined;
 }
 
-function catalogYear(...values: unknown[]): number | undefined {
+export function catalogYear(...values: unknown[]): number | undefined {
   for (const value of values) {
     const text = stringValue(value);
     if (!text) continue;
@@ -224,6 +250,12 @@ function expiryMillis(value: unknown): number | undefined {
   return undefined;
 }
 
+function archiveFor(item: XtreamPayload): Pick<LiveChannel, "catchup"> {
+  if (optionalNumber(item.tv_archive) !== 1) return {};
+  const days = optionalNumber(item.tv_archive_duration);
+  return { catchup: { mode: "xtream", days: days && days > 0 ? days : 1 } };
+}
+
 function drmFor(playlist: Playlist): Pick<LiveChannel, "drmLicenseUrl" | "drmSystem"> {
   return playlist.drmLicenseUrl
     ? {
@@ -233,11 +265,11 @@ function drmFor(playlist: Playlist): Pick<LiveChannel, "drmLicenseUrl" | "drmSys
     : {};
 }
 
-export async function authenticateXtream(
+async function authenticate(
   playlist: Playlist,
   signal?: AbortSignal,
-): Promise<number | undefined> {
-  const payload = object(await requestJson(authenticatedUrl(playlist), "Xtream account check", signal));
+): Promise<{ expiresAtMillis?: number; serverTimeZone?: string }> {
+  const payload = object(await requestJson(playlist.userAgent, authenticatedUrl(playlist), "Xtream account check", signal));
   const userInfo = object(payload?.user_info);
   if (!userInfo) throw new Error("Xtream returned an unexpected authentication response.");
   const status = stringValue(userInfo.status ?? payload?.status)?.toLowerCase() ?? "";
@@ -249,111 +281,214 @@ export async function authenticateXtream(
   if (auth === 0 || ["disabled", "unauthorized"].includes(status)) {
     throw new Error(message || `Xtream authentication was rejected (${status || "inactive"}).`);
   }
-  return expiryMillis(userInfo.exp_date);
+  return {
+    expiresAtMillis: expiryMillis(userInfo.exp_date),
+    serverTimeZone: stringValue(object(payload?.server_info)?.timezone),
+  };
 }
 
+export async function authenticateXtream(
+  playlist: Playlist,
+  signal?: AbortSignal,
+): Promise<number | undefined> {
+  return (await authenticate(playlist, signal)).expiresAtMillis;
+}
+
+function categoryNames(raw: unknown, description: string): Map<string, string> {
+  return new Map(array(raw, description, "categories").flatMap((item) => {
+    const id = stringValue(item.category_id);
+    const name = stringValue(item.category_name);
+    return id && name ? [[id, name] as const] : [];
+  }));
+}
+
+function liveChannelFrom(playlist: Playlist, item: XtreamPayload, categories: Map<string, string>): LiveChannel | null {
+  const providerId = stringValue(item.stream_id);
+  const name = stringValue(item.name);
+  if (!providerId || !name) return null;
+  const categoryId = stringValue(item.category_id);
+  return {
+    id: `${playlist.id}:live:${providerId}`,
+    playlistId: playlist.id,
+    providerId,
+    name,
+    group: (categoryId && categories.get(categoryId)) || "General",
+    streamUrl: xtreamStreamUrl(playlist, "live", providerId, "m3u8"),
+    logoUrl: stringValue(item.stream_icon),
+    tvgId: stringValue(item.epg_channel_id),
+    ...archiveFor(item),
+    ...drmFor(playlist),
+  };
+}
+
+/** The live categories only: one small request, so a source can be added without downloading its channels. */
+export async function loadXtreamLiveCategories(playlist: Playlist, signal?: AbortSignal): Promise<BrowseCategory[]> {
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal);
+  return [...categoryNames(raw, "Live categories")].map(([id, name]) => ({ id, name }));
+}
+
+/** The channels of one live category (every channel when `categoryId` is null). */
+export async function loadXtreamLiveChannels(
+  playlist: Playlist,
+  categoryId: string | null,
+  categories: BrowseCategory[],
+  signal?: AbortSignal,
+): Promise<LiveChannel[]> {
+  const names = new Map(categories.map((category) => [category.id, category.name]));
+  const url = authenticatedUrl(playlist, "get_live_streams", categoryId ? { category_id: categoryId } : undefined);
+  const raw = await requestJson(playlist.userAgent, url, "Live channels", signal);
+  return array(raw, "Live channel", "channels").flatMap((item) => {
+    const channel = liveChannelFrom(playlist, item, names);
+    return channel ? [channel] : [];
+  });
+}
+
+function movieFrom(playlist: Playlist, item: XtreamPayload, categories: Map<string, string>): Movie | null {
+  const providerId = stringValue(item.stream_id);
+  const name = stringValue(item.name);
+  if (!providerId || !name) return null;
+  const categoryId = stringValue(item.category_id);
+  const extension = stringValue(item.container_extension) || "mp4";
+  return {
+    id: `${playlist.id}:movie:${providerId}`,
+    playlistId: playlist.id,
+    providerId,
+    name,
+    streamUrl: xtreamStreamUrl(playlist, "movie", providerId, extension),
+    posterUrl: stringValue(item.stream_icon),
+    overview: stringValue(item.plot),
+    year: catalogYear(item.releasedate, item.releaseDate, item.release_date, item.year, name),
+    rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
+    imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
+    tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
+    categoryId,
+    category: categoryId ? categories.get(categoryId) || "Uncategorized" : undefined,
+    addedAtMillis: epochMillis(item.added),
+    ...drmFor(playlist),
+  };
+}
+
+function seriesFrom(playlist: Playlist, item: XtreamPayload, categories: Map<string, string>): Series | null {
+  const providerId = stringValue(item.series_id);
+  const name = stringValue(item.name);
+  if (!providerId || !name) return null;
+  const categoryId = stringValue(item.category_id);
+  return {
+    id: `${playlist.id}:series:${providerId}`,
+    playlistId: playlist.id,
+    providerId,
+    name,
+    posterUrl: stringValue(item.cover),
+    overview: stringValue(item.plot),
+    seasons: Array.isArray(item.seasons) ? item.seasons.length : 0,
+    categoryId,
+    category: categoryId ? categories.get(categoryId) || "Uncategorized" : undefined,
+    year: catalogYear(item.year, item.releasedate, item.releaseDate, item.release_date, name),
+    rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
+    imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
+    tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
+    addedAtMillis: epochMillis(item.added) ?? epochMillis(item.last_modified),
+  };
+}
+
+/** The series categories only: one small request, so Series can open without downloading the catalog. */
+export async function loadXtreamSeriesCategories(playlist: Playlist, signal?: AbortSignal): Promise<BrowseCategory[]> {
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series_categories"), "Series categories", signal);
+  return [...categoryNames(raw, "Series categories")].map(([id, name]) => ({ id, name }));
+}
+
+/** The series of one category; an empty `categoryId` asks for every series in one answer. */
+export async function loadXtreamSeries(
+  playlist: Playlist,
+  categoryId: string,
+  categories: BrowseCategory[],
+  signal?: AbortSignal,
+): Promise<Series[]> {
+  const names = new Map(categories.map((category) => [category.id, category.name]));
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series", categoryId ? { category_id: categoryId } : {}), "Series", signal);
+  return array(raw, "Series", "series").flatMap((item) => {
+    const show = seriesFrom(playlist, item, names);
+    return show ? [show] : [];
+  });
+}
+
+/** The movie categories only: one small request, so Movies can open without downloading the catalog. */
+export async function loadXtreamMovieCategories(playlist: Playlist, signal?: AbortSignal): Promise<BrowseCategory[]> {
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_vod_categories"), "Movie categories", signal);
+  return [...categoryNames(raw, "Movie categories")].map(([id, name]) => ({ id, name }));
+}
+
+/** The movies of one category; an empty `categoryId` asks for every movie in one answer. */
+export async function loadXtreamMovies(
+  playlist: Playlist,
+  categoryId: string,
+  categories: BrowseCategory[],
+  signal?: AbortSignal,
+): Promise<Movie[]> {
+  const names = new Map(categories.map((category) => [category.id, category.name]));
+  const raw = await requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_vod_streams", categoryId ? { category_id: categoryId } : {}), "Movies", signal);
+  return array(raw, "Movie", "movies").flatMap((item) => {
+    const movie = movieFrom(playlist, item, names);
+    return movie ? [movie] : [];
+  });
+}
+
+/**
+ * What the app imports for an Xtream source: the login details (expiry, time zone) and the live channels.
+ * Movies and series are not downloaded here; they are read one category at a time while browsing.
+ */
+export async function loadXtreamLiveCatalog(
+  playlist: Playlist,
+  signal?: AbortSignal,
+): Promise<{ channels: LiveChannel[]; expiresAtMillis?: number; serverTimeZone?: string }> {
+  const { expiresAtMillis, serverTimeZone } = await authenticate(playlist, signal);
+  const [categoriesRaw, liveRaw] = await Promise.all([
+    requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal),
+    requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_streams"), "Live channels", signal),
+  ]);
+  const categories = categoryNames(categoriesRaw, "Live categories");
+  const channels = array(liveRaw, "Live channel", "channels").flatMap((item) => {
+    const channel = liveChannelFrom(playlist, item, categories);
+    return channel ? [channel] : [];
+  });
+  return { channels, expiresAtMillis, serverTimeZone };
+}
+
+/** The whole catalog in one go. The app no longer imports this way; tests and the perf scripts use it as a reference. */
 export async function loadXtreamCatalog(
   playlist: Playlist,
   signal?: AbortSignal,
 ): Promise<XtreamCatalog> {
-  const expiresAtMillis = await authenticateXtream(playlist, signal);
+  const { expiresAtMillis, serverTimeZone } = await authenticate(playlist, signal);
   const [liveCategoriesRaw, liveRaw, movieCategoriesRaw, moviesRaw, seriesCategoriesRaw, seriesRaw] =
     await Promise.all([
-      requestJson(authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal),
-      requestJson(authenticatedUrl(playlist, "get_live_streams"), "Live channels", signal),
-      requestJson(authenticatedUrl(playlist, "get_vod_categories"), "Movie categories", signal),
-      requestJson(authenticatedUrl(playlist, "get_vod_streams"), "Movies", signal),
-      requestJson(authenticatedUrl(playlist, "get_series_categories"), "Series categories", signal),
-      requestJson(authenticatedUrl(playlist, "get_series"), "Series", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_categories"), "Live categories", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_live_streams"), "Live channels", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_vod_categories"), "Movie categories", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_vod_streams"), "Movies", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series_categories"), "Series categories", signal),
+      requestJson(playlist.userAgent, authenticatedUrl(playlist, "get_series"), "Series", signal),
     ]);
 
-  const liveCategories = new Map(array(liveCategoriesRaw, "Live categories", "categories")
-    .flatMap((item) => {
-      const id = stringValue(item.category_id);
-      const name = stringValue(item.category_name);
-      return id && name ? [[id, name] as const] : [];
-    }));
-  const movieCategories = new Map(array(movieCategoriesRaw, "Movie categories", "categories")
-    .flatMap((item) => {
-      const id = stringValue(item.category_id);
-      const name = stringValue(item.category_name);
-      return id && name ? [[id, name] as const] : [];
-    }));
-  const seriesCategories = new Map(array(seriesCategoriesRaw, "Series categories", "categories")
-    .flatMap((item) => {
-      const id = stringValue(item.category_id);
-      const name = stringValue(item.category_name);
-      return id && name ? [[id, name] as const] : [];
-    }));
-  const drm = drmFor(playlist);
-
+  const liveCategories = categoryNames(liveCategoriesRaw, "Live categories");
+  const movieCategories = categoryNames(movieCategoriesRaw, "Movie categories");
+  const seriesCategories = categoryNames(seriesCategoriesRaw, "Series categories");
   const channels = array(liveRaw, "Live channel", "channels").flatMap((item) => {
-    const providerId = stringValue(item.stream_id);
-    const name = stringValue(item.name);
-    if (!providerId || !name) return [];
-    const categoryId = stringValue(item.category_id);
-    return [{
-      id: `${playlist.id}:live:${providerId}`,
-      playlistId: playlist.id,
-      providerId,
-      name,
-      group: (categoryId && liveCategories.get(categoryId)) || "General",
-      streamUrl: xtreamStreamUrl(playlist, "live", providerId, "m3u8"),
-      logoUrl: stringValue(item.stream_icon),
-      tvgId: stringValue(item.epg_channel_id),
-      ...drm,
-    }];
+    const channel = liveChannelFrom(playlist, item, liveCategories);
+    return channel ? [channel] : [];
   });
 
   const movies = array(moviesRaw, "Movie", "movies").flatMap((item) => {
-    const providerId = stringValue(item.stream_id);
-    const name = stringValue(item.name);
-    if (!providerId || !name) return [];
-    const categoryId = stringValue(item.category_id);
-    const extension = stringValue(item.container_extension) || "mp4";
-    return [{
-      id: `${playlist.id}:movie:${providerId}`,
-      playlistId: playlist.id,
-      providerId,
-      name,
-      streamUrl: xtreamStreamUrl(playlist, "movie", providerId, extension),
-      posterUrl: stringValue(item.stream_icon),
-      overview: stringValue(item.plot),
-      year: catalogYear(item.releasedate, item.releaseDate, item.release_date, item.year, name),
-      rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
-      imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
-      tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
-      categoryId,
-      category: categoryId ? movieCategories.get(categoryId) || "Uncategorized" : undefined,
-      addedAtMillis: epochMillis(item.added),
-      ...drm,
-    }];
+    const movie = movieFrom(playlist, item, movieCategories);
+    return movie ? [movie] : [];
   });
 
   const series = array(seriesRaw, "Series", "series").flatMap((item) => {
-    const providerId = stringValue(item.series_id);
-    const name = stringValue(item.name);
-    if (!providerId || !name) return [];
-    const categoryId = stringValue(item.category_id);
-    return [{
-      id: `${playlist.id}:series:${providerId}`,
-      playlistId: playlist.id,
-      providerId,
-      name,
-      posterUrl: stringValue(item.cover),
-      overview: stringValue(item.plot),
-      seasons: Array.isArray(item.seasons) ? item.seasons.length : 0,
-      categoryId,
-      category: categoryId ? seriesCategories.get(categoryId) || "Uncategorized" : undefined,
-      year: catalogYear(item.year, item.releasedate, item.releaseDate, item.release_date, name),
-      rating: optionalNumber(item.rating) ?? optionalNumber(item.rating_5based),
-      imdbId: normalizeImdbId(item.imdb_id ?? item.imdb),
-      tmdbId: normalizeTmdbId(item.tmdb ?? item.tmdb_id),
-      addedAtMillis: epochMillis(item.added) ?? epochMillis(item.last_modified),
-    }];
+    const show = seriesFrom(playlist, item, seriesCategories);
+    return show ? [show] : [];
   });
 
-  return { channels, movies, series, expiresAtMillis };
+  return { channels, movies, series, expiresAtMillis, serverTimeZone };
 }
 
 export async function loadXtreamEpisodes(
@@ -363,6 +498,7 @@ export async function loadXtreamEpisodes(
 ): Promise<Episode[]> {
   if (!series.providerId) throw new Error("This series does not have a provider ID.");
   const response = object(await requestJson(
+    playlist.userAgent,
     authenticatedUrl(playlist, "get_series_info", { series_id: series.providerId }),
     "Episode information",
     signal,
@@ -409,6 +545,7 @@ function decodeXtreamText(value: unknown): string | undefined {
     const binary = atob(base64);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
     const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
+    // eslint-disable-next-line no-control-regex -- detecting binary data is the point
     if (!decoded || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(decoded)) return text;
     return decoded;
   } catch {
@@ -482,6 +619,7 @@ export async function loadXtreamShortEpg(
       const channelId = channel.tvgId || channel.id;
       try {
         const response = await requestJson(
+          playlist.userAgent,
           authenticatedUrl(playlist, "get_short_epg", {
             stream_id: providerId,
             limit: String(SHORT_EPG_PROGRAMS_PER_CHANNEL),

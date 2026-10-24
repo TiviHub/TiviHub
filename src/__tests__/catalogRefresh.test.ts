@@ -6,7 +6,7 @@ import {
   validateCatalogForSource,
   type CatalogCandidate,
   type CatalogSnapshot,
-} from "../catalogRefresh";
+} from "../services/catalogRefresh";
 
 function snapshot(
   overrides: Partial<CatalogSnapshot> = {},

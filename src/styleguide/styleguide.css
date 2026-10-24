@@ -134,3 +134,18 @@
 .sidebar a:hover {
   text-decoration: none;
 }
+
+/* A whole two-panel page shown at specimen size. */
+.sg-browse-frame {
+  height: 320px;
+}
+
+.sg-browse-frame .live-tv-layout.browse-layout {
+  height: 100%;
+}
+
+/* The real two-panel layout at specimen size: two 320px panels, 360px high. */
+.sg-panel-frame.live-tv-layout.browse-layout {
+  height: 360px;
+  grid-template-columns: repeat(2, 320px);
+}

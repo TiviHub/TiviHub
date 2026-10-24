@@ -1,10 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { decryptBackup, encryptBackup } from "../backup";
-import { formatCatalogChangeSummary } from "../catalogRefresh";
+import { decryptBackup, encryptBackup } from "../services/backup";
+import { formatCatalogChangeSummary } from "../services/catalogRefresh";
 import { createSnapshot, restoreSnapshot } from "../storage/database";
-import { clearSubtitleCache, countSavedSubtitles } from "../subtitleService";
+import { clearSubtitleCache, countSavedSubtitles } from "../services/subtitleService";
 import type { Playlist, UserDataSnapshot } from "../types";
 import { Icon } from "./common";
+import { BrowseShell } from "./BrowseShell";
+import { EmptyPanel } from "./EmptyPanel";
+import { NavPanel, type NavPanelItem } from "./NavPanel";
 
 type ThemePreference = "system" | "light" | "dark";
 
@@ -84,6 +87,7 @@ export function SettingsPage({
   onRefreshEpg: () => Promise<void>;
   onDownloadDiagnostics: () => Promise<boolean>;
 }) {
+  const [group, setGroup] = useState("sources");
   const [keyDraft, setKeyDraft] = useState(apiKey);
   const [keyNotice, setKeyNotice] = useState<string | null>(null);
   const [mdblistDraft, setMdblistDraft] = useState(mdblistApiKey);
@@ -226,34 +230,34 @@ export function SettingsPage({
     }
   }
 
+  const sections: NavPanelItem[] = [
+    { id: "sources", label: "Sources", icon: "playlist_play", count: sources.length },
+    { id: "appearance", label: "Appearance", icon: "dark_mode" },
+    { id: "content-visibility", label: "Adult content", icon: "shield" },
+    { id: "downloads", label: "Downloads", icon: "download" },
+    { id: "subtitles", label: "Subtitles", icon: "subtitles" },
+    ...(onSaveMdblistApiKey ? [{ id: "ratings", label: "External ratings", icon: "high_quality" } as const] : []),
+    { id: "data", label: "Backup and diagnostics", icon: "backup" },
+    { id: "privacy", label: "Privacy and legal", icon: "lock" },
+    ...(isDesktopApp ? [{ id: "updates", label: "App updates", icon: "refresh" } as const] : []),
+  ];
+
   return (
-    <section className="settings-page">
-      <div className="page-intro">
-        <p className="eyebrow">MAKE IT YOURS</p>
-        <h1>Settings</h1>
-        <p>Manage this device's local data, sources, and appearance.</p>
-      </div>
-
-      <div className="settings-layout">
-        <nav aria-label="Settings sections" className="settings-nav">
-          <p>ON THIS PAGE</p>
-          <a href="#settings-appearance"><Icon name="dark_mode" /><span>Appearance</span></a>
-          <a href="#settings-content-visibility"><Icon name="shield" /><span>Adult content</span></a>
-          <a href="#settings-sources"><Icon name="playlist_play" /><span>Sources</span></a>
-          <a href="#settings-downloads"><Icon name="download" /><span>Downloads</span></a>
-          <a href="#settings-subtitles"><Icon name="subtitles" /><span>Subtitles</span></a>
-          {onSaveMdblistApiKey && (
-            <a href="#settings-ratings"><Icon name="high_quality" /><span>External ratings</span></a>
-          )}
-          <a href="#settings-backup"><Icon name="backup" /><span>Encrypted backup</span></a>
-          <a href="#settings-diagnostics"><Icon name="speed" /><span>Diagnostics</span></a>
-          <a href="#settings-privacy-card"><Icon name="lock" /><span>Privacy by design</span></a>
-          <a href="#settings-legal"><Icon name="info" /><span>Legal and content rights</span></a>
-          {isDesktopApp && <a href="#settings-updates"><Icon name="refresh" /><span>App updates</span></a>}
-        </nav>
-
-        <div className="settings-content">
-          <section aria-labelledby="settings-appearance-heading" className="settings-group" id="settings-appearance">
+    <BrowseShell
+      bodyClassName="live-channel-list browse-list settings-body"
+      label="Settings"
+      nav={(
+        <NavPanel
+          items={sections}
+          onSelect={setGroup}
+          selectedId={group}
+          title="Settings"
+        />
+      )}
+      title={sections.find((entry) => entry.id === group)?.label ?? "Settings"}
+    >
+      <div className="settings-content">
+          <section aria-labelledby="settings-appearance-heading" className="settings-group" id="settings-appearance" hidden={group !== "appearance"}>
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="dark_mode" /></div>
@@ -278,7 +282,7 @@ export function SettingsPage({
             </div>
           </section>
 
-          <section aria-labelledby="settings-content-heading" className="settings-group" id="settings-content-visibility">
+          <section aria-labelledby="settings-content-heading" className="settings-group" id="settings-content-visibility" hidden={group !== "content-visibility"}>
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="shield" /></div>
@@ -298,19 +302,19 @@ export function SettingsPage({
             </div>
           </section>
 
-          <section aria-labelledby="settings-sources-heading" className="settings-group settings-sources" id="settings-sources">
+          <section aria-labelledby="settings-sources-heading" className="settings-group settings-sources" id="settings-sources" hidden={group !== "sources"}>
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="playlist_play" /></div>
                 <div><h2 id="settings-sources-heading">Your sources</h2><p>Remote catalogs are cached locally, auto-refresh every 24 hours, and can be refreshed anytime.</p></div>
               </div>
               {sources.length === 0 ? (
-                <p className="settings-empty">No sources connected yet. Add a playlist to browse your media.</p>
+                <EmptyPanel icon="playlist_play" title="No sources yet">Add an M3U playlist, an Xtream Codes account or a portal to browse your media.</EmptyPanel>
               ) : (
                 <div className="source-list">
                   {sources.map((source) => (
                     <article className={`source-row${source.id === activeSourceId ? " active" : ""}`} key={source.id}>
-                      <span className="source-row-icon"><Icon name={source.type === "M3U" ? "playlist_play" : "dns"} /></span>
+                      <span className="source-row-icon"><Icon name={source.type === "M3U" ? "playlist_play" : source.type === "STALKER" ? "devices" : "dns"} /></span>
                       <div className="source-row-copy">
                         <strong>{source.name}</strong>
                         <small>{source.type}{source.expiresAtMillis
@@ -374,7 +378,7 @@ export function SettingsPage({
             </div>
           </section>
 
-          <section aria-labelledby="settings-downloads-heading" className="settings-group" id="settings-downloads">
+          <section aria-labelledby="settings-downloads-heading" className="settings-group" id="settings-downloads" hidden={group !== "downloads"}>
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="download" /></div>
@@ -413,7 +417,7 @@ export function SettingsPage({
             </div>
           </section>
 
-          <section aria-labelledby="settings-subtitles-heading" className="settings-group" id="settings-subtitles">
+          <section aria-labelledby="settings-subtitles-heading" className="settings-group" id="settings-subtitles" hidden={group !== "subtitles"}>
             <div className="settings-card">
               <div className="settings-card-heading">
                 <div className="settings-heading-icon"><Icon name="subtitles" /></div>
@@ -469,7 +473,7 @@ export function SettingsPage({
           </section>
 
           {onSaveMdblistApiKey && (
-            <section aria-labelledby="settings-ratings-heading" className="settings-group" id="settings-ratings">
+            <section aria-labelledby="settings-ratings-heading" className="settings-group" id="settings-ratings" hidden={group !== "ratings"}>
               <div className="settings-card">
                 <div className="settings-card-heading">
                   <div className="settings-heading-icon"><Icon name="high_quality" /></div>
@@ -509,7 +513,7 @@ export function SettingsPage({
             </section>
           )}
 
-          <section aria-labelledby="settings-data-heading" className="settings-group settings-data" id="settings-data">
+          <section aria-labelledby="settings-data-heading" className="settings-group settings-data" id="settings-data" hidden={group !== "data"}>
             <h2 className="sr-only" id="settings-data-heading">Data and diagnostics</h2>
             <div className="settings-card" id="settings-backup">
               <div className="settings-card-heading">
@@ -587,7 +591,7 @@ export function SettingsPage({
             </div>
           </section>
 
-          <section aria-labelledby="settings-privacy-heading" className="settings-group settings-privacy" id="settings-privacy">
+          <section aria-labelledby="settings-privacy-heading" className="settings-group settings-privacy" id="settings-privacy" hidden={group !== "privacy"}>
             <h2 className="sr-only" id="settings-privacy-heading">Privacy and legal</h2>
             <div className="settings-card privacy-settings" id="settings-privacy-card">
               <div className="settings-card-heading">
@@ -644,7 +648,7 @@ export function SettingsPage({
           </section>
 
           {isDesktopApp && (
-            <section aria-labelledby="settings-updates-heading" className="settings-group" id="settings-updates">
+            <section aria-labelledby="settings-updates-heading" className="settings-group" id="settings-updates" hidden={group !== "updates"}>
               <div className="settings-card">
                 <div className="settings-card-heading">
                   <div className="settings-heading-icon"><Icon name="download" /></div>
@@ -685,8 +689,7 @@ export function SettingsPage({
               </div>
             </section>
           )}
-        </div>
       </div>
-    </section>
+    </BrowseShell>
   );
 }

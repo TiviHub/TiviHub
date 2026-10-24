@@ -1,0 +1,43 @@
+import { loadXtreamLiveCategories, loadXtreamLiveChannels } from "../providers/xtream";
+import { loadStalkerChannels } from "../providers/stalker";
+import type { LiveChannel, Playlist } from "../types";
+import { cachedBrowser, memoryBrowser, type ListCache } from "./lists";
+import type { Browser } from "./types";
+
+/** Not a real group name: picks every channel marked as a radio station. */
+export const RADIO_CATEGORY_ID = "@@radio";
+
+/**
+ * Live TV read per category, one batch at a time, instead of copied into the database first.
+ * Whatever a source returns for a category is kept in memory for the session, so paging back and forth is free.
+ */
+export type LiveBrowser = Browser<LiveChannel>;
+
+/** A source that lists every channel in one answer (M3U, portal): read once, then grouped here. */
+function fromChannels(load: (signal?: AbortSignal) => Promise<LiveChannel[]>): LiveBrowser {
+  const browser = memoryBrowser(load, {
+    groupOf: (channel) => channel.group,
+    extraCategories: (channels) => {
+      const radio = channels.filter((channel) => channel.radio).length;
+      return radio > 0 ? [{ id: RADIO_CATEGORY_ID, name: "Radio", count: radio }] : [];
+    },
+    inCategory: (channel, categoryId) => categoryId === RADIO_CATEGORY_ID ? Boolean(channel.radio) : channel.group === categoryId,
+  });
+  return { categories: browser.categories, page: browser.page };
+}
+
+/** Where the last answer for an Xtream category is kept between sessions. */
+export type LiveChannelCache = ListCache<LiveChannel>;
+
+function xtreamBrowser(playlist: Playlist, cache?: LiveChannelCache): LiveBrowser {
+  return cachedBrowser({
+    categories: (signal) => loadXtreamLiveCategories(playlist, signal),
+    list: (key, categories, signal) => loadXtreamLiveChannels(playlist, key || null, categories, signal),
+  }, cache);
+}
+
+export function createLiveBrowser(playlist: Playlist, storedChannels: () => Promise<LiveChannel[]>, cache?: LiveChannelCache): LiveBrowser {
+  if (playlist.type === "XTREAM") return xtreamBrowser(playlist, cache);
+  if (playlist.type === "STALKER") return fromChannels((signal) => loadStalkerChannels(playlist, signal));
+  return fromChannels(storedChannels);
+}

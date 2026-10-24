@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkForUpdate, latestAvailableUpdate } from "../updates";
+import { checkForUpdate, latestAvailableUpdate } from "../services/updates";
 
 afterEach(() => vi.unstubAllGlobals());
 

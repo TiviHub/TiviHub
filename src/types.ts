@@ -1,4 +1,4 @@
-export type PlaylistType = "M3U" | "XTREAM";
+export type PlaylistType = "M3U" | "XTREAM" | "STALKER";
 export type ContentType = "LIVE" | "MOVIE" | "SERIES" | "EPISODE";
 export type LibraryStatus = "WATCHLIST" | "WATCHING" | "WATCHED";
 export type DrmSystem = "com.widevine.alpha" | "com.apple.fps" | "com.apple.fps.1_0";
@@ -23,16 +23,22 @@ export interface Playlist {
   url: string;
   username: string;
   password: string;
+  /** Stalker portals identify the account by the MAC address of a set-top box. Sealed like the password. */
+  macAddress?: string;
   active: boolean;
   drmLicenseUrl: string;
   drmSystem: DrmSystem;
   drmCertificateUrl?: string;
   epgUrl?: string;
+  /** Sent instead of the default User-Agent on every request for this source (desktop app only). */
+  userAgent?: string;
   fileName?: string;
   demo?: boolean;
   /** Set by the SQLite migration when saved credentials could not be decrypted and must be entered again. */
   needsReentry?: boolean;
   expiresAtMillis?: number;
+  /** IANA time zone the Xtream server reported; replay times are written in it. */
+  serverTimeZone?: string;
   lastCatalogRefreshAt?: number;
   lastCatalogRefreshAttemptAt?: number;
   lastCatalogRefreshOutcome?: CatalogRefreshOutcome;
@@ -49,8 +55,22 @@ export interface LiveChannel {
   streamUrl: string;
   logoUrl?: string;
   tvgId?: string;
+  /** An audio station: played without a video picture and listed under the Radio filter. */
+  radio?: boolean;
+  /** Present when the provider keeps a recording of this channel for replay. */
+  catchup?: ChannelCatchup;
   drmLicenseUrl?: string;
   drmSystem?: DrmSystem;
+}
+
+export type CatchupMode = "xtream" | "default" | "append" | "shift" | "flussonic";
+
+export interface ChannelCatchup {
+  mode: CatchupMode;
+  /** How many days back the provider keeps recordings. */
+  days: number;
+  /** URL template from the playlist's `catchup-source`, for the template modes. */
+  source?: string;
 }
 
 export interface Movie {
@@ -87,6 +107,9 @@ export interface Series {
   imdbId?: string;
   tmdbId?: string;
   addedAtMillis?: number;
+  /** Stalker portals: the command and episode numbers kept with a series listed in the video library. */
+  stalkerCmd?: string;
+  stalkerEpisodes?: number[];
 }
 
 export interface Episode {
@@ -180,6 +203,15 @@ export interface PlayableItem {
   drmSystem?: DrmSystem;
   drmCertificateUrl?: string;
   live: boolean;
+  /** The address kept in the catalog when `streamUrl` was resolved just before playing (Stalker portals). */
+  sourceUrl?: string;
+  /** Load the address as a plain media file, without asking the server what it is first. */
+  direct?: boolean;
+  radio?: boolean;
+  /** The source's custom User-Agent; the player sends it through the desktop proxy. */
+  userAgent?: string;
+  /** A recorded programme of a live channel: seekable, but not saved to the library. */
+  replay?: boolean;
   offline?: boolean;
   parentId?: string;
   parentTitle?: string;
@@ -227,6 +259,20 @@ export interface MdblistPopularCacheEntry {
   items: MdblistPopularItem[];
   fetchedAt: number;
   expiresAt: number;
+}
+
+/** The last answer for one Xtream live category, shown at once on the next visit while a fresh one loads. */
+export interface LiveCategoryCacheEntry {
+  key: string;
+  playlistId: string;
+  channels: LiveChannel[];
+  /** Movie categories reuse this store: the movies of one category go here instead of `channels`. */
+  movies?: Movie[];
+  /** Same for series. */
+  series?: Series[];
+  /** Set on the entry that holds a source's category list instead of one category's channels. */
+  categories?: { id: string; name: string; count?: number }[];
+  savedAt: number;
 }
 
 export interface MdblistRateLimitState {

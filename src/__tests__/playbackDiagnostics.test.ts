@@ -5,7 +5,7 @@ import {
   createPlaybackDiagnosticReport,
   playbackDiagnosticError,
   shouldAttemptNativeHlsFallback,
-} from "../playbackDiagnostics";
+} from "../lib/playbackDiagnostics";
 
 describe("playback diagnostics", () => {
   it("offers native HLS only for HLS URLs when the browser reports possible support", () => {

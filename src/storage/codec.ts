@@ -5,9 +5,9 @@ export const OPEN_SUBTITLES_KEY_ID = "open-subtitles-api-key";
 export const MDBLIST_KEY_ID = "mdblist-api-key";
 
 export async function toStoredPlaylist(backend: StorageBackend, playlist: Playlist): Promise<StoredPlaylist> {
-  const { url, username, password, ...metadata } = playlist;
-  const privateData = url || username || password
-    ? await backend.encrypt(JSON.stringify({ url, username, password }))
+  const { url, username, password, macAddress, ...metadata } = playlist;
+  const privateData = url || username || password || macAddress
+    ? await backend.encrypt(JSON.stringify({ url, username, password, macAddress }))
     : undefined;
   return { ...metadata, privateData };
 }
@@ -18,12 +18,14 @@ export async function fromStoredPlaylist(backend: StorageBackend, playlist: Stor
       url: string;
       username: string;
       password: string;
+      macAddress?: string;
     };
     return {
       ...playlist,
       url: privateData.url,
       username: privateData.username,
       password: privateData.password,
+      ...(privateData.macAddress ? { macAddress: privateData.macAddress } : {}),
     };
   }
   const credentials = playlist.credentials

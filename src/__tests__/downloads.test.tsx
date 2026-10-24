@@ -10,9 +10,11 @@ import {
   downloadMedia,
   getDownloadedBlob,
   getDownloads,
+  removeDownload,
+  removeOrphanedParts,
   type DownloadableMedia,
   type DownloadTask,
-} from "../downloads";
+} from "../services/downloads";
 import { DownloadsPage } from "../components/DownloadsPage";
 
 const media: DownloadableMedia = {
@@ -39,6 +41,39 @@ async function clearDownloadDirectorySetting() {
   database.close();
 }
 
+async function storedFileKeys(): Promise<IDBValidKey[]> {
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("tivihub-downloads");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const keys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+    const request = database.transaction("files").objectStore("files").getAllKeys();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  database.close();
+  return keys;
+}
+
+function streamOf(megabytes: number, failAfter?: number) {
+  let sent = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (failAfter !== undefined && sent >= failAfter) {
+        controller.error(new Error("connection lost"));
+        return;
+      }
+      if (sent >= megabytes) {
+        controller.close();
+        return;
+      }
+      sent += 1;
+      controller.enqueue(new Uint8Array(1024 ** 2));
+    },
+  });
+}
+
 beforeEach(async () => {
   vi.stubGlobal("Blob", window.Blob);
   await clearCompletedDownloads();
@@ -52,6 +87,61 @@ afterEach(async () => {
 });
 
 describe("offline downloads", () => {
+  it("downloads through the backend proxy when the source has a User-Agent", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "proxy_register") return { baseUrl: "http://127.0.0.1:5000/p/token" };
+      return undefined;
+    });
+    vi.stubGlobal("isTauri", true);
+    vi.stubGlobal("__TAURI_INTERNALS__", { invoke });
+    const fetchMock = vi.fn(async (_address: string) => new Response(new Uint8Array([1, 2, 3]), {
+      headers: { "content-type": "video/mp4" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await downloadMedia(media, new AbortController().signal, vi.fn(), "Custom/1");
+
+    expect(fetchMock.mock.calls[0][0])
+      .toBe("http://127.0.0.1:5000/p/token?u=https%3A%2F%2Fmedia.example%2Fsample.mp4");
+    expect(invoke).toHaveBeenCalledWith("proxy_register", { headers: [["User-Agent", "Custom/1"]] }, undefined);
+  });
+
+  it("stores a large video in pieces and joins them for playback", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf(20), {
+      headers: { "content-type": "video/mp4", "content-length": String(20 * 1024 ** 2) },
+    })));
+
+    const { record } = await downloadMedia(media, new AbortController().signal, vi.fn());
+
+    expect(record.parts).toBe(3);
+    expect(record.sizeBytes).toBe(20 * 1024 ** 2);
+    // fake-indexeddb cannot keep a Blob's bytes, so only the join itself is checked here.
+    expect(await getDownloadedBlob(record.id)).toBeInstanceOf(Blob);
+  });
+
+  it("leaves no stored pieces behind when the connection drops", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf(20, 10), {
+      headers: { "content-type": "video/mp4" },
+    })));
+
+    await expect(downloadMedia(media, new AbortController().signal, vi.fn())).rejects.toThrow("connection lost");
+
+    expect(await storedFileKeys()).toEqual([]);
+  });
+
+  it("removes pieces whose download never finished", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(streamOf(20), {
+      headers: { "content-type": "video/mp4" },
+    })));
+    const { record } = await downloadMedia(media, new AbortController().signal, vi.fn());
+    expect(await storedFileKeys()).toHaveLength(3);
+
+    await removeOrphanedParts();
+    expect(await storedFileKeys()).toHaveLength(3);
+    await removeDownload(record.id);
+    expect(await storedFileKeys()).toEqual([]);
+  });
+
   it("allows direct non-DRM video files and rejects playlists and protected streams", () => {
     expect(canDownloadMedia(media)).toBe(true);
     expect(canDownloadMedia({ ...media, streamUrl: "https://media.example/sample.m3u8" })).toBe(false);
@@ -132,11 +222,11 @@ describe("offline downloads", () => {
 
   it("refuses files larger than the offline storage limit before reading the body", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array([1]), {
-      headers: { "content-type": "video/mp4", "content-length": String(3 * 1024 ** 3) },
+      headers: { "content-type": "video/mp4", "content-length": String(9 * 1024 ** 3) },
     })));
 
     await expect(downloadMedia(media, new AbortController().signal, vi.fn()))
-      .rejects.toThrow("larger than 2 GB");
+      .rejects.toThrow("larger than 8 GB");
     expect(await getDownloads()).toEqual([]);
   });
 
@@ -200,7 +290,6 @@ describe("offline downloads", () => {
         onRetry={vi.fn()}
         onPlay={vi.fn()}
         onAddPlaylist={vi.fn()}
-        onBrowseMovies={vi.fn()}
       />,
     );
 
@@ -212,8 +301,7 @@ describe("offline downloads", () => {
     expect(document.querySelector(".home-empty-source-types")?.getAttribute("aria-label")).toBe("Supported source types");
   });
 
-  it("uses the same empty panel when a playlist exists but no videos are downloaded", () => {
-    const onBrowseMovies = vi.fn();
+  it("shows an empty message in the panel when a playlist exists but no videos are downloaded", () => {
     render(
       <DownloadsPage
         downloads={[]}
@@ -226,16 +314,11 @@ describe("offline downloads", () => {
         onRetry={vi.fn()}
         onPlay={vi.fn()}
         onAddPlaylist={vi.fn()}
-        onBrowseMovies={onBrowseMovies}
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "No downloads yet" })).toBeTruthy();
-    expect(document.querySelector(".home-empty .home-empty-panel")).toBeTruthy();
-    expect(document.querySelector(".downloads-page")).toBeNull();
-    expect(document.querySelector(".home-empty-source-types")).toBeNull();
-    screen.getByRole("button", { name: "Browse movies" }).click();
-    expect(onBrowseMovies).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Choose Download on a movie or episode/)).toBeTruthy();
+    expect(document.querySelector(".browse-layout")).toBeTruthy();
   });
 
   it("lets a failed download be retried or removed", () => {
@@ -263,7 +346,6 @@ describe("offline downloads", () => {
         onRetry={onRetry}
         onPlay={vi.fn()}
         onAddPlaylist={vi.fn()}
-        onBrowseMovies={vi.fn()}
       />,
     );
 

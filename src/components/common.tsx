@@ -126,6 +126,10 @@ export type IconName =
   | "filter_list"
   | "sort"
   | "schedule"
+  | "history"
+  | "open_in_new"
+  | "radio"
+  | "restart_alt"
   | "chevron_left"
   | "chevron_right"
   | "delete"
@@ -137,6 +141,10 @@ export type IconName =
   | "more_vert"
   | "view_list"
   | "fullscreen"
+  | "fullscreen_exit"
+  | "pause"
+  | "volume_up"
+  | "volume_off"
   | "graphic_eq"
   | "high_quality"
   | "speed"
@@ -152,6 +160,34 @@ export type IconName =
   | "info"
   | "content_copy"
   | "logout";
+
+/** The search box every list uses: a magnifier, the input and, once something is typed, a button that empties it. */
+export function SearchField({ label, placeholder, value, onChange }: {
+  /** What a screen reader calls the field. */
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <label className="search-field">
+      <Icon name="search" />
+      <span className="sr-only">{label}</span>
+      <input onChange={(event) => onChange(event.target.value)} placeholder={placeholder} ref={inputRef} value={value} />
+      {value && (
+        <button
+          aria-label="Clear search"
+          className="search-clear"
+          onClick={() => { onChange(""); inputRef.current?.focus(); }}
+          type="button"
+        >
+          <Icon name="close" />
+        </button>
+      )}
+    </label>
+  );
+}
 
 export function Icon({ name }: { name: IconName }) {
   const iconRef = useRef<HTMLSpanElement>(null);
@@ -530,7 +566,8 @@ export function CustomSelect<Value extends string = string>({
             </div>
           ))}
         </div>,
-        document.body,
+        // Only the full-screen element is visible while in full screen.
+        document.fullscreenElement ?? document.body,
       )}
     </div>
   );

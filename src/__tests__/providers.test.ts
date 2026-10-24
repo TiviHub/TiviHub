@@ -9,6 +9,8 @@ import {
 import { parseXmltvDate } from "../providers/xmltv";
 import {
   loadXtreamCatalog,
+  loadXtreamLiveCategories,
+  loadXtreamLiveChannels,
   loadXtreamShortEpg,
   XtreamAccountExpiredError,
   xtreamStreamUrl,
@@ -22,6 +24,19 @@ afterEach(() => {
 });
 
 describe("M3U provider parsing", () => {
+  it("skips streams that are not HTTP instead of failing the import", () => {
+    const content = [
+      "#EXTM3U",
+      "#EXTINF:-1,Radio",
+      "rtmp://host/live",
+      "#EXTINF:-1,News",
+      "https://host/news.m3u8",
+    ].join("\n");
+    const catalog = parseM3uCatalog(content, { id: "mixed", name: "Mixed" });
+    expect(catalog.channels.map((channel) => channel.name)).toEqual(["News"]);
+    expect(catalog.skipped).toBe(1);
+  });
+
   it("parses quoted metadata and resolves relative stream URLs", () => {
     const channels = parseM3u(
       '#EXTM3U\n#EXTINF:-1 tvg-id="news.1" tvg-logo="https://cdn.example/logo.png" group-title="News, World",Evening News\nstreams/news.m3u8\n',
@@ -275,6 +290,49 @@ describe("Xtream URL construction", () => {
     });
   });
 
+  it("browses live TV by category without downloading the catalog", async () => {
+    const requested: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      requested.push(`${url.searchParams.get("action")}:${url.searchParams.get("category_id") ?? ""}`);
+      const body = url.searchParams.get("action") === "get_live_categories"
+        ? [{ category_id: "1", category_name: "News" }, { category_id: "2", category_name: "Sport" }]
+        : [{ stream_id: 7, name: "Late News", category_id: "1" }];
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+
+    const categories = await loadXtreamLiveCategories(playlist);
+    expect(categories).toEqual([{ id: "1", name: "News" }, { id: "2", name: "Sport" }]);
+    const channels = await loadXtreamLiveChannels(playlist, "1", categories);
+    expect(channels).toMatchObject([{ name: "Late News", group: "News", providerId: "7" }]);
+    expect(requested).toEqual(["get_live_categories:", "get_live_streams:1"]);
+  });
+
+  it("reads archive availability and the server time zone", async () => {
+    const responses: Record<string, unknown> = {
+      "": { user_info: { auth: 1, status: "Active" }, server_info: { timezone: "Europe/Amsterdam" } },
+      get_live_categories: [],
+      get_live_streams: [
+        { stream_id: 1, name: "Recorded", tv_archive: 1, tv_archive_duration: "7" },
+        { stream_id: 2, name: "Not recorded", tv_archive: 0, tv_archive_duration: "0" },
+      ],
+      get_vod_categories: [],
+      get_vod_streams: [],
+      get_series_categories: [],
+      get_series: [],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => new Response(
+      JSON.stringify(responses[new URL(String(input)).searchParams.get("action") ?? ""]),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const catalog = await loadXtreamCatalog(playlist);
+
+    expect(catalog.serverTimeZone).toBe("Europe/Amsterdam");
+    expect(catalog.channels[0].catchup).toEqual({ mode: "xtream", days: 7 });
+    expect(catalog.channels[1].catchup).toBeUndefined();
+  });
+
   it("rejects Xtream responses larger than 200 MB", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       user_info: { auth: 1, status: "Active" },
@@ -422,5 +480,26 @@ describe("Xtream URL construction", () => {
 
     await expect(loadXtreamShortEpg(playlist, channels)).rejects.toThrow(/no more than 96 channels/i);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("M3U classification by stream path", () => {
+  it("sorts Xtream-style lists into live, movies and series even when the group names say nothing", () => {
+    const content = [
+      "#EXTM3U",
+      '#EXTINF:-1 group-title="|NL| NETFLIX",NL - Show (2020) S01 E02',
+      "http://host.example/series/user/pass/101.mkv",
+      '#EXTINF:-1 group-title="|NL| NETFLIX",NL - A Film (2021)',
+      "http://host.example/movie/user/pass/202.mp4",
+      '#EXTINF:-1 group-title="|NL| NPO",NPO 1',
+      "http://host.example/live/user/pass/303.ts",
+      '#EXTINF:-1 group-title="Sports",Plain channel',
+      "http://host.example/user/pass/404",
+    ].join("\n");
+    const catalog = parseM3uCatalog(content, { id: "x", name: "X" });
+    expect(catalog.series.map((show) => show.name)).toEqual(["NL - Show (2020)"]);
+    expect(catalog.episodes).toHaveLength(1);
+    expect(catalog.movies.map((movie) => movie.name)).toEqual(["NL - A Film (2021)"]);
+    expect(catalog.channels.map((channel) => channel.name)).toEqual(["NPO 1", "Plain channel"]);
   });
 });

@@ -4,7 +4,7 @@ import {
   createSubtitleService,
   SUBTITLE_SEARCH_TTL_MILLIS,
   type SubtitleCache,
-} from "../subtitleService";
+} from "../services/subtitleService";
 import type { OpenSubtitleChoices, OpenSubtitleFileCacheEntry, OpenSubtitleSearchCacheEntry } from "../types";
 
 function memoryCache(): SubtitleCache & {

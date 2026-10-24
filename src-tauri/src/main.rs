@@ -2,6 +2,8 @@
 
 mod chromecast;
 mod diagnostics;
+mod external_player;
+mod net;
 mod storage;
 
 use diagnostics::{BackendDiagnosticEvent, BackendDiagnostics};
@@ -147,6 +149,7 @@ fn get_backend_diagnostics(
 fn main() {
     tauri::Builder::default()
         .manage(BackendDiagnostics::default())
+        .manage(net::ProxyState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -160,7 +163,7 @@ fn main() {
                     std::fs::create_dir_all(&dir)
                         .map_err(|_| "Could not create TiviHub's data folder.".to_string())?;
                     let key = storage::load_or_create_key(&dir, &diagnostics)?;
-                    storage::Store::open(&dir.join("tivihub.sqlite3"), key)
+                    storage::Store::open(&dir.join(storage::DATABASE_FILE), key)
                 });
             if opened.is_err() {
                 diagnostics.record("storage", "SQLITE_OPEN_FAILED");
@@ -175,6 +178,9 @@ fn main() {
             cast_media,
             stop_cast,
             get_backend_diagnostics,
+            external_player::open_in_external_player,
+            net::http_fetch,
+            net::proxy_register,
             storage::storage_status,
             storage::storage_get,
             storage::storage_get_all,

@@ -1,8 +1,8 @@
 import { Skeleton } from "./Skeleton";
 import { useEffect, useState } from "react";
 import { MdblistError } from "../providers/mdblist";
-import { createTitleIdentity } from "../ratings";
-import type { RatingsService } from "../ratingsService";
+import { createTitleIdentity } from "../lib/ratings";
+import type { RatingsService } from "../services/ratingsService";
 import type { ExternalRating, Movie, RatingsMediaType, Series } from "../types";
 
 type RatingsState =
@@ -37,21 +37,13 @@ function formatRating(rating: ExternalRating): string {
         : `${Math.round(rating.score ?? 0)}/100`;
 }
 
+const SHORT_LABELS: Record<string, string> = { imdb: "IMDb", tmdb: "TMDB", tomatoes: "RT", metacritic: "MC" };
+
+/** The source's short name on a tile in its brand colour, the same for every source. */
 function RatingLogo({ source }: { source: string }) {
-  if (source === "tomatoes") {
-    return (
-      <span aria-hidden="true" className="external-rating-logo external-rating-logo-tomatoes">
-        <svg viewBox="0 0 20 20">
-          <path d="M10 5.5C5.4 2.2 2.1 6.1 2.6 10.6c.4 4 3.4 6.6 7.4 6.6s7-2.6 7.4-6.6C17.9 6.1 14.6 2.2 10 5.5Z" />
-          <path d="M10 5.4 8 2.7l2.4 1 2.8-1.2-1.1 2.6 2.4.2-2.5 1.1-2-1.3-2.2 1L5 4.8l3.1.3L7 2.9Z" />
-        </svg>
-        RT
-      </span>
-    );
-  }
   return (
-    <span aria-hidden="true" className={`external-rating-logo external-rating-logo-${source}`}>
-      {source === "metacritic" ? "M" : source === "imdb" ? "IMDb" : "TMDB"}
+    <span aria-hidden="true" className="external-rating-logo">
+      {SHORT_LABELS[source] ?? ratingSourceLabel(source)}
     </span>
   );
 }

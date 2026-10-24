@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MdblistError } from "../providers/mdblist";
-import { createTitleIdentity } from "../ratings";
-import { createRatingsService, RATINGS_TTL_MILLIS, type RatingsCache } from "../ratingsService";
+import { createTitleIdentity } from "../lib/ratings";
+import { createRatingsService, RATINGS_TTL_MILLIS, type RatingsCache } from "../services/ratingsService";
 import type { ExternalRatings, RatingsCacheEntry } from "../types";
 
 const identity = createTitleIdentity({ name: "Heat", year: 1995, imdbId: "tt0113277" }, "MOVIE")!;

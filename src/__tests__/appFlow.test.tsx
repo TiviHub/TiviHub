@@ -88,6 +88,25 @@ describe("application source lifecycle", () => {
     await removeLibraryItem(resumeItemId);
   }, 30_000);
 
+  it("opens Series on its own first category after a category was chosen in Movies", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Opening your library" })).toBeNull());
+    await user.click(screen.getAllByRole("button", { name: "Open settings" })[0]);
+    await user.click(await screen.findByRole("button", { name: /^Add (?:another )?source$/ }));
+    await user.click(await screen.findByRole("button", { name: "Import demo" }));
+    await screen.findAllByText("Demo HLS Channel 1");
+    const nav = () => within(document.querySelector("#desktop-navigation") as HTMLElement);
+
+    await user.click(nav().getByRole("button", { name: "Movies" }));
+    await user.click(await screen.findByRole("button", { name: /Sci-Fi/ }));
+    await user.click(nav().getByRole("button", { name: "Series" }));
+
+    const all = await screen.findByRole("button", { name: /^All/ });
+    expect(all.getAttribute("aria-pressed")).toBe("true");
+    expect(await screen.findAllByRole("article")).not.toHaveLength(0);
+  }, 30_000);
+
   it("shows a start-watching state when a source has content but the library is empty", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -102,7 +121,7 @@ describe("application source lifecycle", () => {
     expect(await screen.findByRole("heading", { name: "Make Home yours" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Explore content/ })).toBeTruthy();
     await user.click(within(document.querySelector("#desktop-navigation") as HTMLElement).getByRole("button", { name: "TV Guide" }));
-    expect(await screen.findByRole("region", { name: "Full TV guide" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "TV Guide", level: 1 })).toBeTruthy();
     expect(screen.getByRole("slider", { name: "Timeline zoom (100%)" })).toBeTruthy();
     expect(screen.queryByText("READY TO WATCH")).toBeNull();
     expect(screen.queryByRole("button", { name: "Collapse player" })).toBeNull();

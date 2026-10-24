@@ -3,6 +3,7 @@ import type {
   Episode,
   Favorite,
   LibraryItem,
+  LiveCategoryCacheEntry,
   LiveChannel,
   MdblistPopularCacheEntry,
   MdblistRateLimitState,
@@ -19,7 +20,7 @@ import type {
 /** Encrypted text as the backend stores it: an IndexedDB payload object or an opaque string from Rust. */
 export type Sealed = unknown;
 
-export type StoredPlaylist = Omit<Playlist, "url" | "username" | "password"> & {
+export type StoredPlaylist = Omit<Playlist, "url" | "username" | "password" | "macAddress"> & {
   privateData?: Sealed;
   url?: string;
   credentials?: Sealed;
@@ -42,6 +43,7 @@ export interface StoreValues {
   epg: EpgProgram;
   ratings: RatingsCacheEntry;
   popularCatalog: MdblistPopularCacheEntry;
+  liveCategoryCache: LiveCategoryCacheEntry;
   mdblistRateLimits: MdblistRateLimitState;
   subtitleSearch: OpenSubtitleSearchCacheEntry;
   subtitleFiles: OpenSubtitleFileCacheEntry;
@@ -54,7 +56,7 @@ export type IndexName = "byPlaylist" | "bySeries" | "byChannel" | "bySource";
 
 export const STORE_NAMES: readonly StoreName[] = [
   "playlists", "documents", "channels", "movies", "series", "episodes", "favorites",
-  "library", "epg", "ratings", "popularCatalog", "mdblistRateLimits", "subtitleSearch",
+  "library", "epg", "ratings", "popularCatalog", "liveCategoryCache", "mdblistRateLimits", "subtitleSearch",
   "subtitleFiles", "subtitleChoices", "secrets",
 ];
 

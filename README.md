@@ -31,9 +31,9 @@ TiviHub is a player and organizer, not a content service. It does not provide pl
 
 ## What you can do
 
-- **Connect your sources:** Import an M3U file or URL, or configure an Xtream-compatible source.
+- **Connect your sources:** Import an M3U file or URL, configure an Xtream-compatible source, or (desktop app) add a Stalker portal with its address and MAC address.
 - **Keep catalogs ready:** Remote catalogs are cached on your device and refresh automatically every 24 hours; you can refresh them manually at any time.
-- **Keep your library organized:** Browse live TV, programme guide data, movies, series, and episodes in one place.
+- **Keep your library organized:** Browse live TV, programme guide data, movies, series, and episodes by category in one place. Movies and series load a category at a time, so large providers open fast.
 - **Pick up where you left off:** Save favorites and playback progress on your device.
 - **Cast to Google Cast devices:** Send compatible, unprotected streams directly from the provider to a Chromecast on your local network.
 - **Make it yours:** Choose a light, dark, or system theme.
@@ -51,7 +51,7 @@ The latest release includes the Windows 10/11 x64 installer, Linux x64 AppImage 
 
 The installed player runs with its interface and assets bundled. It has no TiviHub account, application server, analytics, cloud sync, or automatic installer. The app checks the public GitHub Releases API for updates; it does not send playlists or library data in that request, and updates are downloaded and installed manually.
 
-When you check for updates, GitHub receives a request from your network address. When you connect a remote source, refresh content, play media, search for subtitles, or open a movie or series with an MDBList key configured, TiviHub connects directly to the provider or subtitle service you configured. Those services receive the request and your network address; TiviHub does not proxy or relay it. Installer downloads are served by GitHub, not by the TiviHub website host.
+When you check for updates, GitHub receives a request from your network address. When you connect a remote source, refresh content, play media, search for subtitles, or open a movie or series with an MDBList key configured, TiviHub connects directly to the provider or subtitle service you configured. Those services receive the request and your network address; No TiviHub server proxies or relays it; in the desktop app the request is made by the app on your device. Installer downloads are served by GitHub, not by the TiviHub website host.
 
 When you cast, TiviHub sends the stream URL over your local network to the selected Chromecast, which then requests the stream directly from your provider. URLs may contain provider credentials. Only cast to devices you trust and that are on your local network.
 

@@ -1,7 +1,15 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { CustomSelect, Icon, TooltipLayer, type IconName } from "../components/common";
+import { BrowseCategoryList } from "../components/BrowseCategoryList";
+import { BrowseShell } from "../components/BrowseShell";
+import { LibraryCard } from "../components/LibraryCard";
+import { EmptyPanel } from "../components/EmptyPanel";
+import { NavPanel } from "../components/NavPanel";
+import { Toast } from "../components/Toast";
+import { PlayerControls } from "../components/PlayerControls";
+import { PlayerMenu } from "../components/PlayerMenu";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CustomSelect, Icon, SearchField, TooltipLayer, type IconName } from "../components/common";
 import { ProgressIndicator } from "../components/ProgressIndicator";
-import { CardSkeletons, RowSkeletons, Skeleton } from "../components/Skeleton";
+import { CardSkeletons, CategorySkeletons, ChannelSkeletons, RowSkeletons, Skeleton } from "../components/Skeleton";
 
 // Dev-only page (npm run dev, then /styleguide.html). It uses the app's real classes and components,
 // so a mismatch here is a mismatch in the app. Add new shared UI here when you add it to the app.
@@ -9,7 +17,7 @@ import { CardSkeletons, RowSkeletons, Skeleton } from "../components/Skeleton";
 const TOKENS = [
   "--bg", "--sidebar", "--surface", "--surface-raised", "--surface-hover", "--panel", "--row", "--row-selected",
   "--text", "--muted", "--faint", "--primary", "--primary-hover", "--secondary", "--outline", "--outline-soft",
-  "--success", "--danger", "--glow", "--glow-strong",
+  "--success", "--danger", "--warning", "--glow", "--glow-strong",
   "--radius-sm", "--radius-md", "--radius-lg", "--radius-xl", "--radius-2xl", "--hover-duration",
 ];
 
@@ -26,13 +34,19 @@ const SECTIONS: { name: string; icon: IconName }[] = [
   { name: "Icons", icon: "info" },
   { name: "Inputs", icon: "search" },
   { name: "Dropdowns", icon: "expand_more" },
-  { name: "Tabs", icon: "view_list" },
   { name: "Cards", icon: "movie" },
   { name: "Lists", icon: "playlist_play" },
+  { name: "Player", icon: "play_arrow" },
+  { name: "Browse", icon: "filter_list" },
   { name: "Feedback", icon: "error_outline" },
   { name: "Loading", icon: "refresh" },
   { name: "Pagination", icon: "chevron_right" },
 ];
+
+function DemoSearch({ initial = "", label = "Search", placeholder = "Search movies" }: { initial?: string; label?: string; placeholder?: string }) {
+  const [value, setValue] = useState(initial);
+  return <SearchField label={label} onChange={setValue} placeholder={placeholder} value={value} />;
+}
 
 function Block({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
@@ -41,6 +55,65 @@ function Block({ title, note, children }: { title: string; note?: string; childr
       {children}
       {note && <p className="sg-note">{note}</p>}
     </div>
+  );
+}
+
+/** The player as the app builds it: header, picture, our control bar with the menu, speed and extras. */
+function PlayerSpecimen({ live, radio = false, notice = false, failed = false, loading = false }: { live: boolean; radio?: boolean; notice?: boolean; failed?: boolean; loading?: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  return (
+    <section className={`playback-dialog playback-inline${radio ? " is-radio" : ""}`} ref={dialogRef} style={{ maxWidth: 640, position: "static", height: "auto" }}>
+      <header className="playback-header">
+        <div>
+          <h2>{radio ? "Jazz FM" : live ? "Channel name" : "Movie title"}</h2>
+          <p className="playback-status" role="status">{live ? "Playing live" : "Playing"}</p>
+        </div>
+        <div className="playback-header-actions">
+          <button aria-label="Close player" className="icon-button" data-tooltip="Close player" type="button"><Icon name="close" /></button>
+        </div>
+      </header>
+      {radio && <div className="playback-radio-art"><Icon name="radio" /></div>}
+      <video ref={videoRef} />
+      {loading && <ProgressIndicator className="player-loading" label="Loading the stream" />}
+      <PlayerControls
+        badge={live ? <span className="playback-badge">{radio ? "Radio" : "Live"}</span> : undefined}
+        fullscreenRef={dialogRef}
+        live={live}
+        trailing={<button aria-label="Cast" className="icon-button" data-tooltip="Cast" type="button"><Icon name="cast" /></button>}
+        videoRef={videoRef}
+      >
+        <PlayerMenu
+          actions={live ? [] : [{ label: "Search OpenSubtitles…", icon: "search", onClick: () => undefined }]}
+          sections={[
+            ...(live ? [] : [{ title: "Subtitles", options: [{ label: "Subtitles off", value: "", active: true }, { label: "English", value: "1", active: false }], onSelect: () => undefined }]),
+            { title: "Quality", options: [{ label: "Auto", value: "auto", active: true }, { label: "1080p", value: "1080", active: false }], onSelect: () => undefined },
+          ]}
+        />
+        {!live && (
+          <div className="player-track-select">
+            <Icon name="speed" />
+            <CustomSelect ariaLabel="Playback speed" onValueChange={() => undefined} options={[{ label: "Normal speed", value: "1" }, { label: "1.5×", value: "1.5" }]} value="1" variant="embedded" />
+          </div>
+        )}
+        <button aria-label="Open in VLC or mpv" className="icon-button" data-tooltip="Open in VLC or mpv" type="button"><Icon name="open_in_new" /></button>
+      </PlayerControls>
+      {failed && (
+        <>
+          <p className="player-error" role="alert">Playback failed. The provider did not answer.</p>
+          <div className="playback-error-actions">
+            <button className="secondary-button" type="button"><Icon name="refresh" /> Retry playback</button>
+            <button className="secondary-button" type="button"><Icon name="arrow_back" /> Return to browsing</button>
+            <button className="text-button" type="button"><Icon name="content_copy" /> Copy error details</button>
+          </div>
+        </>
+      )}
+      {notice && (
+        <p className="player-error" role="status">
+          This file has no sound in the built-in player: its audio (usually AC-3 or E-AC-3) cannot be decoded here. Use the Open in VLC or mpv button in the player controls to watch it with sound.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -219,8 +292,8 @@ export function StyleGuide() {
           <p>Search fields are 42px tall with a 0.8rem input and a faint placeholder.</p>
         </div>
         <div className="sg-specimens">
-        <Block title="search-field">
-          <label className="search-field"><Icon name="search" /><span className="sr-only">Search</span><input placeholder="Search movies" /></label>
+        <Block title="SearchField" note="Every search box. The X appears once something is typed and empties the box.">
+          <DemoSearch initial="Matrix" />
         </Block>
         <Block title="topbar-global-search">
           <div className="sg-panel">
@@ -263,41 +336,20 @@ export function StyleGuide() {
         </div>
       </section>
 
-      <section className="sg-section" id="tabs">
-        <div className="sg-section-head">
-          <h2>Tabs</h2>
-          <p>Grey tiles, purple selection bar on the active tab.</p>
-        </div>
-        <div className="sg-specimens">
-        <Block title="library-tabs / library-content-tabs">
-          <div className="library-tabs" role="group">
-            <button className="active" type="button">Continue watching<span>3</span></button>
-            <button type="button">Watchlist<span>12</span></button>
-            <button type="button">Watched<span>0</span></button>
-          </div>
-          <div className="library-content-tabs" role="group">
-            <button className="active" type="button">All<span>3</span></button>
-            <button type="button"><Icon name="movie" />Movies<span>2</span></button>
-            <button type="button"><Icon name="tv" />Series<span>1</span></button>
-          </div>
-        </Block>
-        </div>
-      </section>
-
       <section className="sg-section" id="cards">
         <div className="sg-section-head">
           <h2>Cards</h2>
-          <p>Catalog cards with overlay actions, in poster and live (16:9) shapes.</p>
+          <p>Catalog cards with overlay actions, one poster shape for movies, series and channels. Logos, icons and artwork tiles never get a border: they sit on a lighter tone.</p>
         </div>
         <div className="sg-specimens">
-        <Block title="catalog-card">
+        <Block title="catalog-card" note="Movies, series and channels share one poster-shaped card (2:3). A channel adds the LIVE badge and shows its logo whole, padded, on a lighter tile; with no logo it shows the icon like the others.">
           <div className="sg-grid">
             {(["movie", "tv", "live_tv"] as const).map((icon) => (
               <article className={`catalog-card${icon === "live_tv" ? " live-card" : ""}`} key={icon}>
                 <button className="catalog-card-main" type="button">
                   <span className="catalog-artwork">
                     <span className="catalog-artwork-fallback"><Icon name={icon} /></span>
-                    {icon === "live_tv" && <span className="live-badge"><span /> LIVE</span>}
+                    {icon === "live_tv" && <><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 60'%3E%3Crect width='120' height='60' rx='6' fill='%23ffd34e'/%3E%3Ctext x='60' y='38' font-family='Arial' font-size='24' font-weight='700' text-anchor='middle' fill='%23222'%3ELOGO%3C/text%3E%3C/svg%3E" /><span className="live-badge"><span /> LIVE</span></>}
                   </span>
                   <span className="catalog-card-copy"><strong>Title of the item</strong><small>Category</small></span>
                 </button>
@@ -316,26 +368,13 @@ export function StyleGuide() {
           <p>Library, favorites, episodes and downloads share one card rule at the end of styles.css.</p>
         </div>
         <div className="sg-specimens">
-        <Block title="library-item">
-          <div className="library-items">
-            <article className="library-item">
-              <button className="library-item-main" type="button">
-                <span className="library-item-art"><span className="library-item-art-fallback"><Icon name="movie" /></span></span>
-                <span className="library-item-copy"><strong>Movie title</strong><small>Parent title</small><span className="library-progress"><span style={{ width: "45%" }} /></span></span>
-              </button>
-              <div className="status-select"><Dropdown variant="compact" /></div>
-              <button aria-label="Remove" className="icon-button" data-tooltip="Remove from library" type="button"><Icon name="delete" /></button>
-            </article>
-          </div>
-        </Block>
-        <Block title="favorite-row">
-          <div className="favorite-list">
-            <article className="favorite-row">
-              <button aria-label="View details" className="favorite-art-button" type="button"><span className="library-item-art-fallback"><Icon name="tv" /></span></button>
-              <div><strong>Series title</strong><small>Series</small></div>
-              <button aria-label="Play" className="icon-button" data-tooltip="Play" type="button"><Icon name="play_arrow" /></button>
-              <button aria-label="Remove" className="icon-button is-favorite" data-tooltip="Remove from favorites" type="button"><Icon name="favorite" /></button>
-            </article>
+        <Block title="LibraryCard" note="Library and Favorites use the catalog card. Library titles carry a delete circle and a status dropdown; favorites a pink heart. A channel is poster-sized with its logo shown whole, padded, on a lighter tile.">
+          <div className="movies-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 170px)", gap: 15 }}>
+            <LibraryCard contentType="MOVIE" onOpen={() => undefined} onRemove={() => undefined} openLabel="Resume Movie title" progress={45} removeLabel="Remove" removeTooltip="Remove from library" subtitle="Movies" title="Movie title">
+              <div className="status-select"><CustomSelect ariaLabel="Status" onValueChange={() => undefined} options={[{ label: "Watching", value: "WATCHING" }]} value="WATCHING" variant="compact" /></div>
+            </LibraryCard>
+            <LibraryCard artworkUrl="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 60'%3E%3Crect width='120' height='60' rx='6' fill='%23ffd34e'/%3E%3Ctext x='60' y='38' font-family='Arial' font-size='24' font-weight='700' text-anchor='middle' fill='%23222'%3ELOGO%3C/text%3E%3C/svg%3E" contentType="LIVE" isFavorite onOpen={() => undefined} onRemove={() => undefined} openLabel="Play channel" removeLabel="Remove" removeTooltip="Remove from favorites" subtitle="Live TV" title="Channel with a logo" />
+            <LibraryCard contentType="SERIES" isFavorite onOpen={() => undefined} onRemove={() => undefined} openLabel="View details" removeLabel="Remove" removeTooltip="Remove from favorites" subtitle="Series" title="Favorite series" />
           </div>
         </Block>
         <Block title="episode-download-row">
@@ -385,12 +424,12 @@ export function StyleGuide() {
             <button className="primary-button" type="button"><Icon name="play_arrow" />Resume</button>
           </article>
         </Block>
-        <Block title="subtitle-panel (player): search-field + results + saved list" note="Results and saved rows use the shared card look. The empty card replaces plain hint text.">
+        <Block title="subtitle-panel (player): search-field + results + saved list" note="Results and saved rows use the shared card look. The empty state is an EmptyPanel.">
           <section className="subtitle-panel">
             <div className="subtitle-column">
               <strong className="subtitle-column-title">Search OpenSubtitles</strong>
               <form className="subtitle-search">
-                <label className="search-field"><Icon name="search" /><input aria-label="Subtitle search" placeholder="Movie or episode title" /></label>
+                <DemoSearch label="Subtitle search" placeholder="Movie or episode title" />
                 <button className="secondary-button selected" type="submit">Search</button>
               </form>
               <ul className="subtitle-results">
@@ -402,13 +441,97 @@ export function StyleGuide() {
             </div>
             <div className="subtitle-column">
               <strong className="subtitle-column-title">Saved downloads<span className="subtitle-count">1</span></strong>
-              <div className="subtitle-empty"><Icon name="subtitles" /><p>Nothing saved yet. Download a subtitle and it will appear here.</p></div>
+              <EmptyPanel icon="subtitles" title="Nothing saved yet">Download a subtitle and it will appear here.</EmptyPanel>
             </div>
           </section>
         </Block>
-        <Block title="playback-badge (Live chip in the player header, modal, inline and mini)">
-          <h2 style={{ margin: 0 }}><span className="playback-badge">Live</span>Channel name</h2>
+        </div>
+      </section>
+
+      <section className="sg-section" id="player">
+        <div className="sg-section-head">
+          <h2>Player</h2>
+          <p>One player look for the modal, inline (Live TV) and mini player: a header with the title and status, the picture edge to edge, and our own control bar drawn over the bottom of it (hidden while the video plays and the pointer is away). Settings, speed, external player and Cast share the bar; every icon button has a tooltip.</p>
+        </div>
+        <div className="sg-specimens">
+        <Block title="PlayerControls + PlayerMenu (movie, episode)" note="Play, seek, time, volume, fullscreen. The settings menu holds subtitles, audio, quality and the subtitle actions; speed is an embedded dropdown that shows as an icon.">
+          <PlayerSpecimen live={false} />
         </Block>
+        <Block title="Player loading" note="While a stream is prepared or buffering (a recording can take a while): the standard progress bar, 3px, along the top of the picture. It goes away on the first frame or an error.">
+          <PlayerSpecimen live={false} loading />
+        </Block>
+        <Block title="Player error (with actions)" note="The error and its buttons keep the same space below as above.">
+          <PlayerSpecimen live={false} failed />
+        </Block>
+        <Block title="Player notice (no sound)" note="A notice or error under the picture sits as far from the bottom edge as from the picture.">
+          <PlayerSpecimen live={false} notice />
+        </Block>
+        <Block title="PlayerControls (live channel)" note="No seek bar or speed; the Live chip sits left of the volume control. The Live chip is part of the bar, not the header.">
+          <PlayerSpecimen live />
+        </Block>
+        <Block title="playback-dialog.is-radio" note="A station plays as audio in the same player: its logo (or the radio icon) sits in the middle of the picture, the control bar is under it, and the chip says Radio.">
+          <PlayerSpecimen live radio />
+        </Block>
+        </div>
+      </section>
+
+      <section className="sg-section" id="browse">
+        <div className="sg-section-head">
+          <h2>Browse</h2>
+          <p>Live TV, Movies, Series, TV Guide, Library, Downloads and Settings share one frame: a 320px list on the left, one wide panel beside it, flush against the sidebar.</p>
+        </div>
+        <div className="sg-specimens">
+          <Block title="BrowseCategoryList" note="Favorites and All are pinned above the source's own categories. The selected tile uses the shared selection look.">
+            <div className="live-tv-layout browse-layout sg-panel-frame">
+              <BrowseCategoryList
+                categories={[
+                  { id: "@@favorites", name: "Favorites", count: 3, pinned: true },
+                  { id: "", name: "All", pinned: true },
+                  { id: "news", name: "News", count: 42 },
+                  { id: "sport", name: "Sport", count: 1280 },
+                  { id: "kids", name: "A category with a long name that is cut off", count: 7 },
+                ]}
+                loading={false}
+                onRetry={() => undefined}
+                onSelect={() => undefined}
+                selectedId="news"
+                title="Live categories"
+              />
+              <BrowseCategoryList categories={[]} loading onRetry={() => undefined} onSelect={() => undefined} selectedId={null} title="Loading" />
+            </div>
+          </Block>
+          <Block title="NavPanel" note="The left panel of Library, Downloads and Settings: a short fixed list, same tiles as the category list, icon optional, count pill on the right.">
+            <div className="live-tv-layout browse-layout sg-panel-frame">
+              <NavPanel
+                items={[
+                  { id: "watching", label: "Continue watching", icon: "play_arrow", count: 3 },
+                  { id: "watchlist", label: "Watchlist", icon: "bookmark", count: 12 },
+                  { id: "favorites", label: "Favorites", icon: "favorite", count: 0 },
+                ]}
+                onSelect={() => undefined}
+                selectedId="watching"
+                title="Library"
+              />
+            </div>
+          </Block>
+          <Block title="BrowseShell" note="Heading row (56px) with a count, an optional row of 42px tools, then the content. Empty lists use EmptyPanel inside the panel, never a page-sized empty state.">
+            <div className="sg-browse-frame">
+              <BrowseShell
+                count={0}
+                label="Specimen"
+                nav={<NavPanel items={[{ id: "a", label: "In progress", icon: "download", count: 0 }, { id: "b", label: "Saved", icon: "check_circle", count: 0 }]} onSelect={() => undefined} selectedId="b" title="Downloads" />}
+                title="Saved on this device"
+                tools={<DemoSearch placeholder="Search" />}
+              >
+                <EmptyPanel icon="check_circle" title="Nothing saved yet">Choose Download on a movie or episode to keep it here.</EmptyPanel>
+              </BrowseShell>
+            </div>
+          </Block>
+          <Block title="Error" note="A failed request keeps what is on screen and offers Try again; it never leaves a silent gap.">
+            <div className="live-tv-layout browse-layout sg-panel-frame">
+              <BrowseCategoryList categories={[]} error="Could not reach the provider." loading={false} onRetry={() => undefined} onSelect={() => undefined} selectedId={null} title="Live categories" />
+            </div>
+          </Block>
         </div>
       </section>
 
@@ -418,27 +541,40 @@ export function StyleGuide() {
           <p>Toasts keep their colour but share one shape. Empty states and progress bars.</p>
         </div>
         <div className="sg-specimens">
-        <Block title="notification-toast">
+        <Block title="Toast" note="A flat raised card with a bar on its left edge: green for a notice, red for an error. One or two sentences, a bare dismiss button. It floats bottom right (above the mobile nav on a phone), one at a time. Playlist expired is the same card in the warning colour, persistent and clickable (it opens the playlist to edit); on a phone it is an icon in the top bar.">
           <div className="sg-stack" style={{ maxWidth: 430 }}>
-            <div className="app-message notification-toast notice-message"><Icon name="check_circle" /><span>Playlist refreshed.</span><button aria-label="Dismiss" type="button"><Icon name="close" /></button></div>
-            <div className="app-message notification-toast error-message"><Icon name="error_outline" /><span>Could not reach the provider.</span><button aria-label="Dismiss" type="button"><Icon name="close" /></button></div>
+            <Toast kind="notice" onDismiss={() => undefined}>Source connected. 17,253 live channels. Movies and series load as you open their categories.</Toast>
+            <Toast kind="error" onDismiss={() => undefined}>Could not reach the provider.</Toast>
             <button className="topbar-expiry-warning" style={{ justifySelf: "start" }} type="button"><Icon name="error_outline" /><span>Playlist expired</span></button>
           </div>
         </Block>
-        <Block title="catalog-empty">
-          <div className="catalog-empty compact-empty"><Icon name="search" /><h2>No matches</h2><p>Try another title or clear your filters.</p></div>
+        <Block title="EmptyPanel" note="Every empty or failed panel: icon, title, one sentence, at most one button. Errors keep the same shape, tinted, with Try again. The page-sized version (Add your first source, Make Home yours) is HomeEmptyState; it has the same parts, set larger.">
+          <div className="sg-stack" style={{ maxWidth: 430 }}>
+            <EmptyPanel icon="search" title="No matches">No movies match your search.</EmptyPanel>
+            <EmptyPanel action={<button className="secondary-button" type="button"><Icon name="add" /> Add source</button>} icon="playlist_play" title="No sources yet">Add an M3U playlist, an Xtream Codes account or a portal to browse your media.</EmptyPanel>
+            <EmptyPanel action={<button className="secondary-button" type="button">Try again</button>} error icon="error_outline" title="Could not load movies">The provider did not answer.</EmptyPanel>
+            <EmptyPanel compact icon="schedule" title="No programme information">There is no schedule for this channel.</EmptyPanel>
+          </div>
         </Block>
-        <Block title="settings update row (inside a settings card)">
-          <div className="settings-page" style={{ padding: 0 }}>
-            <div className="settings-update-row">
-              <div className="settings-update-details">
-                <p className="settings-version">Installed version · v1.9.0</p>
-                <div className="settings-update-status" role="status">
-                  <span className="settings-update-indicator current" />
-                  <span>Up to date</span>
+        <Block title="settings update row (inside a settings card)" note="Settings cards sit in the wide panel of the two-panel page; the row inside is plain content, no grey box.">
+          <div className="settings-body">
+            <div className="settings-content">
+              <div className="settings-card">
+                <div className="settings-card-heading">
+                  <div className="settings-heading-icon"><Icon name="download" /></div>
+                  <div><h2>Application updates</h2><p>Check for the latest TiviHub desktop version.</p></div>
+                </div>
+                <div className="settings-update-row">
+                  <div className="settings-update-details">
+                    <p className="settings-version">Installed version · v1.9.0</p>
+                    <div className="settings-update-status" role="status">
+                      <span className="settings-update-indicator current" />
+                      <span>Up to date</span>
+                    </div>
+                  </div>
+                  <button className="secondary-button" type="button"><Icon name="refresh" /> Check for updates</button>
                 </div>
               </div>
-              <button className="secondary-button" type="button"><Icon name="refresh" /> Check for updates</button>
             </div>
           </div>
         </Block>
@@ -461,21 +597,48 @@ export function StyleGuide() {
             <RowSkeletons count={2} />
           </div>
         </Block>
-        <Block title="CardSkeletons live (Live TV channels)">
-          <CardSkeletons count={3} live />
+        <Block title="CategorySkeletons and ChannelSkeletons" note="The Live TV, Movies and Series panels: category rows and channel rows. The poster grid uses GridCardSkeletons inside the panel's own grid.">
+          <div className="sg-stack" style={{ maxWidth: 360 }}>
+            <CategorySkeletons count={3} />
+            <ChannelSkeletons count={2} />
+          </div>
         </Block>
         <Block title="RowSkeletons with artwork (downloads)" note="Subtitle results and cast devices use the plain RowSkeletons above.">
           <RowSkeletons artwork count={2} />
         </Block>
-        <Block title="Inline skeletons" note="Current-programme line on a Live TV row, TV Guide footer, player status.">
+        <Block title="Inline skeletons" note="Current-programme line on a Live TV row, player status.">
           <div className="sg-stack" style={{ maxWidth: 360 }}>
             <Skeleton className="skeleton-line" />
-            <Skeleton className="live-guide-footer-skeleton" />
             <Skeleton className="skeleton-line playback-status-skeleton" />
           </div>
         </Block>
         <Block title="Work on content already on screen (updating / sorting catalog)" note="A progress bar, not a spinner. Real progress screens keep their own text.">
           <ProgressIndicator label="Updating your catalog" />
+        </Block>
+        </div>
+      </section>
+
+      <section className="sg-section" id="guide-programmes">
+        <div className="sg-section-head">
+          <h2>TV guide programmes</h2>
+          <p>Blocks in the guide timeline. A 3px primary bar marks a finished programme the provider still has a recording of; the programme on air can be started over.</p>
+        </div>
+        <div className="sg-specimens">
+        <Block title="live-guide-program (normal, replayable, current with start over)">
+          <div className="live-guide-program-track" style={{ position: "relative", height: 62, width: 560 }}>
+            <button className="live-guide-program" style={{ left: 0, width: 150 }} type="button">
+              <small>18:00 – 19:00</small><strong>Evening film</strong>
+            </button>
+            <button className="live-guide-program is-replayable" style={{ left: 156, width: 150 }} type="button">
+              <small>19:00 – 20:00</small><strong>Recorded news</strong>
+            </button>
+            <button className="live-guide-program is-current" style={{ left: 312, width: 200 }} type="button">
+              <small>20:00 – 21:30</small><strong>On air now</strong>
+            </button>
+            <button aria-label="Start over" className="icon-button live-guide-startover" data-tooltip="Start over" style={{ left: 478 }} type="button">
+              <Icon name="restart_alt" />
+            </button>
+          </div>
         </Block>
         </div>
       </section>

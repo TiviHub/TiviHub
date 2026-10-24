@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Movie } from "../types";
-import { sortCatalogItems, topCatalogItems } from "../catalogSorting";
+import { sortCatalogItems, topCatalogItems } from "../lib/catalogSorting";
 
 function movie(
   id: string,

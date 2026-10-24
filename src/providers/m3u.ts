@@ -1,6 +1,8 @@
 import type { DrmSystem, Episode, LiveChannel, Movie, Series } from "../types";
-import { recordDiagnosticFailure } from "../diagnosticLog";
+import { catchupFromAttributes } from "../lib/catchup";
+import { recordDiagnosticFailure } from "../lib/diagnosticLog";
 import { readResponseText, validateHttpsUrl } from "./http";
+import { providerFetch } from "./transport";
 
 export const MAX_M3U_BYTES = 200 * 1024 * 1024;
 
@@ -17,6 +19,8 @@ export interface M3uCatalog {
   movies: Movie[];
   series: Series[];
   episodes: Episode[];
+  /** Entries left out because their stream is not HTTP or HTTPS. */
+  skipped: number;
 }
 
 interface PendingEntry {
@@ -44,7 +48,7 @@ function titleSeparator(value: string): number {
   return -1;
 }
 
-function resolveStream(value: string, baseUrl?: string): string {
+function resolveStream(value: string, baseUrl?: string): string | null {
   let result: URL;
   try {
     result = baseUrl ? new URL(value, baseUrl) : new URL(value);
@@ -53,9 +57,8 @@ function resolveStream(value: string, baseUrl?: string): string {
       "This playlist contains a relative stream URL. Add its original playlist URL as the base address.",
     );
   }
-  if (result.protocol !== "http:" && result.protocol !== "https:") {
-    throw new Error("Playlist entries must use HTTP or HTTPS stream URLs.");
-  }
+  // rtmp://, rtsp:// and udp:// entries cannot play here; the caller skips them instead of failing the import.
+  if (result.protocol !== "http:" && result.protocol !== "https:") return null;
   return result.toString();
 }
 
@@ -92,7 +95,20 @@ function episodeDetails(entry: PendingEntry, index: number): {
   };
 }
 
-function itemKind(group: string): "live" | "movie" | "series" {
+// `radio="true"` marks a station; without the attribute a group named "Radio" does the same. `radio="false"` opts out.
+function isRadio(attributes: Record<string, string>, group: string): boolean {
+  const declared = attributes.radio?.trim().toLowerCase();
+  if (declared === "true") return true;
+  if (declared === "false") return false;
+  return /\bradio\b/i.test(group);
+}
+
+// An Xtream-style list says what an entry is in its address (/movie/user/pass/1.mp4, /series/..., /live/...): that is
+// reliable where group names are not ("|NL| NETFLIX" holds movies and series, "|EN| ANIME" is nearly all series).
+function itemKind(group: string, streamUrl: string): "live" | "movie" | "series" {
+  const byPath = /\/(live|movie|series)\/[^/]+\/[^/]+\/[^/]+$/.exec(new URL(streamUrl).pathname)?.[1];
+  if (byPath === "movie" || byPath === "series") return byPath;
+  if (byPath === "live") return "live";
   if (/\b(series|tv shows|tv-show|tvshows|shows)\b/i.test(group)) return "series";
   if (/\b(movie|movies|film|films|vod)\b/i.test(group)) return "movie";
   return "live";
@@ -107,6 +123,7 @@ function createM3uCatalogParser(context: PlaylistContext) {
   let pending: PendingEntry | null = null;
   let hasHeader = false;
   let firstLine = true;
+  let skipped = 0;
   const playlistDrmLicenseUrl = context.drmLicenseUrl;
 
   function processLine(rawLine: string) {
@@ -134,6 +151,11 @@ function createM3uCatalogParser(context: PlaylistContext) {
 
     const streamUrl = resolveStream(line, context.url);
     const metadata = pending;
+    pending = null;
+    if (streamUrl === null) {
+      skipped += 1;
+      return;
+    }
     const name = metadata.name ||
       metadata.attributes["tvg-name"] ||
       metadata.attributes["tvg-id"] ||
@@ -150,7 +172,7 @@ function createM3uCatalogParser(context: PlaylistContext) {
       metadata.attributes.poster ||
       metadata.attributes.cover ||
       undefined;
-    const kind = itemKind(group);
+    const kind = itemKind(group, streamUrl);
     if (kind === "movie") {
       const year = Number(/\((\d{4})\)/.exec(name)?.[1] ?? metadata.attributes.year);
       const rating = Number(metadata.attributes.rating);
@@ -209,11 +231,12 @@ function createM3uCatalogParser(context: PlaylistContext) {
         streamUrl,
         logoUrl,
         tvgId: metadata.attributes["tvg-id"] || undefined,
+        ...(isRadio(metadata.attributes, group) ? { radio: true } : {}),
+        catchup: catchupFromAttributes(metadata.attributes),
         drmLicenseUrl,
         drmSystem: context.drmSystem,
       });
     }
-    pending = null;
   }
 
   function finish(): M3uCatalog {
@@ -221,9 +244,10 @@ function createM3uCatalogParser(context: PlaylistContext) {
       throw new Error("This file is not a valid extended M3U playlist (missing #EXTM3U).");
     }
     if (channels.length + movies.length + episodes.length === 0) {
+      if (skipped > 0) throw new Error("Playlist entries must use HTTP or HTTPS stream URLs.");
       throw new Error("No media entries were found in this playlist.");
     }
-    return { channels, movies, series, episodes };
+    return { channels, movies, series, episodes, skipped };
   }
 
   return { processLine, finish };
@@ -335,16 +359,17 @@ export function parseM3u(content: string, context: PlaylistContext): LiveChannel
   return catalog.channels;
 }
 
-export async function fetchM3u(url: string, signal?: AbortSignal): Promise<string> {
+export async function fetchM3u(url: string, signal?: AbortSignal, userAgent?: string): Promise<string> {
   const parsed = validateHttpUrl(url, "playlist URL");
   let response: Response;
   try {
-    response = await fetch(parsed, { signal, headers: { Accept: "application/x-mpegURL, text/plain, */*" } });
+    response = await providerFetch(parsed, { signal, headers: { Accept: "application/x-mpegURL, text/plain, */*" } }, userAgent);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     recordDiagnosticFailure("m3u-playlist", "network");
     throw new Error(
       "The playlist could not be fetched by TiviHub. The provider may block cross-origin access (CORS); try importing the M3U file instead.",
+      { cause: error },
     );
   }
   if (!response.ok) {

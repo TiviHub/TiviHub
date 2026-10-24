@@ -1,7 +1,7 @@
 {
   "name": "tivihub",
   "private": true,
-  "version": "1.11.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,7 @@
     "build:desktop": "tsc -b && vite build --mode desktop",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 20",
     "pretest": "cargo build --quiet --manifest-path src-tauri/Cargo.toml --example storage_harness",
     "test": "vitest run src/__tests__",
     "test:e2e": "playwright test",

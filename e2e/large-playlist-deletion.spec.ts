@@ -11,7 +11,7 @@ test("deletes an Xtream-sized catalog from IndexedDB with visible progress", asy
   const recordCount = await page.evaluate(async () => {
     const [{ saveCatalog }, { DEMO_PLAYLIST_ID }] = await Promise.all([
       import("/src/storage/database.ts"),
-      import("/src/demo.ts"),
+      import("/src/lib/demo.ts"),
     ]);
     const channels = Array.from({ length: 55_680 }, (_, index) => ({
       id: `${DEMO_PLAYLIST_ID}:e2e-channel:${index}`,
@@ -60,7 +60,7 @@ test("deletes an Xtream-sized catalog from IndexedDB with visible progress", asy
   console.log(`Deleted ${recordCount + 1} IndexedDB records and reloaded the library in ${Date.now() - deletionStartedAt} ms`);
 
   const remainingRecords = await page.evaluate(async () => {
-    const { DEMO_PLAYLIST_ID } = await import("/src/demo.ts");
+    const { DEMO_PLAYLIST_ID } = await import("/src/lib/demo.ts");
     const { getCatalogSnapshot, getPlaylists } = await import("/src/storage/database.ts");
     const [playlists, catalog] = await Promise.all([
       getPlaylists(),

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import type { DrmSystem, Playlist, PlaylistType } from "../types";
 import { validateHttpsUrl } from "../providers/http";
 import { MAX_M3U_BYTES } from "../providers/m3u";
+import { normalizeMac } from "../providers/stalker";
 import { CustomSelect, Icon, type CustomSelectOption } from "./common";
 import { ProgressIndicator } from "./ProgressIndicator";
 
@@ -39,6 +41,8 @@ export function PlaylistDialog({
   const [password, setPassword] = useState(editing?.password ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [epgUrl, setEpgUrl] = useState(editing?.epgUrl ?? "");
+  const [userAgent, setUserAgent] = useState(editing?.userAgent ?? "");
+  const [macAddress, setMacAddress] = useState(editing?.macAddress ?? "");
   const [drmLicenseUrl, setDrmLicenseUrl] = useState(editing?.drmLicenseUrl ?? "");
   const [drmSystem, setDrmSystem] = useState<DrmSystem>(editing?.drmSystem ?? "com.widevine.alpha");
   const [drmCertificateUrl, setDrmCertificateUrl] = useState(editing?.drmCertificateUrl ?? "");
@@ -140,6 +144,15 @@ export function PlaylistDialog({
       setError("Enter the Xtream username and password.");
       return;
     }
+    if (type === "STALKER" && !normalizeMac(macAddress)) {
+      setError("Enter the portal's MAC address, for example 00:1A:79:12:34:56.");
+      return;
+    }
+    // eslint-disable-next-line no-control-regex -- control characters must not reach a header
+    if (/[\u0000-\u001f\u007f]/.test(userAgent)) {
+      setError("The User-Agent cannot contain line breaks or control characters.");
+      return;
+    }
     if (drmLicenseUrl) {
       try {
         validateHttpsUrl(drmLicenseUrl, "DRM license URL");
@@ -183,13 +196,15 @@ export function PlaylistDialog({
       name: name.trim() || file?.name.replace(/\.[^.]+$/, "") || "My playlist",
       type,
       url: type === "M3U" && sourceMode === "file" ? "" : url.trim(),
-      username: type === "XTREAM" ? username.trim() : "",
-      password: type === "XTREAM" ? password : "",
+      username: type === "M3U" ? "" : username.trim(),
+      password: type === "M3U" ? "" : password,
+      macAddress: type === "STALKER" ? normalizeMac(macAddress) ?? undefined : undefined,
       active: editing?.active ?? true,
       drmLicenseUrl: drmLicenseUrl.trim(),
       drmSystem,
       drmCertificateUrl: drmCertificateUrl.trim() || undefined,
       epgUrl: epgUrl.trim() || undefined,
+      userAgent: (isTauri() && userAgent.trim()) || undefined,
       fileName: type === "M3U" && sourceMode === "file" ? file?.name ?? editing?.fileName : undefined,
       expiresAtMillis: editing?.expiresAtMillis,
       createdAt: editing?.createdAt ?? createdAt,
@@ -273,19 +288,19 @@ export function PlaylistDialog({
           </p>
           <fieldset className="source-type-switch" disabled={busyAction !== null}>
             <legend className="sr-only">Source type</legend>
-            {(["M3U", "XTREAM"] as const).map((item) => (
+            {(isTauri() ? ["M3U", "XTREAM", "STALKER"] as const : ["M3U", "XTREAM"] as const).map((item) => (
               <button
                 aria-pressed={type === item}
                 className={type === item ? "source-type active" : "source-type"}
                 key={item}
                 onClick={() => {
                   setType(item);
-                  if (item === "XTREAM") setFile(null);
+                  if (item !== "M3U") setFile(null);
                 }}
                 type="button"
               >
-                <Icon name={item === "M3U" ? "playlist_play" : "dns"} />
-                {item === "M3U" ? "M3U playlist" : "Xtream account"}
+                <Icon name={item === "M3U" ? "playlist_play" : item === "XTREAM" ? "dns" : "devices"} />
+                {item === "M3U" ? "M3U playlist" : item === "XTREAM" ? "Xtream account" : "Stalker portal"}
               </button>
             ))}
           </fieldset>
@@ -324,16 +339,16 @@ export function PlaylistDialog({
             />
           </label>
 
-          {sourceMode === "url" || type === "XTREAM" ? (
+          {sourceMode === "url" || type !== "M3U" ? (
             <>
               <label className="form-field" key="playlist-url">
-                <span>{type === "M3U" ? "Playlist URL" : "Provider server URL"} <em>Required</em></span>
+                <span>{type === "M3U" ? "Playlist URL" : type === "XTREAM" ? "Provider server URL" : "Portal URL"} <em>Required</em></span>
                 <input
                   autoComplete="url"
                   disabled={busyAction !== null}
                   inputMode="url"
                   onChange={(event) => setUrl(event.target.value)}
-                  placeholder={type === "M3U" ? "https://provider.example/list.m3u" : "https://provider.example"}
+                  placeholder={type === "M3U" ? "https://provider.example/list.m3u" : type === "XTREAM" ? "https://provider.example" : "http://portal.example/c/"}
                   required
                   type="url"
                   value={url}
@@ -342,7 +357,11 @@ export function PlaylistDialog({
               <p className="form-note">
                 {type === "M3U"
                   ? "M3U playlist downloads are limited to 200 MB."
-                  : "Each Xtream API response is limited to 200 MB."}
+                  : type === "XTREAM"
+                    ? "Each Xtream API response is limited to 200 MB."
+                    : "Stalker portals identify your account by a MAC address. Use only portals you are subscribed to."}
+                {/^http:\/\//i.test(url.trim()) &&
+                  " This address is unencrypted (HTTP), so anyone on your network can read your login."}
               </p>
             </>
           ) : (
@@ -375,6 +394,23 @@ export function PlaylistDialog({
             </>
           )}
 
+          {type === "STALKER" && (
+            <label className="form-field">
+              <span>MAC address <em>Required</em></span>
+              <input
+                autoCapitalize="characters"
+                autoComplete="off"
+                disabled={busyAction !== null}
+                maxLength={17}
+                onChange={(event) => setMacAddress(event.target.value)}
+                placeholder="00:1A:79:12:34:56"
+                required
+                spellCheck={false}
+                value={macAddress}
+              />
+            </label>
+          )}
+
           {type === "XTREAM" && (
             <div className="form-row">
               <label className="form-field">
@@ -401,9 +437,32 @@ export function PlaylistDialog({
             </div>
           )}
 
-          {(type === "M3U" || type === "XTREAM") && (
+          {(
             <details className="advanced-source">
-              <summary>Optional guide &amp; DRM settings</summary>
+              <summary>{type === "STALKER" ? "Optional login & guide settings" : "Optional guide & DRM settings"}</summary>
+              {type === "STALKER" && (
+                <div className="form-row">
+                  <label className="form-field">
+                    <span>Username <em>Optional</em></span>
+                    <input
+                      autoComplete="username"
+                      disabled={busyAction !== null}
+                      onChange={(event) => setUsername(event.target.value)}
+                      value={username}
+                    />
+                  </label>
+                  <label className="form-field">
+                    <span>Password <em>Optional</em></span>
+                    <input
+                      autoComplete="current-password"
+                      disabled={busyAction !== null}
+                      onChange={(event) => setPassword(event.target.value)}
+                      type="password"
+                      value={password}
+                    />
+                  </label>
+                </div>
+              )}
               <label className="form-field">
                 <span>XMLTV guide URL <em>Optional</em></span>
                 <input
@@ -411,11 +470,31 @@ export function PlaylistDialog({
                   disabled={busyAction !== null}
                   inputMode="url"
                   onChange={(event) => setEpgUrl(event.target.value)}
-                  placeholder={type === "XTREAM" ? "Uses provider's XMLTV by default" : "https://provider.example/guide.xml"}
+                  placeholder={type === "M3U" ? "https://provider.example/guide.xml" : "Uses the provider's own guide by default"}
                   type="url"
                   value={epgUrl}
                 />
               </label>
+              {isTauri() && (
+                <label className="form-field">
+                  <span>User-Agent <em>Optional</em></span>
+                  <input
+                    autoComplete="off"
+                    disabled={busyAction !== null}
+                    list="user-agent-presets"
+                    maxLength={256}
+                    onChange={(event) => setUserAgent(event.target.value)}
+                    placeholder="Uses TiviHub's default"
+                    value={userAgent}
+                  />
+                  <datalist id="user-agent-presets">
+                    <option value="VLC/3.0.20 LibVLC/3.0.20" />
+                    <option value="Kodi/21.0 (Windows NT 10.0; Win64; x64)" />
+                    <option value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36" />
+                  </datalist>
+                </label>
+              )}
+              {type !== "STALKER" && (<>
               <label className="form-field">
                 <span>DRM system <em>Optional</em></span>
                 <div className="select-control">
@@ -464,6 +543,7 @@ export function PlaylistDialog({
                 Use only license details supplied by your provider. DRM support depends on its
                 license flow and webview CORS permissions; TiviHub does not proxy license requests.
               </p>
+              </>)}
             </details>
           )}
 

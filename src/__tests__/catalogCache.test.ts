@@ -6,7 +6,7 @@ import {
   catalogRefreshDueAt,
   isCatalogRefreshDue,
   isPlaylistExpired,
-} from "../catalogCache";
+} from "../services/catalogCache";
 
 function source(overrides: Partial<Playlist> = {}): Playlist {
   return {
