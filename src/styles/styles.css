@@ -7863,3 +7863,99 @@ button.icon-button.is-favorite {
   background: transparent;
   pointer-events: none;
 }
+
+/* Multiview: up to four live channels side by side; the tile with sound has a purple border. */
+.live-channel-sidebar-heading:has(> .icon-button) > h2 {
+  margin-right: auto;
+}
+
+.multiview-dialog {
+  width: min(100%, 1400px);
+}
+
+.multiview-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.multiview-picker-list {
+  display: flex;
+  max-height: 160px;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow: auto;
+}
+
+.multiview-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  padding-bottom: clamp(14px, 3vw, 22px);
+}
+
+.multiview-grid[data-columns="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.multiview-tile {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--outline-soft);
+  border-radius: var(--radius-lg);
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.multiview-tile.is-audible {
+  border-color: var(--primary);
+}
+
+.multiview-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.multiview-tile-loading {
+  position: absolute;
+  inset: 0;
+}
+
+.multiview-tile-error {
+  position: absolute;
+  inset-inline: 8px;
+  top: 8px;
+  background: var(--surface);
+}
+
+.multiview-tile-bar {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 12px;
+  background: linear-gradient(transparent, rgb(0 0 0 / 70%));
+}
+
+.multiview-tile-bar strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Heading row with a button at its right end: that button lines up with the sort button in the row below. */
+.live-channel-sidebar-heading > .icon-button {
+  margin-right: -7px;
+}
+
+.theme-option-icon.language-code {
+  min-width: 20px;
+  color: var(--secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}

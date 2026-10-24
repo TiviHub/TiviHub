@@ -472,6 +472,24 @@ export function StyleGuide() {
         <Block title="playback-dialog.is-radio" note="A station plays as audio in the same player: its logo (or the radio icon) sits in the middle of the picture, the control bar is under it, and the chip says Radio.">
           <PlayerSpecimen live radio />
         </Block>
+        <Block title="Multiview tiles" note="Up to four live channels side by side, 16:9 each. The tile with sound has a purple border; the bar over the bottom holds the channel name, a sound button and a remove button.">
+          <div className="multiview-grid" data-columns={2}>
+            <article className="multiview-tile is-audible">
+              <div className="multiview-tile-bar">
+                <strong>Channel one</strong>
+                <button aria-label="Sound of Channel one" aria-pressed className="icon-button selected" data-tooltip="Sound of Channel one" type="button"><Icon name="volume_up" /></button>
+                <button aria-label="Remove Channel one" className="icon-button" data-tooltip="Remove Channel one" type="button"><Icon name="close" /></button>
+              </div>
+            </article>
+            <article className="multiview-tile">
+              <div className="multiview-tile-bar">
+                <strong>Channel two</strong>
+                <button aria-label="Sound of Channel two" aria-pressed={false} className="icon-button" data-tooltip="Sound of Channel two" type="button"><Icon name="volume_off" /></button>
+                <button aria-label="Remove Channel two" className="icon-button" data-tooltip="Remove Channel two" type="button"><Icon name="close" /></button>
+              </div>
+            </article>
+          </div>
+        </Block>
         </div>
       </section>
 

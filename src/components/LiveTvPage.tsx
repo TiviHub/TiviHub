@@ -83,6 +83,9 @@ export function LiveTvPage({
   onLoadGuideForChannels,
   onPlay,
   onReplay,
+  onToggleReminder,
+  reminderIds,
+  onOpenMultiView,
   onToggleFavorite,
   livePlayer,
   livePlaybackItemId,
@@ -97,6 +100,10 @@ export function LiveTvPage({
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (item: PlayableItem) => void;
   onReplay: (channel: LiveChannel, program: EpgProgram) => void;
+  onToggleReminder: (channel: LiveChannel, program: EpgProgram) => void;
+  reminderIds: ReadonlySet<string>;
+  /** Opens multiview with the channel on screen and the channels this list shows. */
+  onOpenMultiView?: (start: LiveChannel | undefined, channels: LiveChannel[]) => void;
   onToggleFavorite: (item: LiveChannel, contentType: "LIVE") => void;
   livePlayer?: ReactNode;
   livePlaybackItemId?: string;
@@ -214,6 +221,17 @@ export function LiveTvPage({
             <div className="live-channel-sidebar-heading">
               <h2>{categoryName || t("live.heading")}</h2>
               <span>{formatNumber(showingFavorites ? favoriteChannels.length : browse.total ?? shownChannels.length)}</span>
+              {onOpenMultiView && (
+                <button
+                  aria-label={t("multi.open")}
+                  className="icon-button"
+                  data-tooltip={t("multi.open")}
+                  onClick={() => onOpenMultiView(visibleChannel, shownChannels)}
+                  type="button"
+                >
+                  <Icon name="grid_view" />
+                </button>
+              )}
             </div>
             <div className="browse-panel-tools">
               <SearchField label={t("live.searchLabel")} onChange={setQuery} placeholder={t("live.searchPlaceholder")} value={query} />
@@ -287,6 +305,8 @@ export function LiveTvPage({
               onLoadGuideForChannels={onLoadGuideForChannels}
               onPlay={play}
               onReplay={onReplay}
+              onToggleReminder={onToggleReminder}
+              reminderIds={reminderIds}
               single
             />
           )}

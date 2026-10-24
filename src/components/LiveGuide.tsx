@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } fr
 import type { EpgProgram, LiveChannel } from "../types";
 import { canReplay, canStartOver } from "../lib/catchup";
 import { formatDate, formatTimeOfDay, t } from "../lib/i18n";
+import { reminderId } from "../lib/reminders";
 import { guideDayBounds, guideProgramBlock, guideTimeTicks } from "../lib/liveGuideLayout";
 import { Icon, SearchField } from "./common";
 import { BrowseCategoryList, type BrowseCategoryEntry } from "./BrowseCategoryList";
@@ -35,6 +36,8 @@ export function LiveGuide({
   onLoadGuideForChannels,
   onPlay,
   onReplay,
+  reminderIds,
+  onToggleReminder,
   single = false,
 }: {
   channels: LiveChannel[];
@@ -45,6 +48,9 @@ export function LiveGuide({
   onLoadGuideForChannels: (channels: LiveChannel[]) => void;
   onPlay: (channel: LiveChannel) => void;
   onReplay: (channel: LiveChannel, program: EpgProgram) => void;
+  /** Programmes that have a reminder, and the way to set or remove one. Without them no bell is shown. */
+  reminderIds?: ReadonlySet<string>;
+  onToggleReminder?: (channel: LiveChannel, program: EpgProgram) => void;
   /** One channel only (under the player): no page heading, filters, channel column or footer. */
   single?: boolean;
 }) {
@@ -321,6 +327,22 @@ export function LiveGuide({
                           <Icon name="restart_alt" />
                         </button>
                       )}
+                      {onToggleReminder && program.startMillis > now && block.width >= 64 && (() => {
+                        const set = reminderIds?.has(reminderId(channel.playlistId, channel.id, program.startMillis)) ?? false;
+                        return (
+                          <button
+                            aria-label={t(set ? "guide.reminderOnAria" : "guide.remindAria", { title: program.title, channel: channel.name })}
+                            aria-pressed={set}
+                            className={`icon-button live-guide-startover${set ? " selected" : ""}`}
+                            data-tooltip={t(set ? "guide.reminderOn" : "guide.remind")}
+                            onClick={() => onToggleReminder(channel, program)}
+                            style={{ left: `${block.left + block.width - 34}px` }}
+                            type="button"
+                          >
+                            <Icon name={set ? "notifications_active" : "notifications"} />
+                          </button>
+                        );
+                      })()}
                       </Fragment>
                     );
                   })}

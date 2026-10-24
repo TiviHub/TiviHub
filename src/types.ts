@@ -168,6 +168,16 @@ export interface EpgProgram {
   source: string;
 }
 
+/** A TV guide programme the person wants to be told about shortly before it starts. */
+export interface Reminder {
+  id: string;
+  playlistId: string;
+  channelId: string;
+  channelName: string;
+  title: string;
+  startMillis: number;
+}
+
 export interface PlaylistDocument {
   playlistId: string;
   content: string;

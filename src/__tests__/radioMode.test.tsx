@@ -49,6 +49,8 @@ describe("radio filter in Live TV", () => {
       onLoadGuideForChannels={vi.fn()}
       onPlay={onPlay}
       onReplay={vi.fn()}
+      onToggleReminder={vi.fn()}
+      reminderIds={new Set<string>()}
       onToggleFavorite={vi.fn()}
       showAdultContent
       source={source}

@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { LiveGuide } from "../components/LiveGuide";
+import { reminderId } from "../lib/reminders";
 import type { EpgProgram, LiveChannel } from "../types";
 
 const HOUR = 3_600_000;
@@ -88,5 +89,26 @@ describe("single-channel guide under the player", () => {
     expect(screen.getByRole("region", { name: "Programme guide for One" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Morning show.*Select to watch the recording/ }));
     expect(onReplay).toHaveBeenCalledWith(channel, epg[0]);
+  });
+
+  it("lets you set and remove a reminder, only for a programme that has not started", () => {
+    const onToggleReminder = vi.fn();
+    const set = new Set([reminderId("p", "c1", epg[2].startMillis)]);
+    render(
+      <LiveGuide
+        channels={[channel]} epg={epg} favoriteIds={new Set()} loading={false}
+        onLoadGuideForChannels={vi.fn()} onPlay={vi.fn()} onReplay={vi.fn()}
+        onToggleReminder={onToggleReminder} reminderIds={set}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove the reminder for Evening film on One" }));
+    expect(onToggleReminder).toHaveBeenCalledWith(channel, epg[2]);
+    expect(screen.queryByRole("button", { name: /Remind me of Morning show/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Remind me of Midday news/ })).toBeNull();
+  });
+
+  it("shows no bell when reminders are not available", () => {
+    renderGuide();
+    expect(screen.queryByRole("button", { name: /Remind me|reminder/ })).toBeNull();
   });
 });

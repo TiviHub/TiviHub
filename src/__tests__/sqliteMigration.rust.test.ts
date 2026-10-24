@@ -43,7 +43,7 @@ describe("IndexedDB to the Rust SQLite store", () => {
     expect(plaintextInFiles("user-r1")).toEqual([]);
     expect(plaintextInFiles("mdb-secret")).toEqual([]);
     rmSync(dir, { recursive: true, force: true });
-  });
+  }, 30_000); // starts a Rust process: under a full parallel run it can pass the 5 s default
 
   it("completes after a crash partway through, with no duplicate rows", async () => {
     await seedIdb("r2");

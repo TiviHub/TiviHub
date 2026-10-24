@@ -26,6 +26,7 @@ import type {
   OpenSubtitleSearchCacheEntry,
   PlaylistDocument,
   RatingsCacheEntry,
+  Reminder,
   Series,
 } from "../types";
 
@@ -35,7 +36,7 @@ interface EncryptedPayload {
 }
 
 export const IDB_DATABASE_NAME = "tivihub-web";
-const DATABASE_VERSION = 8;
+const DATABASE_VERSION = 9;
 const CATALOG_WRITE_BATCH_SIZE = 1000;
 const DELETE_BATCH_SIZE = 10_000;
 const CREDENTIAL_KEY_ID = "local-encryption-key";
@@ -83,6 +84,7 @@ interface TiviHubDatabase extends DBSchema {
   ratings: { key: string; value: RatingsCacheEntry };
   popularCatalog: { key: string; value: MdblistPopularCacheEntry };
   liveCategoryCache: { key: string; value: LiveCategoryCacheEntry; indexes: { byPlaylist: string } };
+  reminders: { key: string; value: Reminder; indexes: { byPlaylist: string } };
   mdblistRateLimits: { key: string; value: MdblistRateLimitState };
   subtitleSearch: { key: string; value: OpenSubtitleSearchCacheEntry };
   subtitleFiles: { key: number; value: OpenSubtitleFileCacheEntry };
@@ -134,6 +136,9 @@ function getDb(): Promise<IDBPDatabase<TiviHubDatabase>> {
     }
     if (oldVersion < 8) {
       database.createObjectStore("liveCategoryCache", { keyPath: "key" }).createIndex("byPlaylist", "playlistId");
+    }
+    if (oldVersion < 9) {
+      database.createObjectStore("reminders", { keyPath: "id" }).createIndex("byPlaylist", "playlistId");
     }
   },
 });;
@@ -300,11 +305,12 @@ async function deletePlaylist(
     "library",
     "epg",
     "liveCategoryCache",
+    "reminders",
   ] as const;
   const transaction = database.transaction(names, "readwrite");
   try {
     const playlistRange = IDBKeyRange.only(id);
-    const stores = ["channels", "movies", "series", "episodes", "favorites", "library", "liveCategoryCache"] as const;
+    const stores = ["channels", "movies", "series", "episodes", "favorites", "library", "liveCategoryCache", "reminders"] as const;
     const counts = await Promise.all([
       transaction.objectStore("playlists").count(id),
       transaction.objectStore("documents").count(id),

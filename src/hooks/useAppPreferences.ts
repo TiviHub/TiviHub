@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "../lib/i18n";
+import { readPinRecord } from "./useParentalPin";
 
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -14,6 +15,8 @@ function readThemePreference(): ThemePreference {
 }
 
 function readShowAdultContent(): boolean {
+  // With a PIN set, adult content is locked again every time the app starts.
+  if (readPinRecord()) return false;
   try {
     return window.localStorage.getItem("tivihub.web.show-adult-content") === "true";
   } catch (error) {
@@ -55,7 +58,7 @@ export function useAppPreferences(notify: (message: string, kind: "error" | "not
   function chooseShowAdultContent(value: boolean) {
     setShowAdultContent(value);
     try {
-      window.localStorage.setItem("tivihub.web.show-adult-content", String(value));
+      window.localStorage.setItem("tivihub.web.show-adult-content", String(value && !readPinRecord()));
     } catch (cause) {
       console.error("Could not save the local adult-content preference", cause);
       notify(t("prefs.adultSaveFailed"), "error");

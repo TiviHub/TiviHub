@@ -6,6 +6,7 @@ import webPackage from "../../package.json";
 import type { PlayableItem } from "../types";
 import type { SubtitleResult } from "../providers/opensubtitles";
 import { subtitleService } from "../services/subtitleService";
+import { routePlayerThroughProxy } from "../services/playerProxy";
 import { playbackErrorMessage } from "../lib/playbackErrors";
 import { t } from "../lib/i18n";
 import type { MessageKey } from "../locales";
@@ -501,17 +502,7 @@ export function PlaybackDialog({
           if (!player.configure({ drm })) throw new Error(t("play.drmRejected"));
         }
         if (proxy) {
-          const base = proxy;
-          // Manifest (0), segment (1), timing (4) and key (6) requests go to the provider; licence requests do not.
-          const engine = player.getNetworkingEngine();
-          engine?.registerRequestFilter((type, request) => {
-            if ([0, 1, 4, 6].includes(type)) request.uris = request.uris.map((uri) => proxiedUrl(base, uri));
-          });
-          // Relative segment addresses in a playlist resolve against the response address, so give back the real one.
-          engine?.registerResponseFilter((_type, response) => {
-            if (!response.uri.startsWith(base)) return;
-            response.uri = response.headers["x-final-url"] ?? new URL(response.uri).searchParams.get("u") ?? response.uri;
-          });
+          routePlayerThroughProxy(player, proxy);
         }
         await player.load(item.streamUrl);
         if (disposed) return;

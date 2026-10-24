@@ -29,6 +29,7 @@ const settingsProps: ComponentProps<typeof SettingsPage> = {
   onChooseTheme: vi.fn(),
   showAdultContent: false,
   onSetShowAdultContent: vi.fn(),
+  parentalPin: { pinSet: false, check: vi.fn(async () => "ok" as const), setPin: vi.fn(async () => true), clearPin: vi.fn(async () => "ok" as const) },
   sources: [source, { ...source, id: "other-source", name: "Bedroom", active: false }],
   activeSourceId: source.id,
   downloadDirectoryPath: null,

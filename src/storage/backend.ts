@@ -14,6 +14,7 @@ import type {
   Playlist,
   PlaylistDocument,
   RatingsCacheEntry,
+  Reminder,
   Series,
 } from "../types";
 
@@ -40,6 +41,7 @@ export interface StoreValues {
   episodes: Episode;
   favorites: Favorite;
   library: LibraryItem;
+  reminders: Reminder;
   epg: EpgProgram;
   ratings: RatingsCacheEntry;
   popularCatalog: MdblistPopularCacheEntry;
@@ -56,7 +58,7 @@ export type IndexName = "byPlaylist" | "bySeries" | "byChannel" | "bySource";
 
 export const STORE_NAMES: readonly StoreName[] = [
   "playlists", "documents", "channels", "movies", "series", "episodes", "favorites",
-  "library", "epg", "ratings", "popularCatalog", "liveCategoryCache", "mdblistRateLimits", "subtitleSearch",
+  "library", "reminders", "epg", "ratings", "popularCatalog", "liveCategoryCache", "mdblistRateLimits", "subtitleSearch",
   "subtitleFiles", "subtitleChoices", "secrets",
 ];
 

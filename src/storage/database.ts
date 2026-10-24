@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { t } from "../lib/i18n";
 import type {
   EpgProgram,
+  Reminder,
   Episode,
   Favorite,
   LibraryItem,
@@ -301,6 +302,18 @@ export async function saveMdblistPopularCacheEntry(entry: MdblistPopularCacheEnt
   await (await backend()).tx([{ op: "put", store: "popularCatalog", record: entry }]);
 }
 
+export async function getReminders(): Promise<Reminder[]> {
+  return (await backend()).getAll("reminders");
+}
+
+export async function saveReminder(reminder: Reminder): Promise<void> {
+  await (await backend()).tx([{ op: "put", store: "reminders", record: reminder }]);
+}
+
+export async function deleteReminders(ids: string[]): Promise<void> {
+  await (await backend()).tx(ids.map((key): StorageOp => ({ op: "delete", store: "reminders", key })));
+}
+
 export async function getLiveCategoryCache(key: string): Promise<LiveCategoryCacheEntry | undefined> {
   return (await backend()).get("liveCategoryCache", key);
 }
@@ -397,7 +410,7 @@ export async function restoreSnapshot(snapshot: UserDataSnapshot): Promise<void>
   const puts = (store: StorageOp["store"], records: readonly unknown[]) =>
     records.map((record): StorageOp => ({ op: "put", store, record: record as never }));
   await b.tx([
-    ...(["playlists", "documents", "channels", "movies", "series", "episodes", "favorites", "library", "epg", "secrets"] as const)
+    ...(["playlists", "documents", "channels", "movies", "series", "episodes", "favorites", "library", "reminders", "epg", "secrets"] as const)
       .map((store): StorageOp => ({ op: "clear", store })),
     ...puts("playlists", storedPlaylists),
     ...puts("documents", snapshot.documents),

@@ -13,7 +13,7 @@ TiviHub is local-first: no server, accounts or analytics. The attacker is **a ho
 |---|---|---|
 | Webview to the internet | All requests go through Rust `http_fetch`. `check_target` allows only http/https, resolves host names, refuses loopback, link-local (169.254.x) and multicast, and re-checks every redirect (max 5). 200 MB cap, header allow-list without line breaks | `src-tauri/src/net.rs`, `providers/transport.ts` |
 | Streams | Loopback proxy: secret token per registration, Host must be `127.0.0.1:<port>` or `localhost:<port>` (stops DNS rebinding), GET/HEAD only, headers set once by `proxy_register`, same `check_target` policy | `net.rs` |
-| Webview to OS | Tauri capabilities: window close/minimize/maximize, `fs` open/remove/write, opener default URLs | `src-tauri/capabilities/default.json` |
+| Webview to OS | Tauri capabilities: window close/minimize/maximize, `fs` open/remove/write, opener default URLs, notification (permission check, request, send: for TV guide reminders) | `src-tauri/capabilities/default.json` |
 | Content | CSP in `tauri.conf.json`: scripts `'self'` only, `object-src 'none'`, `frame-src 'none'`, `base-uri 'self'`. `http:`/`https:` stay open for images, media and connect because providers are arbitrary hosts | `src-tauri/tauri.conf.json` |
 | Credentials | OS keychain key; secrets encrypted in the `secrets` store; Xtream stream URLs stored with `/{username}/{password}/` placeholders | `storage.rs`, `storage/credentialUrls.ts` |
 | Other programs | VLC or mpv only, address as a separate argument, http(s) only, User-Agent without line breaks and at most 256 chars | `external_player.rs` |

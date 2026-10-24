@@ -152,6 +152,7 @@ fn main() {
         .manage(net::ProxyState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let diagnostics = app.state::<BackendDiagnostics>();
