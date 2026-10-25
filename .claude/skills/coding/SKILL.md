@@ -5,7 +5,7 @@ description: TypeScript, React and Rust conventions for TiviHub. Use when writin
 
 # Coding rules
 
-Behave as in the `karpathy-guidelines` skill: state assumptions, smallest change, surgical edits, verify with a check.
+State assumptions, make the smallest surgical change, and verify with a check.
 
 ## TypeScript / React
 

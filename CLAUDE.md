@@ -7,6 +7,7 @@ Tauri 2 desktop app (Rust in `src-tauri/`) with a React 19 + Vite + TypeScript U
 | Skill | Use for |
 |---|---|
 | `architecture` | layers, where code goes, Tauri commands, speed rules |
+| `browse` | Live TV, Movies, Series: browsers, caches, category counts |
 | `coding` | TypeScript, React and Rust conventions, the done-checklist |
 | `database` | SQLite/IndexedDB stores, migrations, caches, secrets |
 | `ui` | every UI/CSS change: tokens, shared components, style guide |
@@ -14,7 +15,6 @@ Tauri 2 desktop app (Rust in `src-tauri/`) with a React 19 + Vite + TypeScript U
 | `playback` | streams: Shaka, native path, proxy, DRM, errors, cast, `PlaybackDialog` |
 | `security` | trust boundaries, network policy, credentials, capabilities, new Tauri commands |
 | `release` | version, release notes, tags, commit format |
-| `karpathy-guidelines` | how to work: assumptions, small diffs, verify |
 | `landing-design` | the marketing page in `src/landing/` only |
 
 ## Always
