@@ -15,6 +15,8 @@
     "notification:allow-request-permission",
     "notification:allow-notify",
     "opener:allow-open-url",
-    "opener:allow-default-urls"
+    "opener:allow-default-urls",
+    "updater:allow-check",
+    "updater:allow-download-and-install"
   ]
 }

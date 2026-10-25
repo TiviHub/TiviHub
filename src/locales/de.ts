@@ -143,6 +143,8 @@ export const de: Messages = {
   "settings.updates.checkFailed": "Updatesuche fehlgeschlagen",
   "settings.updates.check": "Nach Updates suchen",
   "settings.updates.download": "v{version} herunterladen",
+  "settings.updates.install": "Auf v{version} aktualisieren",
+  "settings.updates.installing": "Update wird installiert…",
   "settings.updates.checkingShort": "Suche…",
   "settings.updates.retry": "Erneut versuchen",
 };

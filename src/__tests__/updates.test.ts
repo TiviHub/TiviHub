@@ -58,3 +58,18 @@ describe("GitHub release updates", () => {
     expect(() => latestAvailableUpdate({}, "1.0.0")).toThrow(/invalid releases list/i);
   });
 });
+
+describe("in-app install", () => {
+  it("downloads and installs when a signed package is published, and reports none otherwise", async () => {
+    const downloadAndInstall = vi.fn(async () => undefined);
+    const check = vi.fn()
+      .mockResolvedValueOnce({ downloadAndInstall })
+      .mockResolvedValueOnce(null);
+    vi.doMock("@tauri-apps/plugin-updater", () => ({ check }));
+    const { installUpdate } = await import("../services/updates");
+    await expect(installUpdate()).resolves.toBe(true);
+    expect(downloadAndInstall).toHaveBeenCalledOnce();
+    await expect(installUpdate()).resolves.toBe(false);
+    vi.doUnmock("@tauri-apps/plugin-updater");
+  });
+});

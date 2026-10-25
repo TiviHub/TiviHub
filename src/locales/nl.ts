@@ -143,6 +143,8 @@ export const nl: Messages = {
   "settings.updates.checkFailed": "Controle op updates mislukt",
   "settings.updates.check": "Controleren op updates",
   "settings.updates.download": "v{version} downloaden",
+  "settings.updates.install": "Bijwerken naar v{version}",
+  "settings.updates.installing": "Update installeren…",
   "settings.updates.checkingShort": "Controleren…",
   "settings.updates.retry": "Opnieuw controleren",
 };

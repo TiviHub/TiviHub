@@ -143,6 +143,8 @@ export const tr: Messages = {
   "settings.updates.checkFailed": "Güncelleme denetimi başarısız",
   "settings.updates.check": "Güncellemeleri denetle",
   "settings.updates.download": "v{version} sürümünü indir",
+  "settings.updates.install": "v{version} sürümüne güncelle",
+  "settings.updates.installing": "Güncelleme yükleniyor…",
   "settings.updates.checkingShort": "Denetleniyor…",
   "settings.updates.retry": "Denetimi yeniden dene",
 };

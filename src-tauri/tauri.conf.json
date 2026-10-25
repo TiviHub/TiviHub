@@ -43,5 +43,16 @@
         "languages": ["English"]
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDAzOEM5QTkyMzZFRDY3QUYKUldTdlorMDJrcHFNQXdsS1BucmlaRTFOVGtxMzBXZFZmS2x5KzhYQW9CTXdKZjNxRGVxaGFkYmYK",
+      "endpoints": [
+        "https://github.com/TiviHub/TiviHub/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

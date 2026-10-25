@@ -14,6 +14,10 @@ Semantic Versioning: `MAJOR` breaking change or data migration users must know a
 3. Run the checks from the `testing-and-ci` skill; add the `release-dry-run` label to the PR to rehearse the installers.
 4. Merge, then tag `vX.Y.Z` on `main` and push the tag. CI builds, creates a draft release with the notes, and attaches installers. Review the draft, then publish.
 
+## In-app updates (Windows)
+
+The Windows build is signed with the updater key (`TAURI_SIGNING_PRIVATE_KEY` repo secret, public key in `tauri.conf.json`) and `package-windows.mjs` writes `latest.json`, which the release uploads. The app reads `releases/latest/download/latest.json`, so it only sees stable, published releases. Other platforms still open the release download. Losing the private key means installed apps can never update themselves again.
+
 ## Release notes format
 
 Copy the shape of `docs/releases/v2.0.0.md`:

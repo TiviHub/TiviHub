@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import webPackage from "../../package.json";
-import { checkForUpdate, type AvailableUpdate } from "../services/updates";
+import { checkForUpdate, installUpdate, installsInApp, type AvailableUpdate } from "../services/updates";
 
-export type UpdateStatus = "idle" | "checking" | "current" | "available" | "error";
+export type UpdateStatus = "idle" | "checking" | "current" | "available" | "installing" | "error";
 
 const CHECK_INTERVAL_MILLIS = 6 * 60 * 60 * 1000;
 
@@ -32,6 +32,14 @@ export function useAppUpdate(isDesktopApp: boolean) {
   async function openAvailableUpdate() {
     if (!availableUpdate) return;
     try {
+      if (installsInApp) {
+        setUpdateStatus("installing");
+        try {
+          if (await installUpdate()) return;
+        } catch (cause) {
+          console.error("Could not install the TiviHub update in the app; opening the download instead", cause);
+        }
+      }
       await openUrl(availableUpdate.installerUrl);
     } catch (cause) {
       console.error("Could not open the TiviHub installer download", cause);
@@ -63,5 +71,5 @@ export function useAppUpdate(isDesktopApp: boolean) {
     };
   }, [checkUpdates, isDesktopApp]);
 
-  return { availableUpdate, updateStatus, checkUpdates, openAvailableUpdate };
+  return { availableUpdate, updateStatus, checkUpdates, openAvailableUpdate, installsInApp };
 }
