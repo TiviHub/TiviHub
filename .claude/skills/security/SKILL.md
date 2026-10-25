@@ -13,7 +13,7 @@ TiviHub is local-first: no server, accounts or analytics. The attacker is **a ho
 |---|---|---|
 | Webview to the internet | All requests go through Rust `http_fetch`. `check_target` allows only http/https, resolves host names, refuses loopback, link-local (169.254.x) and multicast, and re-checks every redirect (max 5). 200 MB cap, header allow-list without line breaks | `src-tauri/src/net.rs`, `providers/transport.ts` |
 | Streams | Loopback proxy: secret token per registration, Host must be `127.0.0.1:<port>` or `localhost:<port>` (stops DNS rebinding), GET/HEAD only, headers set once by `proxy_register`, same `check_target` policy | `net.rs` |
-| Webview to OS | Tauri capabilities: window close/minimize/maximize, `fs` open/remove/write, opener default URLs, notification (permission check, request, send: for TV guide reminders) | `src-tauri/capabilities/default.json` |
+| Webview to OS | Tauri capabilities (the folder picker uses `tauri-plugin-dialog` from Rust in `main.rs`, so it has no webview permission): window close/minimize/maximize, `fs` open/remove/write, opener default URLs, notification (permission check, request, send: for TV guide reminders) | `src-tauri/capabilities/default.json` |
 | Content | CSP in `tauri.conf.json`: scripts `'self'` only, `object-src 'none'`, `frame-src 'none'`, `base-uri 'self'`. `http:`/`https:` stay open for images, media and connect because providers are arbitrary hosts | `src-tauri/tauri.conf.json` |
 | Credentials | OS keychain key; secrets encrypted in the `secrets` store; Xtream stream URLs stored with `/{username}/{password}/` placeholders | `storage.rs`, `storage/credentialUrls.ts` |
 | Other programs | VLC or mpv only, address as a separate argument, http(s) only, User-Agent without line breaks and at most 256 chars | `external_player.rs` |
@@ -26,7 +26,7 @@ TiviHub is local-first: no server, accounts or analytics. The attacker is **a ho
 - **No shell.** Spawn programs with `Command::new(<fixed program>).args([...])`; never build a command line from strings, and never pass a user value that can start with `-` as an option.
 - **No credential in a log, error, diagnostic, URL stored in SQLite, backup (unless encrypted by `encryptBackup`) or release note.** Use `redactUrl`; Rust diagnostics carry only `component` + `code`.
 - A keychain failure stops with an error and never creates a new key (see the `database` skill).
-- Render provider text as text. No `dangerouslySetInnerHTML`, `innerHTML`, `eval` or `new Function`; subtitles go through `asWebVtt` as text tracks.
+- Render provider text as text. No `dangerouslySetInnerHTML`, `innerHTML`, `eval` or `new Function` (one accepted exception: the static FAQ JSON-LD in `src/landing/LandingPage.tsx`, built from our own constants, never provider data); subtitles go through `asWebVtt` as text tracks.
 - Provider-controlled sizes are capped (fetch 200 MB, subtitles 5 MB, 256 proxy profiles). A new read of remote data gets a cap.
 - Test fixtures never contain a real provider URL, account or media.
 
