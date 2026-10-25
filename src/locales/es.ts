@@ -143,6 +143,8 @@ export const es: Messages = {
   "settings.updates.checkFailed": "Error al buscar actualizaciones",
   "settings.updates.check": "Buscar actualizaciones",
   "settings.updates.download": "Descargar v{version}",
+  "settings.updates.install": "Actualizar a v{version}",
+  "settings.updates.installing": "Instalando actualización…",
   "settings.updates.checkingShort": "Buscando…",
   "settings.updates.retry": "Reintentar",
 };

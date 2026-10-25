@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildUpdaterManifest } from "./updater-manifest.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const npmCli = process.env.npm_execpath;
@@ -28,7 +29,12 @@ function runNpm(args, env = process.env) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-runNpm(["run", "tauri:build"]);
+// Only a signed build produces the update package; a local build without the key still gives an installer.
+const signing = Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY);
+if (!signing && process.env.GITHUB_REF_TYPE === "tag") {
+  throw new Error("TAURI_SIGNING_PRIVATE_KEY is missing, so the release would have no in-app update.");
+}
+runNpm(["run", "tauri:build", ...(signing ? ["--", "--config", "src-tauri/tauri.updater.conf.json"] : [])]);
 runNpm(["run", "build"]);
 
 const installer = join(
@@ -53,3 +59,15 @@ copyFileSync(installer, versionedInstaller);
 copyFileSync(installer, latestInstaller);
 console.log(`Staged versioned release asset at ${versionedInstaller}`);
 console.log(`Staged latest-release download asset at ${latestInstaller}`);
+
+if (signing) {
+  const notesFile = join(root, "docs", "releases", `v${packageInfo.version}.md`);
+  const manifest = buildUpdaterManifest({
+    version: packageInfo.version,
+    notes: existsSync(notesFile) ? readFileSync(notesFile, "utf8") : "",
+    signature: readFileSync(`${installer}.sig`, "utf8").trim(),
+  });
+  writeFileSync(join(releaseDirectory, "latest.json"), `${JSON.stringify(manifest, null, 2)}
+`);
+  console.log("Staged the in-app update manifest latest.json");
+}

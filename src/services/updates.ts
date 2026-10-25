@@ -156,3 +156,15 @@ export async function checkForUpdate(
   }
   return latestAvailableUpdate(await response.json() as unknown, currentVersion);
 }
+
+// Windows is the only platform whose release ships a signed update package (latest.json).
+export const installsInApp = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+
+/** Downloads, verifies and installs the update; the installer then restarts the app. False when no signed package is published. */
+export async function installUpdate(): Promise<boolean> {
+  const { check } = await import("@tauri-apps/plugin-updater");
+  const update = await check();
+  if (!update) return false;
+  await update.downloadAndInstall();
+  return true;
+}

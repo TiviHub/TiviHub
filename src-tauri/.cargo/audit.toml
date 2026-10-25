@@ -1,4 +1,4 @@
-# Advisories we knowingly accept. Every one comes from the `chromecast` crate (0.18.2, the latest
+# Advisories we knowingly accept. All but the `zip` ones come from the `chromecast` crate (0.18.2, the latest
 # release), which pins old rustls and protobuf versions. Remove an entry as soon as the crate is
 # replaced or patched; a new advisory that is not listed here fails CI.
 #
@@ -14,4 +14,7 @@ ignore = [
   "RUSTSEC-2026-0104", # rustls-webpki 0.101: CRL parsing panic (no CRLs are processed)
   "RUSTSEC-2026-0382", # rustls-webpki 0.101: distrusted intermediates (no certificate validation)
   "RUSTSEC-2026-0381", # webpki-roots 0.22: distrusted root (trust anchors are not used to verify)
+  "RUSTSEC-2026-0367", # zip 4: SUID bits kept on extract (tauri-plugin-updater; we never extract a zip)
+  "RUSTSEC-2026-0368", # zip 4: symlink escape on extract (same; the update is a signed .exe)
+  "RUSTSEC-2026-0369", # zip 4: same extract() family (same; remove when the plugin moves to zip >= 9)
 ]

@@ -133,7 +133,7 @@ function App() {
   } = useDownloads({ notify, openPlayback, sources });
   const [expiredSourceIds, setExpiredSourceIds] = useState<Set<string>>(() => new Set());
   const [expiryCheckTime, setExpiryCheckTime] = useState(() => Date.now());
-  const { availableUpdate, updateStatus, checkUpdates, openAvailableUpdate } = useAppUpdate(isDesktopApp);
+  const { availableUpdate, updateStatus, checkUpdates, openAvailableUpdate, installsInApp } = useAppUpdate(isDesktopApp);
   const requestedEpgChannels = useRef(new Set<string>());
   const activeSourceIdRef = useRef(activeSourceId);
   activeSourceIdRef.current = activeSourceId;
@@ -643,6 +643,7 @@ function App() {
                 refreshing={refreshing}
                 isDesktopApp={isDesktopApp}
                 updateStatus={updateStatus}
+                updateInstallsInApp={installsInApp}
                 availableUpdateVersion={availableUpdate?.version ?? null}
                 onUpdateAction={() => availableUpdate ? void openAvailableUpdate() : void checkUpdates()}
                 version={webPackage.version}

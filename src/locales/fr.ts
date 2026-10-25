@@ -143,6 +143,8 @@ export const fr: Messages = {
   "settings.updates.checkFailed": "Échec de la recherche de mises à jour",
   "settings.updates.check": "Rechercher des mises à jour",
   "settings.updates.download": "Télécharger v{version}",
+  "settings.updates.install": "Mettre à jour vers v{version}",
+  "settings.updates.installing": "Installation de la mise à jour…",
   "settings.updates.checkingShort": "Recherche…",
   "settings.updates.retry": "Réessayer",
 };

@@ -143,6 +143,8 @@ export const pt: Messages = {
   "settings.updates.checkFailed": "Falha ao procurar atualizações",
   "settings.updates.check": "Procurar atualizações",
   "settings.updates.download": "Transferir v{version}",
+  "settings.updates.install": "Atualizar para v{version}",
+  "settings.updates.installing": "A instalar a atualização…",
   "settings.updates.checkingShort": "A procurar…",
   "settings.updates.retry": "Tentar novamente",
 };

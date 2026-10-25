@@ -45,6 +45,7 @@ const settingsProps: ComponentProps<typeof SettingsPage> = {
   version: "1.4.0",
   isDesktopApp: false,
   updateStatus: "idle",
+  updateInstallsInApp: false,
   availableUpdateVersion: null,
   onUpdateAction: vi.fn(),
   apiKey: "",

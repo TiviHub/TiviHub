@@ -88,6 +88,8 @@ jobs:
         run: npm test
 
       - name: Build installer and release assets
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: npm run package:windows
 
       - name: Upload release assets
@@ -96,14 +98,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          gh release upload $tag "dist/releases/TiviHub-$tag-windows-x64.exe" dist/releases/TiviHub-setup.exe --clobber
+          gh release upload $tag "dist/releases/TiviHub-$tag-windows-x64.exe" dist/releases/TiviHub-setup.exe dist/releases/latest.json --clobber
 
       - name: Keep the installer as a workflow artifact (dry run)
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: dist/releases/*.exe
+          path: dist/releases/*
           retention-days: 3
 
   unix:

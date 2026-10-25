@@ -51,6 +51,7 @@ export function SettingsPage({
   version,
   isDesktopApp,
   updateStatus,
+  updateInstallsInApp,
   availableUpdateVersion,
   onUpdateAction,
   apiKey,
@@ -81,7 +82,8 @@ export function SettingsPage({
   refreshing: boolean;
   version: string;
   isDesktopApp: boolean;
-  updateStatus: "idle" | "checking" | "current" | "available" | "error";
+  updateStatus: "idle" | "checking" | "current" | "available" | "installing" | "error";
+  updateInstallsInApp: boolean;
   availableUpdateVersion: string | null;
   onUpdateAction: () => void;
   apiKey: string;
@@ -696,7 +698,9 @@ export function SettingsPage({
                       <span>
                         {updateStatus === "checking"
                           ? t("settings.updates.checking")
-                          : updateStatus === "current"
+                          : updateStatus === "installing"
+                            ? t("settings.updates.installing")
+                            : updateStatus === "current"
                             ? t("settings.updates.current")
                             : updateStatus === "available" && availableUpdateVersion
                               ? t("settings.updates.available", { version: availableUpdateVersion })
@@ -708,13 +712,13 @@ export function SettingsPage({
                   </div>
                   <button
                     className="secondary-button"
-                    disabled={updateStatus === "checking"}
+                    disabled={updateStatus === "checking" || updateStatus === "installing"}
                     onClick={onUpdateAction}
                     type="button"
                   >
                     <Icon name={availableUpdateVersion ? "download" : "refresh"} />
                     {availableUpdateVersion
-                      ? t("settings.updates.download", { version: availableUpdateVersion })
+                      ? t(updateInstallsInApp ? "settings.updates.install" : "settings.updates.download", { version: availableUpdateVersion })
                       : updateStatus === "checking"
                         ? t("settings.updates.checkingShort")
                         : updateStatus === "error" ? t("settings.updates.retry") : t("settings.updates.check")}

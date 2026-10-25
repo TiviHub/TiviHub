@@ -141,6 +141,8 @@ export const en = {
   "settings.updates.checkFailed": "Update check failed",
   "settings.updates.check": "Check for updates",
   "settings.updates.download": "Download v{version}",
+  "settings.updates.install": "Update to v{version}",
+  "settings.updates.installing": "Installing update…",
   "settings.updates.checkingShort": "Checking…",
   "settings.updates.retry": "Retry check",
 } as const;
