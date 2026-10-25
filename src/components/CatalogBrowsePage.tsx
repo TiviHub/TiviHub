@@ -10,7 +10,7 @@ import type { Favorite, LibraryItem, Movie, Playlist, Series } from "../types";
 import { BrowseCategoryList } from "./BrowseCategoryList";
 import { BrowseSortButton } from "./BrowseSortButton";
 import { CatalogCard } from "./ContentPages";
-import { SearchField } from "./common";
+import { ScrollToTop, SearchField } from "./common";
 import { EmptyPanel } from "./EmptyPanel";
 import { GridCardSkeletons } from "./Skeleton";
 
@@ -30,11 +30,37 @@ const SECTION_KEYS = {
 } as const satisfies Record<"Movies" | "Series", Record<string, MessageKey>>;
 
 /**
+ * The chosen category, search, sort and scroll places of one page; the app owns it so leaving the page and coming back
+ * keeps them. It all belongs to one source: another source starts fresh.
+ */
+export function useCatalogView(sourceId: string | undefined) {
+  const [chosen, setChosen] = useState<string | null | undefined>(undefined);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<BrowseSort>("default");
+  const [owner, setOwner] = useState(sourceId);
+  if (owner !== sourceId) {
+    setOwner(sourceId);
+    setChosen(undefined);
+    setQuery("");
+    setSort("default");
+  }
+  const [places] = useState<Record<"list" | "categories", { sourceId: string | undefined; top: number }>>(() => ({
+    list: { sourceId, top: 0 }, categories: { sourceId, top: 0 },
+  }));
+  const [scroll, categoryScroll] = useMemo(() => (["list", "categories"] as const).map((name) => ({
+    get: () => (places[name].sourceId === sourceId ? places[name].top : 0),
+    set: (top: number) => { places[name].sourceId = sourceId; places[name].top = top; },
+  })), [places, sourceId]);
+  return { chosen, setChosen, query, setQuery, sort, setSort, scroll, categoryScroll };
+}
+
+/**
  * Movies and Series: categories on the left, the titles of the chosen one next to it, loaded a batch at a time as
  * you scroll. The section's browse hook is passed in because it needs the search and sort chosen here.
  */
 export function CatalogBrowsePage<T extends Movie | Series>({
   section,
+  view,
   source,
   storedItems,
   showAdultContent,
@@ -47,6 +73,7 @@ export function CatalogBrowsePage<T extends Movie | Series>({
   onFetched,
 }: {
   section: "Movies" | "Series";
+  view: ReturnType<typeof useCatalogView>;
   source: Playlist | undefined;
   /** Titles already stored on this device: they give Favorites and the category counts. */
   storedItems: T[];
@@ -72,9 +99,7 @@ export function CatalogBrowsePage<T extends Movie | Series>({
 }) {
   const contentType = section === "Movies" ? "MOVIE" : "SERIES";
   const k = SECTION_KEYS[section];
-  const [chosen, setChosen] = useState<string | null | undefined>(undefined);
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<BrowseSort>("default");
+  const { chosen, setChosen, query, setQuery, sort, setSort, scroll, categoryScroll } = view;
   const showingFavorites = chosen === FAVORITES_ID;
   const browse = useItems({ source, storedItems, showAdultContent, chosenCategoryId: showingFavorites ? undefined : chosen, query, sort, paused: showingFavorites, onFetched });
 
@@ -101,6 +126,16 @@ export function CatalogBrowsePage<T extends Movie | Series>({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const canObserve = typeof IntersectionObserver !== "undefined";
   const { hasMore, loadMore } = browse;
+  // Back from a title: scroll to where the list was, once the batches above that point are loaded again.
+  const restoreTo = useRef(0);
+  useEffect(() => { restoreTo.current = scroll.get();
+  }, [scroll]);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !restoreTo.current || browse.loading) return;
+    list.scrollTop = restoreTo.current;
+    if (list.scrollTop >= restoreTo.current - 1 || !hasMore) restoreTo.current = 0;
+  }, [browse.loading, hasMore, shownItems.length]);
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel || !hasMore || !canObserve || showingFavorites) return;
@@ -129,6 +164,7 @@ export function CatalogBrowsePage<T extends Movie | Series>({
           loading={browse.categoriesLoading}
           onRetry={browse.retry}
           onSelect={setChosen}
+          scroll={categoryScroll}
           selectedId={effectiveId}
           title={t(k.categories)}
         />
@@ -141,7 +177,7 @@ export function CatalogBrowsePage<T extends Movie | Series>({
             <SearchField label={t(k.search)} onChange={setQuery} placeholder={t(k.search)} value={query} />
             <BrowseSortButton label={t(k.sort)} onChange={setSort} value={sort} />
           </div>
-          <div className={`live-channel-list browse-list movies-grid${browse.loading ? " is-loading" : ""}`} ref={listRef}>
+          <div className={`live-channel-list browse-list movies-grid${browse.loading ? " is-loading" : ""}`} onScroll={(event) => { if (!restoreTo.current) scroll.set(event.currentTarget.scrollTop); }} ref={listRef}>
             {browse.loading && (
               <>
                 <span aria-live="polite" className="sr-only" role="status">{t(k.loading)}</span>
@@ -175,6 +211,7 @@ export function CatalogBrowsePage<T extends Movie | Series>({
               ? <div aria-hidden="true" className="browse-sentinel movies-grid-message" ref={sentinelRef} />
               : <button className="text-button movies-grid-message" onClick={loadMore} type="button">{t("browse.loadMore")}</button>)}
           </div>
+          <ScrollToTop listRef={listRef} />
         </aside>
       </div>
     </section>

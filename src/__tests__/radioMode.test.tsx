@@ -2,11 +2,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { LiveTvPage } from "../components/LiveTvPage";
+import { useState } from "react";
+import { useCatalogView } from "../components/CatalogBrowsePage";
+import { LiveTvPage as Page } from "../components/LiveTvPage";
+
+type LivePageProps = Parameters<typeof Page>[0];
 import { parseM3uCatalog } from "../providers/m3u";
 import type { LiveChannel, Playlist } from "../types";
 
 afterEach(cleanup);
+
+// Like App: the view and the chosen channel live above the page.
+function LiveTvPage(props: Omit<LivePageProps, "view" | "selectedChannel" | "onSelectChannel">) {
+  const view = useCatalogView("p");
+  const [selectedChannel, onSelectChannel] = useState<LiveChannel | null>(null);
+  return <Page {...props} onSelectChannel={onSelectChannel} selectedChannel={selectedChannel} view={view} />;
+}
 
 const channel = (id: string, name: string, extra: Partial<LiveChannel> = {}): LiveChannel => ({
   id, playlistId: "p", name, group: "General", streamUrl: `https://host/${id}.m3u8`, ...extra,

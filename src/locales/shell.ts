@@ -65,6 +65,7 @@ export const shell = area({
 
   "common.tryAgain": "Try again",
   "common.clearSearch": "Clear search",
+  "common.scrollToTop": "Back to top",
   "common.chooseOption": "Choose an option",
   "common.options": "{label} options",
 
@@ -162,6 +163,7 @@ export const shell = area({
 
     "common.tryAgain": "Opnieuw proberen",
     "common.clearSearch": "Zoekopdracht wissen",
+    "common.scrollToTop": "Naar boven",
     "common.chooseOption": "Kies een optie",
     "common.options": "Opties voor {label}",
 
@@ -259,6 +261,7 @@ export const shell = area({
 
     "common.tryAgain": "Reintentar",
     "common.clearSearch": "Borrar búsqueda",
+    "common.scrollToTop": "Ir arriba",
     "common.chooseOption": "Elige una opción",
     "common.options": "Opciones de {label}",
 
@@ -356,6 +359,7 @@ export const shell = area({
 
     "common.tryAgain": "Réessayer",
     "common.clearSearch": "Effacer la recherche",
+    "common.scrollToTop": "Retour en haut",
     "common.chooseOption": "Choisissez une option",
     "common.options": "Options de {label}",
 
@@ -453,6 +457,7 @@ export const shell = area({
 
     "common.tryAgain": "Erneut versuchen",
     "common.clearSearch": "Suche löschen",
+    "common.scrollToTop": "Nach oben",
     "common.chooseOption": "Option wählen",
     "common.options": "Optionen für {label}",
 
@@ -550,6 +555,7 @@ export const shell = area({
 
     "common.tryAgain": "Tentar novamente",
     "common.clearSearch": "Limpar pesquisa",
+    "common.scrollToTop": "Voltar ao topo",
     "common.chooseOption": "Escolha uma opção",
     "common.options": "Opções de {label}",
 
@@ -647,6 +653,7 @@ export const shell = area({
 
     "common.tryAgain": "Tekrar dene",
     "common.clearSearch": "Aramayı temizle",
+    "common.scrollToTop": "Yukarı çık",
     "common.chooseOption": "Bir seçenek belirleyin",
     "common.options": "{label} seçenekleri",
 
