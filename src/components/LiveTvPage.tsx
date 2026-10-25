@@ -1,14 +1,14 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import { sortByName } from "../browse/lists";
-import type { BrowseSort } from "../browse/types";
 import { useLiveBrowse } from "../hooks/useLiveBrowse";
 import { FAVORITES_ID, useCategoryEntries } from "../hooks/useCategoryEntries";
 import { formatNumber, t, useT } from "../lib/i18n";
 import type { EpgProgram, Favorite, LiveChannel, PlayableItem, Playlist } from "../types";
 import { BrowseCategoryList } from "./BrowseCategoryList";
+import { useCatalogView } from "./CatalogBrowsePage";
 import { BrowseSortButton } from "./BrowseSortButton";
 import { playableChannel } from "./ContentPages";
-import { Icon, SearchField } from "./common";
+import { Icon, ScrollToTop, SearchField } from "./common";
 import { EmptyPanel } from "./EmptyPanel";
 import { LiveGuide } from "./LiveGuide";
 import { ChannelSkeletons, Skeleton } from "./Skeleton";
@@ -74,6 +74,9 @@ function ChannelRow({
  * scroll), the player on the right. Nothing is downloaded for a category until it is opened.
  */
 export function LiveTvPage({
+  view,
+  selectedChannel,
+  onSelectChannel: setSelectedChannel,
   source,
   storedChannels,
   showAdultContent,
@@ -91,6 +94,10 @@ export function LiveTvPage({
   livePlaybackItemId,
   livePlayerMini = false,
 }: {
+  /** Category, search, sort and scroll places, kept by the app so leaving Live TV and coming back finds them. */
+  view: ReturnType<typeof useCatalogView>;
+  selectedChannel: LiveChannel | null;
+  onSelectChannel: (channel: LiveChannel | null) => void;
   source: Playlist | undefined;
   storedChannels: LiveChannel[];
   showAdultContent: boolean;
@@ -109,10 +116,7 @@ export function LiveTvPage({
   livePlaybackItemId?: string;
   livePlayerMini?: boolean;
 }) {
-  const [chosen, setChosen] = useState<string | null | undefined>(undefined);
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<BrowseSort>("default");
-  const [selectedChannel, setSelectedChannel] = useState<LiveChannel | null>(null);
+  const { chosen, setChosen, query, setQuery, sort, setSort, scroll, categoryScroll } = view;
   const [now, setNow] = useState(Date.now);
   const showingFavorites = chosen === FAVORITES_ID;
   const browse = useLiveBrowse({
@@ -168,6 +172,16 @@ export function LiveTvPage({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const canObserve = typeof IntersectionObserver !== "undefined";
   const { hasMore, loadMore } = browse;
+  // Back from another page: scroll to where the list was, once the batches above that point are loaded again.
+  const restoreTo = useRef(0);
+  useEffect(() => { restoreTo.current = scroll.get();
+  }, [scroll]);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !restoreTo.current || browse.loading) return;
+    list.scrollTop = restoreTo.current;
+    if (list.scrollTop >= restoreTo.current - 1 || !hasMore) restoreTo.current = 0;
+  }, [browse.loading, hasMore, shownChannels.length]);
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel || !hasMore || !canObserve || showingFavorites) return;
@@ -214,6 +228,7 @@ export function LiveTvPage({
             loading={browse.categoriesLoading}
             onRetry={browse.retry}
             onSelect={setChosen}
+            scroll={categoryScroll}
             selectedId={effectiveId}
             title={t("live.categories")}
           />
@@ -237,7 +252,7 @@ export function LiveTvPage({
               <SearchField label={t("live.searchLabel")} onChange={setQuery} placeholder={t("live.searchPlaceholder")} value={query} />
               <BrowseSortButton label={t("live.sort")} onChange={setSort} value={sort} />
             </div>
-            <div className={`live-channel-list browse-list${browse.loading ? " is-loading" : ""}`} ref={listRef} role="list">
+            <div className={`live-channel-list browse-list${browse.loading ? " is-loading" : ""}`} onScroll={(event) => { if (!restoreTo.current) scroll.set(event.currentTarget.scrollTop); }} ref={listRef} role="list">
               {browse.loading && (
                 <div aria-live="polite" role="status">
                   <span className="sr-only">{t("live.loading")}</span>
@@ -272,6 +287,7 @@ export function LiveTvPage({
                 ? <div aria-hidden="true" className="browse-sentinel" ref={sentinelRef} />
                 : <button className="text-button" onClick={loadMore} type="button">{t("browse.loadMore")}</button>)}
             </div>
+            <ScrollToTop listRef={listRef} />
           </aside>
         </div>
         <div className="live-tv-main">

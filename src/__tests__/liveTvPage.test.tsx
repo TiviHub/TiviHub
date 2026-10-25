@@ -3,10 +3,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BROWSE_PAGE_SIZE } from "../browse/types";
-import { LiveTvPage } from "../components/LiveTvPage";
+import { useState } from "react";
+import { useCatalogView } from "../components/CatalogBrowsePage";
+import { LiveTvPage as Page } from "../components/LiveTvPage";
+
+type LivePageProps = Parameters<typeof Page>[0];
 import type { Favorite, LiveChannel, Playlist } from "../types";
 
 afterEach(cleanup);
+
+// Like App: the view and the chosen channel live above the page.
+function LiveTvPage(props: Omit<LivePageProps, "view" | "selectedChannel" | "onSelectChannel">) {
+  const view = useCatalogView("p");
+  const [selectedChannel, onSelectChannel] = useState<LiveChannel | null>(null);
+  return <Page {...props} onSelectChannel={onSelectChannel} selectedChannel={selectedChannel} view={view} />;
+}
 
 const source: Playlist = {
   id: "p", name: "P", type: "M3U", url: "https://host/list.m3u", username: "", password: "",

@@ -128,7 +128,7 @@ textarea {
 .home-empty-source-types > span {
   letter-spacing: 0;
   text-transform: lowercase;
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   backdrop-filter: none;
 }
 
@@ -167,7 +167,6 @@ textarea {
 .live-channel-list-item.selected,
 .live-guide-channel.is-playing,
 .browse-category.active,
-.catalog-view-switch button.active,
 .custom-select-option.active,
 .custom-select-option[aria-selected="true"],
 .theme-option.selected,
@@ -192,7 +191,7 @@ textarea {
 }
 
 /* Nested controls sit on grey rows, not outlines. */
-:is(.theme-option, .secondary-button, .home-empty-source-types > span, .source-type, .source-mode, .settings-download-location, .settings-switch, .icon-button, .catalog-view-switch, .custom-select-trigger, .form-row input, .form-row select, .form-row textarea, input[type="text"], input[type="search"], input[type="url"], input[type="password"], select, textarea) {
+:is(.theme-option, .secondary-button, .home-empty-source-types > span, .source-type, .source-mode, .settings-download-location, .icon-button, .custom-select-trigger, .form-row input, .form-row select, .form-row textarea, input[type="text"], input[type="search"], input[type="url"], input[type="password"], select, textarea) {
   border-color: transparent;
   background-color: var(--row);
 }
@@ -202,8 +201,29 @@ textarea {
 }
 
 :is(input, select, textarea):focus-visible {
-  outline: 2px solid var(--primary);
+  outline: var(--focus-ring);
   outline-offset: 0;
+}
+
+/* One focus ring for every field: a single 2px purple frame on the box that looks like the field. A field built from a
+   wrapper around an input (search, dropdown) rings the wrapper; the inner control stays plain, so there is never a second frame. */
+:is(.search-field, .category-select, .player-track-select, .browse-sort, .live-guide-select, .global-search-input):focus-within {
+  outline: var(--focus-ring);
+  outline-offset: 0;
+}
+
+:is(.search-field, .category-select, .player-track-select, .browse-sort, .live-guide-select, .global-search-input) :is(input, select, .custom-select-trigger):focus-visible {
+  outline: 0;
+}
+
+.custom-select-trigger:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 0;
+}
+
+.form-field input:focus {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 /* Page labels are gone; the websites mockups have none either. */
@@ -276,4 +296,18 @@ button.icon-button.selected {
 /* No monospace in the UI (browsers default <code> to it). */
 code {
   font-family: inherit;
+}
+
+/* Light theme: --outline is a strong grey meant for real borders. Progress tracks, the skeleton shimmer and form fields use the soft one, like the search fields do. */
+:root[data-theme="light"] :is(.progress-indicator, .program-progress, .library-progress) {
+  background: var(--outline-soft);
+}
+
+:root[data-theme="light"] .skeleton {
+  background: linear-gradient(90deg, var(--surface-hover) 25%, color-mix(in srgb, var(--outline-soft) 70%, var(--surface-hover)) 50%, var(--surface-hover) 75%);
+  background-size: 200% 100%;
+}
+
+:root[data-theme="light"] .form-field input {
+  border-color: var(--outline-soft);
 }

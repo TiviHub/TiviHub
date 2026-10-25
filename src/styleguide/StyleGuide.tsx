@@ -8,7 +8,7 @@ import { PlayerControls } from "../components/PlayerControls";
 import { PlayerMenu } from "../components/PlayerMenu";
 import { RemindersMenu } from "../components/RemindersMenu";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CustomSelect, Icon, SearchField, TooltipLayer, type IconName } from "../components/common";
+import { CustomSelect, Icon, ScrollToTop, SearchField, TooltipLayer, type IconName } from "../components/common";
 import { ProgressIndicator } from "../components/ProgressIndicator";
 import { CardSkeletons, CategorySkeletons, ChannelSkeletons, RowSkeletons, Skeleton } from "../components/Skeleton";
 
@@ -49,6 +49,18 @@ const SECTIONS: { name: string; icon: IconName }[] = [
 function DemoSearch({ initial = "", label = "Search", placeholder = "Search movies" }: { initial?: string; label?: string; placeholder?: string }) {
   const [value, setValue] = useState(initial);
   return <SearchField label={label} onChange={setValue} placeholder={placeholder} value={value} />;
+}
+
+function ScrollDemo() {
+  const listRef = useRef<HTMLDivElement>(null);
+  return (
+    <>
+      <div className="live-channel-list" ref={listRef} style={{ overflowY: "auto" }}>
+        {Array.from({ length: 30 }, (_, index) => <p key={index} style={{ margin: 0, padding: "8px 11px" }}>Row {index + 1}</p>)}
+      </div>
+      <ScrollToTop listRef={listRef} />
+    </>
+  );
 }
 
 function Block({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
@@ -226,6 +238,11 @@ export function StyleGuide() {
           <p style={{ color: "var(--muted)" }}>Muted text for secondary information.</p>
           <p style={{ color: "var(--faint)" }}>Faint text for placeholders and hints.</p>
         </div>
+        <Block title="Small text sizes" note="Four sizes for everything under 1rem: use the token, never a new rem value. Control text is --text-md.">
+          {([["--text-xs", "0.68rem: badges, chips, counts"], ["--text-sm", "0.72rem: meta lines, toasts"], ["--text-md", "0.8rem: buttons, fields, rows"], ["--text-lg", "0.9rem: row titles, body in panels"]] as const).map(([token, use]) => (
+            <p key={token} style={{ margin: "4px 0", fontSize: `var(${token})` }}>{token} · {use}</p>
+          ))}
+        </Block>
         </div>
       </section>
 
@@ -259,6 +276,18 @@ export function StyleGuide() {
             <button aria-label="In favorites" className="detail-icon-button favorite selected" data-tooltip="In favorites" type="button"><Icon name="favorite" /></button>
             <button aria-label="In library" className="detail-icon-button selected" data-tooltip="In library" type="button"><Icon name="check" /></button>
             <button aria-label="Download" className="detail-icon-button" data-tooltip="Download" type="button"><Icon name="download" /></button>
+          </div>
+        </Block>
+        <Block title="source-type-switch (add-source dialog)" note="A row of toggle buttons where one is on. The chosen one gets the purple selection tint.">
+          <fieldset className="source-type-switch" style={{ margin: 0 }}>
+            <button aria-pressed="true" className="source-type active" type="button"><Icon name="playlist_play" /> M3U</button>
+            <button aria-pressed="false" className="source-type" type="button"><Icon name="dns" /> Xtream</button>
+            <button aria-pressed="false" className="source-type" disabled type="button"><Icon name="devices" /> Stalker</button>
+          </fieldset>
+        </Block>
+        <Block title="ScrollToTop" note="Appears in the corner of a long list once it is scrolled far down; click to go back to the top. Scroll the list.">
+          <div className="live-channel-sidebar" style={{ height: 180 }}>
+            <ScrollDemo />
           </div>
         </Block>
         </div>
@@ -311,6 +340,16 @@ export function StyleGuide() {
             <input placeholder="What are you looking for?" type="search" />
             <kbd aria-hidden="true">ESC</kbd>
           </label>
+        </Block>
+        <Block title="focus ring" note="Every field has one 2px purple frame on the box that looks like the field (the wrapper of a search or dropdown, the input itself otherwise). Click or tab into each to compare.">
+          <div className="sg-panel" style={{ display: "grid", gap: 12, maxWidth: 360 }}>
+            <SearchField label="Search" onChange={() => {}} placeholder="search-field" value="" />
+            <label className="global-search-input" style={{ margin: 0 }}>
+              <Icon name="search" /><span className="sr-only">Search</span>
+              <input placeholder="global-search-input" type="search" />
+            </label>
+            <label className="form-field"><span>form-field</span><input placeholder="Living room" /></label>
+          </div>
         </Block>
         <Block title="form-field">
           <label className="form-field" style={{ maxWidth: 360 }}>

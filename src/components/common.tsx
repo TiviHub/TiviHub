@@ -8,6 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/dom";
@@ -91,6 +92,7 @@ export function HorizontalDragTrack({
 }
 
 export type IconName =
+  | "arrow_upward"
   | "home"
   | "live_tv"
   | "movie"
@@ -191,6 +193,24 @@ export function SearchField({ label, placeholder, value, onChange }: {
         </button>
       )}
     </label>
+  );
+}
+
+/** Shows once a long list is scrolled far down; jumps back to its top. Sits in the panel that holds the list. */
+export function ScrollToTop({ listRef }: { listRef: RefObject<HTMLElement | null> }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const update = () => setShown(list.scrollTop > 600);
+    list.addEventListener("scroll", update, { passive: true });
+    return () => list.removeEventListener("scroll", update);
+  }, [listRef]);
+  if (!shown) return null;
+  return (
+    <button aria-label={t("common.scrollToTop")} className="icon-button scroll-to-top" onClick={() => listRef.current?.scrollTo({ top: 0, behavior: "smooth" })} type="button">
+      <Icon name="arrow_upward" />
+    </button>
   );
 }
 

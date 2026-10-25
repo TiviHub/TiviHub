@@ -32,7 +32,7 @@ Pink `#ff83aa` is used only for a favorited heart.
 
 ## Typography
 
-Roboto throughout (no monospace in the UI). Never use literal pixel `border-radius` values (they ignore the theme); use `var(--radius-md)` or the other radius tokens (pill shapes `999px` and `50%` are the only exceptions). Muted text `--muted`, placeholders and hints `--faint`. Control text: 0.8rem (buttons, search), 0.78rem (dropdowns), 0.72rem (toasts, chips). Do not introduce new font sizes for controls.
+Roboto throughout (no monospace in the UI). Never use literal pixel `border-radius` values (they ignore the theme); use `var(--radius-md)` or the other radius tokens (pill shapes `999px` and `50%` are the only exceptions). Muted text `--muted`, placeholders and hints `--faint`. Text under 1rem uses four tokens only: `--text-xs` 0.68rem (badges, chips, counts), `--text-sm` 0.72rem (meta lines, toasts), `--text-md` 0.8rem (buttons, fields, dropdowns, rows), `--text-lg` 0.9rem. Never write a literal rem value below 1rem.
 
 ## Buttons
 
@@ -55,7 +55,9 @@ Never add one-off bordered or purple-outline icon button variants. Icon-only but
 ## Inputs and dropdowns
 
 - Search fields: use `SearchField` (`common.tsx`), never your own `<label className="search-field">`. It holds the magnifier, the input and an X (`.search-clear`, 24px, appears once there is text, empties the box and keeps focus in it). The topbar search and the global search dialog (a native `type="search"` input with its own clear X) follow the same measurements: 42px tall, 0.8rem, 19px muted icon, 11px side padding, 8px gap, placeholder `--faint`. The inner `<input>` stays transparent.
-- Dropdown (`CustomSelect`): standalone triggers 38px tall, 0.78rem, min-width 68px, 10px padding. Embedded variant lives inside a 42px search-style box. Do not size individual dropdowns.
+- Control heights are tokens: `--control-h` 42px (fields, secondary buttons, topbar), `--control-h-compact` 38px (compact dropdowns), `--control-h-primary` 48px. Phone touch sizes may be larger.
+- One focus ring everywhere: `var(--focus-ring)` (2px `--primary`, no offset) on the box that looks like the field; the inner input of a search or dropdown stays plain.
+- Dropdown (`CustomSelect`): standalone triggers 38px tall, `--text-md`, min-width 68px, 10px padding. Embedded variant lives inside a 42px search-style box. Do not size individual dropdowns.
 - Forms: `.form-field`. TV Guide toolbar controls (icon buttons, date buttons, filter and zoom boxes) are the standard 42px too.
 - Topbar actions are 42px, the same height as the topbar search. The reminders bell (`RemindersMenu`, style guide Feedback) is one of them: a 9px `--primary` dot means unseen fired reminders, its panel opens downward and reuses `.custom-select-menu` and `EmptyPanel`.
 

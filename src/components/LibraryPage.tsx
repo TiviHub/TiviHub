@@ -44,6 +44,7 @@ export function LibraryPage({
   onRemove,
   onRemoveFavorite,
   onOpenFavorite,
+  onOpenSeries,
   sourceCount,
   onAddSource,
 }: {
@@ -54,6 +55,8 @@ export function LibraryPage({
   onRemove: (id: string, title: string) => void;
   onRemoveFavorite: (favorite: Favorite) => void;
   onOpenFavorite?: (favorite: Favorite) => void;
+  /** A series has no stream of its own, so a saved one opens its detail page. */
+  onOpenSeries?: (item: LibraryItem) => void;
   sourceCount: number;
   onAddSource: () => void;
 }) {
@@ -192,9 +195,9 @@ export function LibraryPage({
         <LibraryCard
           artworkUrl={item.artworkUrl}
           contentType={item.contentType}
-          disabled={!item.streamUrl}
+          disabled={!item.streamUrl && !(item.contentType === "SERIES" && onOpenSeries)}
           key={item.id}
-          onOpen={() => playLibraryItem(item)}
+          onOpen={() => (item.contentType === "SERIES" && !item.streamUrl ? onOpenSeries?.(item) : playLibraryItem(item))}
           onRemove={() => onRemove(item.id, item.title)}
           openLabel={t(item.status === "WATCHING" ? "library.resume" : item.status === "WATCHED" ? "library.replay" : "library.watch", { title: item.title })}
           progress={item.durationMillis > 0 ? item.positionMillis / item.durationMillis * 100 : undefined}

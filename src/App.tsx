@@ -45,7 +45,7 @@ import { configureMdblistRateLimiter } from "./lib/mdblistRateLimit";
 import { playableChannel } from "./components/ContentPages";
 import { MovieDetail, SeriesDetail } from "./components/DetailPages";
 import { LiveTvPage } from "./components/LiveTvPage";
-import { CatalogBrowsePage } from "./components/CatalogBrowsePage";
+import { CatalogBrowsePage, useCatalogView } from "./components/CatalogBrowsePage";
 import { useMovieBrowse } from "./hooks/useMovieBrowse";
 import { useSeriesBrowse } from "./hooks/useSeriesBrowse";
 import { LibraryPage } from "./components/LibraryPage";
@@ -91,6 +91,7 @@ function App() {
   const [guideLoadCount, setGuideLoadCount] = useState(0);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
+  const [selectedLiveChannel, setSelectedLiveChannel] = useState<LiveChannel | null>(null);
   const [episodeLoading, setEpisodeLoading] = useState(false);
   const [episodeError, setEpisodeError] = useState<string | null>(null);
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
@@ -136,6 +137,9 @@ function App() {
   const requestedEpgChannels = useRef(new Set<string>());
   const activeSourceIdRef = useRef(activeSourceId);
   activeSourceIdRef.current = activeSourceId;
+  const liveView = useCatalogView(activeSourceId ?? undefined);
+  const movieView = useCatalogView(activeSourceId ?? undefined);
+  const seriesView = useCatalogView(activeSourceId ?? undefined);
   const startupOverlayRef = useRef<HTMLDivElement>(null);
   const catalogRefreshInFlight = useRef(new Set<string>());
   const navigationHistoryRef = useRef<NavigationEntry[]>([]);
@@ -454,7 +458,7 @@ function App() {
     series: visibleSeries,
   };
 
-  function openFavorite(favorite: Favorite) {
+  function openFavorite(favorite: Pick<Favorite, "contentType" | "contentId" | "playlistId">) {
     if (favorite.contentType === "MOVIE") {
       const movie = visibleMovies.find((item) =>
         item.id === favorite.contentId && item.playlistId === favorite.playlistId,
@@ -541,6 +545,9 @@ function App() {
                 className={`live-tv-persistent${section === "Live TV" ? "" : " is-mini"}`}
               >
                 <LiveTvPage
+                  view={liveView}
+                  selectedChannel={selectedLiveChannel}
+                  onSelectChannel={setSelectedLiveChannel}
                   onOpenMultiView={(start, channels) => { closePlayback(); setMultiView({ start, channels }); }}
                   epg={visibleEpg}
                   favorites={visibleFavorites}
@@ -713,6 +720,7 @@ function App() {
                 onOpen={openMovie}
                 onToggleFavorite={(item) => void toggleFavorite(item, "MOVIE")}
                 section="Movies"
+                view={movieView}
                 source={activeSource ?? undefined}
                 storedItems={movies}
                 showAdultContent={showAdultContent}
@@ -776,6 +784,7 @@ function App() {
                   onOpen={(item) => void openSeries(item)}
                   onToggleFavorite={(item) => void toggleFavorite(item, "SERIES")}
                   section="Series"
+                  view={seriesView}
                   source={activeSource ?? undefined}
                   storedItems={series}
                   showAdultContent={showAdultContent}
@@ -798,6 +807,7 @@ function App() {
                 onRemove={(id, title) => void deleteLibraryItem(id, title)}
                 onRemoveFavorite={(favorite) => void removeFavorite(favorite)}
                 onOpenFavorite={openFavorite}
+                onOpenSeries={openFavorite}
               />
             )}
           </>
